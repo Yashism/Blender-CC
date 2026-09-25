@@ -113,8 +113,7 @@ if a.what in ("faces", "all"):
     set_view(-12, 1.1, 1.12, target=(0, 0, 1.09), lens=60)
     shots = []
     for f in (int(x) for x in a.faces.split(",")):
-        root["face"] = f
-        scene.frame_set(scene.frame_current)
+        pickles.set_face(root, f)
         shots.append(render(os.path.join(a.out, f"_fc_{f}.png")))
     tile(shots, os.path.join(a.out, "faces_grid.png"), cols=min(3, len(shots)))
-    root["face"] = 0
+    pickles.set_face(root, 0)

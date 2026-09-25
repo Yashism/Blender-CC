@@ -363,7 +363,9 @@ def skin(ob, arm, coll, co, col):
     J_ = {n: j for j, n in enumerate(names)}
     px = heat_proxy(ob, arm, coll)
     transfer_weights(px, ob, names)
+    px_me = px.data
     bpy.data.objects.remove(px, do_unlink=True)
+    bpy.data.meshes.remove(px_me)
     W = read_weights(ob, names)
     edges = _neighbours(ob.data)
     m = classify(co, col)
@@ -640,14 +642,14 @@ def paint_faces(ob, co, col, base_img_path, out_dir, names):
     def eyes_closed(img):
         for side in ("R", "L"):
             cx, cz, rx, rz = FACE["eye_" + side]
-            paint(img, _sstep(_ellipse_d(px, pz, cx, cz, rx + 0.004, rz + 0.004), F), mask_black,
-                  0.1)
+            paint(img, _sstep(_ellipse_d(px, pz, cx, cz, rx + 0.007, rz + 0.007), F * 2),
+                  mask_black, 0.0)
             arc = _arc(cx, rx * 0.95, cz + 0.004, cz - 0.009)       # sleepy lid, bowed down
-            paint(img, _sstep(_band_d(px, pz, arc, cx - rx * 0.95, cx + rx * 0.95, 0.0022), F),
-                  eye_white, 0.2)
+            paint(img, _sstep(_band_d(px, pz, arc, cx - rx * 0.95, cx + rx * 0.95, 0.0026), F),
+                  eye_white, 0.0)
             arc2 = _arc(cx, rx * 0.45, cz - 0.008, cz - 0.013)      # lash line underneath
             paint(img, _sstep(_band_d(px, pz, arc2, cx - rx * 0.4, cx + rx * 0.4, 0.0012), F),
-                  eye_white * 0.8, 0.2)
+                  eye_white * 0.8, 0.0)
 
     def small_pupils(img, scale=0.62):
         for side in ("R", "L"):
@@ -663,8 +665,8 @@ def paint_faces(ob, co, col, base_img_path, out_dir, names):
     def erase_mouth(img):
         cx, hw, zc, zb = FACE["mouth"]
         arc = _arc(cx, hw, zc, zb)
-        paint(img, _sstep(_band_d(px, pz, arc, cx - hw - 0.008, cx + hw + 0.008, 0.0075), F * 2),
-              white, 0.5)
+        paint(img, _sstep(_band_d(px, pz, arc, cx - hw - 0.012, cx + hw + 0.012, 0.009), F * 2),
+              white, 0.0)
 
     def draw_brows(img, dz, tilt):
         for side, sgn in (("R", -1), ("L", 1)):
@@ -677,16 +679,16 @@ def paint_faces(ob, co, col, base_img_path, out_dir, names):
     def erase_brows(img):
         for side in ("R", "L"):
             bx, bz, bw, bh = FACE["brow_" + side]
-            d = _ellipse_d(px, pz, bx, bz, bw + 0.006, bh + 0.004)
-            above_mask = pz > 1.165
-            paint(img, _sstep(d, F * 3) * above_mask, grey, 0.6)
+            d = _ellipse_d(px, pz, bx, bz, bw + 0.008, bh + 0.006)
+            above_mask = _sstep(1.166 - pz, F * 2)
+            paint(img, _sstep(d, F * 3) * above_mask, grey, 0.0)
 
     variants = {
         "neutral": [],
         "blink": [eyes_closed],
         "smile": [lambda im: grin(im)],
         "whoa": [erase_mouth, small_pupils, lambda im: o_mouth(im)],
-        "brows_up": [erase_brows, lambda im: draw_brows(im, 0.014, 0.008)],
+        "brows_up": [erase_brows, lambda im: draw_brows(im, 0.006, 0.012)],
     }
 
     def grin(img):
@@ -715,6 +717,18 @@ def paint_faces(ob, co, col, base_img_path, out_dir, names):
         paint(img, _sstep(_ellipse_d(px, pz, cx, cz, 0.019, 0.025), F), mouth_dark, 0.05)
         paint(img, _sstep(_ellipse_d(px, pz, cx, cz - 0.014, 0.014, 0.008), F), tongue, 0.1)
 
+    # texture fix shared by every face: the sculpt texture has lime vest texels on the mitten
+    # (right thumb tip); repaint them mitten-black
+    hand = ((np.abs(x) > 0.165) & (z > 0.34) & (z < 0.56) & (y < 0.07) & (y > -0.13))
+    hr, hc, hp = texel_positions(ob, co, hand, (W, H))
+    hcol = base[hr, hc]
+    hh, hs, hv = _hsv(hcol)
+    in_hand = (np.abs(hp[:, 0]) > 0.17) & (hp[:, 2] < 0.482)   # below the vest hem
+    lime_t = in_hand & (hh > 50) & (hh < 100) & (hs > 0.35) & (hv > 0.3)
+    dark_t = in_hand & (hv < 0.15)
+    if lime_t.any() and dark_t.any():
+        mitten = np.median(hcol[dark_t], 0)
+        base[hr[lime_t], hc[lime_t]] = mitten + rng.normal(0, 0.01, (int(lime_t.sum()), 1))
     paths = []
     for i, n in enumerate(names):
         img = base.copy()
@@ -776,13 +790,15 @@ def face_switch(mat, root, face_paths):
     val.location = (-1400, 700)
     fc = val.outputs[0].driver_add("default_value")
     drv = fc.driver
-    drv.type = "AVERAGE"
+    drv.type = "SCRIPTED"   # simple expression: evaluates without Python auto-exec
     var = drv.variables.new()
     var.name = "face"
     var.type = "SINGLE_PROP"
     var.targets[0].id_type = "OBJECT"
     var.targets[0].id = root
     var.targets[0].data_path = '["face"]'
+    drv.expression = "face"
+    drv.is_valid = True     # it may have been flagged while the variable was still empty
     uses = [l for l in nt.links if l.from_node == tex0 and l.from_socket.name == "Color"]
     prev = tex0.outputs["Color"]
     tex0.image = bpy.data.images.load(face_paths[0], check_existing=True)
@@ -843,7 +859,11 @@ def face_rig(root, body, co, col, face_dir, names, src_png, force=False):
     ui = root.id_properties_ui("face")
     ui.update(min=0, max=len(names) - 1, soft_min=0, soft_max=len(names) - 1,
               description="Replacement face: " + ", ".join(f"{i} {n}" for i, n in enumerate(names)))
-    return face_switch(body.data.materials[0], root, paths)
+    root.update_tag()                     # the evaluated copy must carry the new property,
+    bpy.context.view_layer.update()       # else the driver's first evaluation fails for good
+    val = face_switch(body.data.materials[0], root, paths)
+    bpy.context.view_layer.update()
+    return val
 
 
 def brass_pins(body, co, col, src_png, mask_path, force=False):

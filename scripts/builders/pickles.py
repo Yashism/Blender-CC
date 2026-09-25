@@ -20,7 +20,7 @@ Bones (Pickles_rig):
 Hands and feet copy the rotation of their IK controls. No jaw: the mouth is painted, faces swap.
 
 Faces (Pickles_root["face"]): 0 neutral, 1 blink, 2 smile, 3 whoa, 4 brows_up.
-Poses: pose_rest(root), pose_push(root, bar_y, bar_z), pose_test(root).
+Poses: pose_rest(root), pose_push(root, bar_y, bar_z), pose_test(root). Faces: set_face(root, i).
 """
 import math
 import os
@@ -67,6 +67,16 @@ def build(coll):
         "origin)." % (off.x, off.y, ", ".join(FACES), *PUSH_BAR))
     pose_rest(root)
     return root
+
+
+# ------------------------------------------------------------------------------ faces
+
+def set_face(root, i):
+    """Select replacement face i (0..4). Keyframe root["face"] for animation (constant
+    interpolation); from Python, use this so the depsgraph sees the change."""
+    root["face"] = int(i)
+    root.update_tag()
+    bpy.context.view_layer.update()
 
 
 # ------------------------------------------------------------------------------ posing
