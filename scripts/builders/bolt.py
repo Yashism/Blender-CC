@@ -250,7 +250,7 @@ def _faces_grid(root, path, res=(480, 400), samples=16):
     """Render a head close-up for every face variant and tile them (4 x 2, labelled)."""
     from lib import studio
     s = bpy.context.scene
-    cam, tgt = studio.camera("Bolt_facecam", (0.16, -1.35, 0.70), (0.0, -0.26, 0.605), lens=100,
+    cam, tgt = studio.camera("Bolt_facecam", (0.16, -1.35, 0.70), (0.0, -0.26, 0.59), lens=85,
                              fstop=16)
     s.camera = cam
     s.render.resolution_x, s.render.resolution_y = res
@@ -261,7 +261,7 @@ def _faces_grid(root, path, res=(480, 400), samples=16):
     s.collection.objects.link(lob)
     lob.data.materials.append(M.emissive("facelabel", "#F4ECD8", 3.0))
     bpy.context.view_layer.update()
-    lob.matrix_world = cam.matrix_world @ Matrix.Translation((-0.105, -0.075, -0.8))
+    lob.matrix_world = cam.matrix_world @ Matrix.Translation((-0.125, 0.085, -0.8))
     lob.rotation_euler = cam.matrix_world.to_euler()
     tiles = []
     tmp = os.path.join(os.path.dirname(path), "_face_tile.png")

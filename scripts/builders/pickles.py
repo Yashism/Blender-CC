@@ -38,7 +38,7 @@ HEIGHT = 1.35
 TURNTABLE = dict(height=1.35, radius=3.6, lens=50, target_z=1.35 * 0.5, cam_elev=0.15, fstop=5.6)
 
 FACES = ["neutral", "blink", "smile", "whoa", "brows_up"]
-PUSH_BAR = (-0.34, 1.05)   # default bar (y, z) in Pickles space for pose_push
+PUSH_BAR = (-0.36, 1.0)   # default bar (y, z) in Pickles space for pose_push
 
 
 def build(coll):
@@ -47,7 +47,7 @@ def build(coll):
     co, off = K.recentre(body, col)
     arm = K.build_armature(coll)
     geo.parent(arm, root)
-    K.skin(body, arm, coll, co, col)
+    _, _, _, co, col = K.skin(body, arm, coll, co, col)
     body.parent = arm
     body.parent_type = "OBJECT"
     md = body.modifiers.new("Armature", "ARMATURE")
@@ -128,7 +128,7 @@ def pose_push(root, bar_y=PUSH_BAR[0], bar_z=PUSH_BAR[1]):
     arm = pose_rest(root)
     pb = arm.pose.bones
     pb["hips"].location = (0, 0, 0)
-    _rot(pb["hips"], (1, 0, 0), -6)
+    _rot(pb["hips"], (1, 0, 0), -8)
     pb["hips"].matrix = Matrix.Translation((0, -0.03, -0.03)) @ pb["hips"].matrix
     bpy.context.view_layer.update()
     for n, d in (("spine.01", -4), ("spine.02", -4), ("spine.03", -3)):
@@ -136,13 +136,11 @@ def pose_push(root, bar_y=PUSH_BAR[0], bar_z=PUSH_BAR[1]):
     _rot(pb["neck"], (1, 0, 0), 6)
     _rot(pb["head"], (1, 0, 0), 8)
     for tag, sx in (("L", 1), ("R", -1)):
-        # hand points forward (-Y), palm on top of the bar: wrist behind and a little above
-        q = Quaternion((1, 0, 0), math.radians(-80)) @ Quaternion((0, 0, 1), 0)
-        q = Quaternion((0, 1, 0), math.radians(sx * 70)) @ q
-        grip = Vector((sx * 0.235, bar_y, bar_z + 0.03))
-        _place(arm, f"IK_hand.{tag}", grip + Vector((0, 0.10, 0.0)), q)
-        _local_rot(pb[f"fingers.{tag}"], "X", 55)
-        _local_rot(pb[f"thumb.{tag}"], "X", 25)
+        # hand points forward (-Y), rolled palm-down on top of the bar, fingers hooked over it
+        q = Quaternion((0, 1, 0), math.radians(-sx * 85)) @ Quaternion((1, 0, 0), math.radians(-95))
+        wrist = Vector((sx * 0.225, bar_y + 0.075, bar_z + 0.025))
+        _place(arm, f"IK_hand.{tag}", wrist, q)
+        _rot(pb[f"fingers.{tag}"], (1, 0, 0), 55)
     # walking stance: left foot forward flat, right foot back on the toes
     _place(arm, "IK_foot.L", Vector((0.105, -0.07, 0.10)))
     _place(arm, "IK_foot.R", Vector((-0.103, 0.14, 0.14)),

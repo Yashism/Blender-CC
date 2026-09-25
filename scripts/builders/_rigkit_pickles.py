@@ -446,9 +446,11 @@ def skin(ob, arm, coll, co, col):
     W[phones, J_["neck"]] = 1
 
     W = limit_normalize(fallback(np.clip(W, 0, None)), 4)
+    W, co, col = rip_arms(ob, names, W, co, col, J_, arm_cols, handzone)
+    W = limit_normalize(W, 4)
     write_weights(ob, names, W)
     ob["rigid_parts"] = "hat->head, headphones->neck, vest->spine (smoothed), tail->tail chain"
-    return W, names, dict(hat=hat, phones=phones, vest=vest, tail=tail)
+    return W, names, dict(hat=hat, phones=phones, vest=vest, tail=tail), co, col
 
 
 def weight_debug_colours(ob, W, names):
@@ -848,3 +850,99 @@ def brass_pins(body, co, col, src_png, mask_path, force=False):
     if force or not os.path.exists(mask_path):
         pin_mask_image(body, co, col, src_png, mask_path)
     return brass_mix(body.data.materials[0], mask_path)
+
+
+# --------------------------------------------------------------------------- arm rip
+
+def _components(n, edges):
+    lab = np.arange(n)
+    while True:
+        m = np.minimum(lab[edges[:, 0]], lab[edges[:, 1]])
+        old = lab.copy()
+        np.minimum.at(lab, edges[:, 0], m)
+        np.minimum.at(lab, edges[:, 1], m)
+        lab = lab[lab]
+        if (lab == old).all():
+            return lab
+
+
+def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
+    """The sculpt fuses each hanging arm onto the torso side (a ~0.12 x 0.3 m contact patch).
+    Raised arms would pull webbing out of the torso, so cut each arm free along that seam
+    (puppet arm on a split pin), cap both openings with fur-coloured fills and make the arm
+    piece arm-only and the body arm-free."""
+    import bmesh
+    me = ob.data
+    edges = _neighbours(me)
+    x, y, z = co.T
+    aw = W[:, arm_cols].sum(1)
+    armish = (aw > 0.5) & (np.abs(x) > 0.13) & (z > 0.34) & (z < 0.9)
+    piece = flood(handzone, edges, armish | handzone)
+    cut = piece[edges[:, 0]] != piece[edges[:, 1]]
+    # grey fur UV to paint the caps with (median UV of torso-side grey fur)
+    h, s, v = _hsv(col)
+    uvl = me.uv_layers.active
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.edges.ensure_lookup_table()
+    bm.verts.ensure_lookup_table()
+    uv_layer = bm.loops.layers.uv.active
+    grey_v = np.nonzero((s < 0.15) & (v > 0.4) & (v < 0.7) & (np.abs(x) < 0.12) & (z > 0.3)
+                        & (z < 0.42) & (y > 0.0) & (y < 0.1))[0][:50]
+    guv = np.array([[l[uv_layer].uv[:] for l in bm.verts[i].link_loops][0] for i in grey_v])
+    grey_uv = np.median(guv, 0) if len(guv) else np.array([0.5, 0.5])
+    n0 = len(bm.verts)
+    cut_edges = [bm.edges[i] for i in np.nonzero(cut)[0]]
+    bmesh.ops.split_edges(bm, edges=cut_edges)
+    bm.verts.ensure_lookup_table()
+    n1 = len(bm.verts)
+    # new verts are copies of originals: remember where they came from (same position)
+    boundary = [e for e in bm.edges if e.is_boundary]
+    res = bmesh.ops.holes_fill(bm, edges=boundary, sides=0)
+    caps = res["faces"]
+    tri = bmesh.ops.triangulate(bm, faces=caps, quad_method="BEAUTY", ngon_method="BEAUTY")
+    for f in tri["faces"]:
+        f.smooth = True
+        for l in f.loops:
+            l[uv_layer].uv = grey_uv
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    # new arrays
+    co2 = np.empty(len(me.vertices) * 3)
+    me.vertices.foreach_get("co", co2)
+    co2 = co2.reshape(-1, 3)
+    attr = me.color_attributes["tex_col"]
+    c4 = np.empty(len(me.vertices) * 4, np.float32)
+    attr.data.foreach_get("color", c4)
+    col2 = c4.reshape(-1, 4)[:, :3].astype(np.float64)
+    # weights of the duplicated verts: nearest original vertex at the same spot
+    W2 = np.zeros((len(co2), W.shape[1]), np.float32)
+    W2[:n0] = W
+    if n1 > n0:
+        from mathutils.kdtree import KDTree
+        kd = KDTree(n0)
+        idx = np.unique(edges[cut])
+        for i in idx:
+            kd.insert(co[i], int(i))
+        kd.balance()
+        for j in range(n0, n1):
+            _, i, _ = kd.find(co2[j])
+            W2[j] = W[i]
+    # classify pieces by connectivity after the cut
+    e2 = _neighbours(me)
+    lab = _components(len(co2), e2)
+    seeds = np.nonzero(np.concatenate([handzone, np.zeros(len(co2) - n0, bool)]))[0]
+    arm_labels = np.unique(lab[seeds])
+    is_arm = np.isin(lab, arm_labels)
+    others = [j for j in range(W.shape[1]) if j not in arm_cols]
+    W2[np.ix_(is_arm, others)] = 0
+    W2[np.ix_(~is_arm, arm_cols)] = 0
+    lost = W2.sum(1) < 1e-4
+    for tag in ("L", "R"):
+        side = (co2[:, 0] > 0) if tag == "L" else (co2[:, 0] < 0)
+        W2[lost & is_arm & side, J_[f"upper_arm.{tag}"]] = 1
+    W2[lost & ~is_arm, J_["spine.03"]] = 1
+    ob["arm_rip"] = "arms cut free along the fused torso seam: %d edges, %d cap faces" % (
+        int(cut.sum()), len(tri["faces"]))
+    return W2, co2, col2

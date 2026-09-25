@@ -661,9 +661,9 @@ def _fur(cv, mask, ring=0.003):
 def _lid(cv, eye, lid_col, lash_col, frac_top=1.0, frac_bot=0.0, sag=0.35, lashes=True, side=1):
     """Felt eyelid: covers the eye from the top down to a curved lash line."""
     cx, cz, rx, rz = eye
-    ell = _ellipse_a(cv, cx, cz, rx * 1.1, rz * 1.1)
+    ell = _ellipse_a(cv, cx, cz, rx * 1.2, rz * 1.16)
     X, Z = cv["X"], cv["Z"]
-    u = np.clip((X - cx) / (rx * 1.1), -1, 1)
+    u = np.clip((X - cx) / (rx * 1.2), -1, 1)
     edge = cz + rz * (1 - 2 * frac_top) - rz * sag * (1 - u ** 2)   # lash-line height
     top = np.clip(0.5 + (Z - edge) / 0.0004, 0, 1) * ell
     _paint(cv, top, lid_col)
@@ -674,7 +674,7 @@ def _lid(cv, eye, lid_col, lash_col, frac_top=1.0, frac_bot=0.0, sag=0.35, lashe
     xs = np.linspace(-0.98, 0.98, 41)
     ex = cx + xs * rx * 1.08
     ez = cz + rz * (1 - 2 * frac_top) - rz * sag * (1 - xs ** 2)
-    _paint(cv, _line_a(cv, np.stack([ex, ez], -1), rz * 0.14, taper=True), lash_col)
+    _paint(cv, _line_a(cv, np.stack([ex, ez], -1), rz * 0.2, taper=True), lash_col)
     if lashes:   # three little lashes at the outer corner
         for k, ang in enumerate((-35, -60, -85)):
             t = 0.93 - 0.14 * k
@@ -682,7 +682,7 @@ def _lid(cv, eye, lid_col, lash_col, frac_top=1.0, frac_bot=0.0, sag=0.35, lashe
             pz = cz + rz * (1 - 2 * frac_top) - rz * sag * (1 - t ** 2)
             a = math.radians(ang)
             q = (px + side * math.cos(a) * rz * 0.33, pz + math.sin(a) * rz * 0.33)
-            _paint(cv, _line_a(cv, [(px, pz), q], rz * 0.09), lash_col)
+            _paint(cv, _line_a(cv, [(px, pz), q], rz * 0.11), lash_col)
 
 
 def _wide(cv, base, eye, s=1.13, catch=True, side=1):
@@ -728,7 +728,7 @@ def paint_variant(name, cv0, F):
     # lid = the black felt around the eye; the lash line is a pale stitched seam so the
     # closed eye reads on black fur
     lid = (0.095, 0.092, 0.1)            # bolt_black felt, a touch lifted
-    lash = (0.66, 0.62, 0.56)
+    lash = (0.8, 0.76, 0.68)
     if name == "blink":
         _lid(cv, F["eyeL"], lid, lash, side=1)
         _lid(cv, F["eyeR"], lid, lash, side=-1)
@@ -746,7 +746,7 @@ def paint_variant(name, cv0, F):
         _brow_tilt(cv, base, F["browR"], math.radians(28))
     elif name == "whoa":
         X, Z = cv["X"], cv["Z"]
-        o = _ellipse_a(cv, 0.0, 0.514, 0.031, 0.035)
+        o = _ellipse_a(cv, 0.0, 0.516, 0.047, 0.043)
         white = np.median(base[(np.abs(X) < 0.06) & (Z > 0.56) & (Z < 0.575) & (np.abs(X) > 0.04)], 0)
         for sg in (1, -1):      # erase the smile creases outside the O
             h, s, v = _rgb_hsv(base)
@@ -773,7 +773,7 @@ def write_back(tex, P, cov, cv, protect=None):
     pos, nrm = P[ys, xs, :3], P[ys, xs, 3:]
     cj, ci = _canvas_idx(pos)
     a = cv["alpha"][cj, ci]
-    ok = (a > 0) & (pos[:, 1] <= cv["dep"][cj, ci] + 0.004) & (nrm[:, 1] < 0.1)
+    ok = (a > 0) & (pos[:, 1] <= cv["dep"][cj, ci] + 0.005) & (nrm[:, 1] < 0.3)
     if protect is not None:
         ok &= ~protect[ys, xs]
     a = a * ok
