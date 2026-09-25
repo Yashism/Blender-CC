@@ -692,28 +692,53 @@ def _ears(coll, m, att):
         att(_pin(f"ear.{sfx}", root + up * 0.02 + n * 0.017, n, coll, r=0.009), f"ear.{sfx}")
 
 
+SKULL_C = (0.01, 1.095)
+SNOUT_ROOT = -0.09
+# tapered stacked snout: (x0, x1, tip_y) per layer, each layer shorter toward the sides
+SNOUT_LAYERS = [(0.0, 0.017, -0.30), (0.015, 0.032, -0.262), (0.03, 0.047, -0.222),
+                (0.045, 0.062, -0.182)]
+
+
+def _skull(k, fur_from=205, fur_to=335, n=20, ry=0.148, rz=0.152):
+    """Rounded skull side profile (y, z), scaled by k, fur on the lower jaw arc."""
+    cy, cz = SKULL_C
+    ctrl, st = [], ""
+    for i in range(n):
+        a = math.radians(360.0 * i / n)
+        # flatter under the jaw, fuller at the back of the skull
+        zz = rz * math.sin(a) * (0.86 if math.sin(a) < 0 else 1.0)
+        yy = ry * math.cos(a) * (1.04 if math.cos(a) > 0 else 1.0)
+        ctrl.append((cy + yy * k, cz + zz * k))
+        deg = 360.0 * (i + 0.5) / n
+        st += "f" if fur_from <= deg <= fur_to else "s"
+    return ctrl, st
+
+
+def _snout_profile(tip, zt, zb):
+    r = SNOUT_ROOT
+    mid = (r + tip) / 2
+    return [(r, zt), (mid, (zt + 1.118) / 2 + 0.004), (tip + 0.022, 1.118), (tip, 1.1),
+            (tip + 0.028, 1.05), (mid, (zb + 1.05) / 2 - 0.006), (r, zb)]
+
+
 def _head(coll, m, att):
-    # Centre slab: full side profile (crown, face, jaw fringe, back of the head).
-    centre = [(-0.125, 1.22), (-0.136, 1.13), (-0.13, 1.02), (-0.1, 0.965), (-0.04, 0.945),
-              (0.05, 0.95), (0.12, 0.99), (0.15, 1.07), (0.145, 1.16), (0.09, 1.23),
-              (0.0, 1.255), (-0.08, 1.245)]
-    st = "sssfffssssss"
-    att(side(P + "head", outline(centre, st, fur=0.025), -0.05, 0.05, m["grey"], coll,
-             bevel=0.006), "head")
-    mid = scaled(centre, 0.97, (0.01, 1.09))
+    parts = []  # static head felt: joined into one Pickles_head mesh at the end
 
-    def midp():
-        return outline(mid, st, fur=0.0275)
-    for o in pair_side(P + "head_mid", midp(), 0.045, 0.1, m["grey"], coll, 0.006, midp):
-        att(o, "head")
-    outer = [(-0.11, 1.2), (-0.126, 1.12), (-0.122, 1.03), (-0.09, 0.97), (-0.03, 0.935),
-             (0.05, 0.935), (0.12, 0.975), (0.14, 1.06), (0.13, 1.15), (0.07, 1.21),
-             (-0.03, 1.225)]
+    def add(o):
+        parts.append(o)
+        return o
 
-    def outp():
-        return outline(outer, "ssssfffssss", fur=0.0275)
-    for o in pair_side(P + "head_outer", outp(), 0.095, 0.13, m["grey"], coll, 0.005, outp):
-        att(o, "head")
+    # Skull: contour-stacked side slabs, each smaller toward the side (reads round).
+    for name, x0, x1, k, fur in (("head_centre", -0.05, 0.05, 1.0, 0.026),
+                                 ("head_mid", 0.045, 0.095, 0.955, 0.028),
+                                 ("head_outer", 0.09, 0.13, 0.86, 0.028)):
+        c, st = _skull(k)
+        if x0 < 0:
+            add(side(P + name, outline(c, st, fur=fur), x0, x1, m["grey"], coll, bevel=0.006))
+        else:
+            for o in pair_side(P + name, outline(c, st, fur=fur), x0, x1, m["grey"], coll,
+                               0.006, lambda c=c, st=st, fur=fur: outline(c, st, fur=fur)):
+                add(o)
     # Cheek ruff: fringed crescent layered on the outside of the jaw, sweeping back.
     ruff = [(-0.1, 1.035), (-0.05, 1.03), (0.02, 1.02), (0.09, 1.0), (0.15, 0.975),
             (0.13, 0.935), (0.06, 0.912), (-0.03, 0.92), (-0.085, 0.97)]
@@ -721,7 +746,7 @@ def _head(coll, m, att):
     def ruffp():
         return outline(ruff, "sssffffff", fur=0.0325, fur_sp=0.0144, lean=0.35)
     for o in pair_side(P + "cheek_ruff", ruffp(), 0.126, 0.152, m["grey"], coll, 0.005, ruffp):
-        att(o, "head")
+        add(o)
     # Pale cheek patch (muzzle felt) layered on the front of the ruff, as in the ref.
     cheek = [(-0.118, 1.05), (-0.07, 1.045), (-0.02, 1.03), (0.01, 1.0), (-0.03, 0.965),
              (-0.09, 0.97), (-0.12, 1.0)]
@@ -730,33 +755,45 @@ def _head(coll, m, att):
         return outline(cheek, "ssfffss", fur=0.018, fur_sp=0.012, lean=0.4)
     for o in pair_side(P + "cheek_patch", cheekp(), 0.15, 0.157, m["muzzle"], coll, 0.002,
                        cheekp):
-        att(o, "head")
+        add(o)
+    # Cheek fur flaring out at the sides (front-facing, so it reads from the front and 3/4).
+    for sfx, s in (("L", 1), ("R", -1)):
+        fl = [(0.09, 1.075), (0.15, 1.07), (0.19, 1.035), (0.2, 0.985), (0.16, 0.945),
+              (0.1, 0.94), (0.08, 1.0)]
+        fl = [(x * s, z) for x, z in fl]
+        add(front(P + f"cheek_flare.{sfx}", outline(fl, "sffffss", fur=0.026, fur_sp=0.014,
+                                                    lean=0.35), -0.08, 0.022, m["grey"], coll,
+                  bevel=0.004))
     # Back of the head: a fringed panel so the head reads round from behind.
     bk, st = sym([(0.0, 1.17), (0.08, 1.15), (0.12, 1.08), (0.115, 1.0), (0.07, 0.96),
                   (0.0, 0.95)], "ssfff")
-    att(panel(P + "head_back", outline(bk, st, fur=0.022, fur_sp=0.016), 0.025,
-              (0, 0.128, 0), (0, 1, 0), (0, 0, 1), m["grey"], coll, bevel=0.005), "head")
-    # Front face plate (so the face reads from the front), fringed cheeks.
-    fp, st = sym([(0.0, 1.235), (0.1, 1.215), (0.13, 1.15), (0.13, 1.08), (0.122, 1.02),
-                  (0.085, 0.975), (0.035, 0.955), (0.0, 0.952)], "sssffffs")
-    att(front(P + "face_plate", outline(fp, st, fur=0.0225, fur_sp=0.0128), -0.112, 0.028,
-              m["grey"], coll, bevel=0.005), "head")
-    # Light-grey muzzle: layered side slabs pointing forward and a touch up.
-    muz = [(-0.105, 1.145), (-0.17, 1.135), (-0.24, 1.118), (-0.278, 1.1), (-0.288, 1.07),
-           (-0.272, 1.04), (-0.22, 1.012), (-0.16, 0.995), (-0.105, 0.99)]
-    att(side(P + "muzzle", outline(muz, "sssssssss"), -0.032, 0.032, m["muzzle"], coll,
-             bevel=0.006), "head")
-    mo = scaled(muz, 0.9, (-0.1, 1.06))
+    add(panel(P + "head_back", outline(bk, st, fur=0.022, fur_sp=0.016), 0.025,
+              (0, 0.142, 0), (0, 1, 0), (0, 0, 1), m["grey"], coll, bevel=0.005))
+    # Front face plate: round, with fringed cheeks.
+    fp, st = sym([(0.0, 1.24), (0.075, 1.23), (0.118, 1.19), (0.132, 1.13), (0.13, 1.07),
+                  (0.112, 1.015), (0.075, 0.978), (0.03, 0.962), (0.0, 0.96)], "sssfffffs")
+    add(front(P + "face_plate", outline(fp, st, fur=0.022, fur_sp=0.0128), -0.112, 0.028,
+              m["grey"], coll, bevel=0.006))
+    # Snout: light-grey wedge built from stacked layers, each shorter toward the sides,
+    # so it tapers to a point at the nose from the side, the top and 3/4.
+    for k, (x0, x1, tip) in enumerate(SNOUT_LAYERS):
+        prof = _snout_profile(tip, 1.158 - 0.009 * k, 0.99 + 0.012 * k)
 
-    def mop():
-        return outline(mo, "sssssssss")
-    for o in pair_side(P + "muzzle_side", mop(), 0.028, 0.052, m["muzzle"], coll, 0.005, mop):
-        att(o, "head")
-    # Chin: pale fringed layer under the muzzle.
+        def snp(prof=prof):
+            return outline(prof, "ssssssc")
+        if x0 == 0.0:
+            add(side(P + "snout", snp(), -x1, x1, m["muzzle"], coll, bevel=0.005))
+        else:
+            for o in pair_side(P + f"snout_{k}", snp(), x0, x1, m["muzzle"], coll, 0.005, snp):
+                add(o)
+    # Chin: pale fringed layer under the snout.
     chin, st = sym([(0.0, 1.02), (0.055, 1.015), (0.07, 0.985), (0.04, 0.96), (0.0, 0.955)],
                    "sfff")
-    att(front(P + "chin", outline(chin, st, fur=0.0175, fur_sp=0.0096), -0.138, 0.012,
-              m["muzzle"], coll), "head")
+    add(front(P + "chin", outline(chin, st, fur=0.0175, fur_sp=0.0096), -0.138, 0.012,
+              m["muzzle"], coll))
+    head = geo.join(parts, P + "head")
+    head.data.name = P + "head"
+    att(head, "head")
 
 
 def _hardhat(coll, m, att):

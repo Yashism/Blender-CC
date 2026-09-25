@@ -1131,8 +1131,8 @@ def pose_test(root):
     # ears flop back (lagging behind the head turn); ear.02 swings a little further
     world_rot("ear.01.L", (0, 1, 0), 10)   # upper-side ear hangs in against the head tilt
     world_rot("ear.02.L", (1, 0, 0), -12)
-    world_rot("ear.01.R", (1, 0, 0), -8)
-    world_rot("ear.02.R", (1, 0, 0), -14)
+    world_rot("ear.01.R", (1, 0, 0), -4)
+    world_rot("ear.02.R", (1, 0, 0), -9)
     pb["IK_FL"].location = (0, 0.03, 0.07)  # paw lifted (bone-local)
     pb["spine.01"].rotation_euler = (math.radians(4), 0, 0)
     face = bpy.data.objects["Bolt_face"]
