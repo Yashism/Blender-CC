@@ -162,8 +162,10 @@ def render_frames(out_dir, frames=None):
         bpy.ops.render.render(write_still=True)
 
 
-def encode_mp4(frame_dir, out_path, fps=24, pattern="f_%04d.png", start=1, crf=18):
+def encode_mp4(frame_dir, out_path, fps=24, pattern="f_%04d.png", start=1, crf=18, loops=1,
+               frames=0):
+    vf = ["-vf", f"loop=loop={loops - 1}:size={frames}:start=0"] if loops > 1 and frames else []
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-start_number",
-           str(start), "-i", os.path.join(frame_dir, pattern), "-c:v", "libx264", "-pix_fmt",
+           str(start), "-i", os.path.join(frame_dir, pattern), *vf, "-c:v", "libx264", "-pix_fmt",
            "yuv420p", "-crf", str(crf), "-movflags", "+faststart", out_path]
     subprocess.run(cmd, check=True)

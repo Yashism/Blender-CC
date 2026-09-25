@@ -52,7 +52,7 @@ EAR_ROOT = Vector((0.14, 0.045, 1.078))
 EAR_UP = Vector((0.32, 0.06, 1.0)).normalized()
 EYE_C = Vector((0.1405, -0.1425, 1.108))
 EYE_N = Vector((0.72, -0.69, 0.0)).normalized()
-MOUTH_O = Vector((0.0, -0.262, 1.03))
+MOUTH_O = Vector((0.0, -0.284, 1.046))
 EYE_RX, EYE_RY = 0.0245, 0.0335
 HAT_BASE = Vector((0.0, 0.012, 1.19))
 HAT_TILT = -11.0
@@ -714,11 +714,23 @@ def _skull(k, fur_from=205, fur_to=335, n=20, ry=0.148, rz=0.152):
     return ctrl, st
 
 
-def _snout_profile(tip, zt, zb):
+def _ztop(y):
+    return 1.135 + (y - SNOUT_ROOT) * 0.08
+
+
+def _zbot(y):
+    return 1.0 + (SNOUT_ROOT - y) * 0.25
+
+
+def _snout_profile(tip, k):
+    """Wedge that slopes to the nose; outer layers are shorter AND lower/narrower in z."""
     r = SNOUT_ROOT
     mid = (r + tip) / 2
-    return [(r, zt), (mid, (zt + 1.118) / 2 + 0.004), (tip + 0.022, 1.118), (tip, 1.1),
-            (tip + 0.028, 1.05), (mid, (zb + 1.05) / 2 - 0.006), (r, zb)]
+    dt, db = 0.011 * k, 0.012 * k
+    return [(r, _ztop(r) - dt), (mid, _ztop(mid) - dt + 0.003), (tip + 0.022, _ztop(tip) - dt),
+            (tip, (_ztop(tip) + _zbot(tip)) / 2 - (dt - db) / 2),
+            (tip + 0.012, _zbot(tip + 0.012) + db), (mid, _zbot(mid) + db - 0.004),
+            (r, _zbot(r) + db)]
 
 
 def _head(coll, m, att):
@@ -761,9 +773,13 @@ def _head(coll, m, att):
         fl = [(0.09, 1.075), (0.15, 1.07), (0.19, 1.035), (0.2, 0.985), (0.16, 0.945),
               (0.1, 0.94), (0.08, 1.0)]
         fl = [(x * s, z) for x, z in fl]
-        add(front(P + f"cheek_flare.{sfx}", outline(fl, "sffffss", fur=0.026, fur_sp=0.014,
-                                                    lean=0.35), -0.08, 0.022, m["grey"], coll,
-                  bevel=0.004))
+        o = add(front(P + f"cheek_flare.{sfx}", outline(fl, "sffffss", fur=0.026, fur_sp=0.014,
+                                                        lean=0.35), -0.08, 0.022, m["grey"],
+                      coll, bevel=0.004))
+        # swing the outer edge back so it isn't edge-on from the side
+        pv = Vector((0.09 * s, -0.08, 0.0))
+        o.matrix_world = (Matrix.Translation(pv) @ Matrix.Rotation(math.radians(35 * s), 4, "Z")
+                          @ Matrix.Translation(-pv) @ o.matrix_world)
     # Back of the head: a fringed panel so the head reads round from behind.
     bk, st = sym([(0.0, 1.17), (0.08, 1.15), (0.12, 1.08), (0.115, 1.0), (0.07, 0.96),
                   (0.0, 0.95)], "ssfff")
@@ -777,7 +793,7 @@ def _head(coll, m, att):
     # Snout: light-grey wedge built from stacked layers, each shorter toward the sides,
     # so it tapers to a point at the nose from the side, the top and 3/4.
     for k, (x0, x1, tip) in enumerate(SNOUT_LAYERS):
-        prof = _snout_profile(tip, 1.158 - 0.009 * k, 0.99 + 0.012 * k)
+        prof = _snout_profile(tip, k)
 
         def snp(prof=prof):
             return outline(prof, "ssssssc")
@@ -916,28 +932,33 @@ def _face(coll, m, arm):
         for v in lid.data.vertices:
             v.co.y = EYE_RY * 1.1 - (EYE_RY * 1.1 - v.co.y) * 0.12
         add(lid, f"lid_{sfx}")
-    # Nose (black felt, layered) and mouth line.
-    nose = [(-0.262, 1.128), (-0.29, 1.124), (-0.304, 1.104), (-0.297, 1.08), (-0.272, 1.074),
-            (-0.256, 1.096)]
-    add(side(P + "nose", outline(nose, "ssssss"), -0.022, 0.022, m["black"], coll, bevel=0.006),
+    # Nose: black felt cap over the snout tip, with a front disc.
+    nose = [(-0.27, 1.127), (-0.3, 1.124), (-0.317, 1.104), (-0.311, 1.08), (-0.288, 1.071),
+            (-0.268, 1.094)]
+    add(side(P + "nose", outline(nose, "ssssss"), -0.024, 0.024, m["black"], coll, bevel=0.006),
         "nose")
-    add(front(P + "nose_front", outline(ellipse(0.024, 0.019, 24, 0.0, 1.103)), -0.293, 0.01,
+    add(front(P + "nose_front", outline(ellipse(0.021, 0.017, 24, 0.0, 1.102)), -0.302, 0.012,
               m["black"], coll, bevel=0.004), "nose")
-    for sfx, s in (("L", 1), ("R", -1)):
-        sl = [(-0.268, 1.045), (-0.24, 1.03), (-0.205, 1.026), (-0.175, 1.034), (-0.158, 1.05)]
-        x0 = 0.05 if s > 0 else -0.055
-        add(side(P + f"smile.{sfx}", outline(strip(sl, 0.006)), x0, x0 + 0.005, m["black"],
-                 coll, bevel=0.0015), "mouth")
-    mouth = [(-0.03, 1.052), (-0.015, 1.043), (0.0, 1.046), (0.015, 1.043), (0.03, 1.052)]
-    add(front(P + "mouth_front", outline(strip(mouth, 0.006)), -0.277, 0.006, m["black"], coll,
-              bevel=0.0015), "mouth")
-    add(front(P + "philtrum", outline(strip([(0.0, 1.083), (0.0, 1.046)], 0.005)), -0.279,
-              0.005, m["black"], coll, bevel=0.0015), "mouth")
+    # Smile: one short stitched segment on each snout layer, stepping back and curling up.
+    segs = [(1, [(-0.249, 1.07), (-0.236, 1.064), (-0.224, 1.062)]),
+            (2, [(-0.21, 1.062), (-0.197, 1.06), (-0.185, 1.06)]),
+            (3, [(-0.17, 1.061), (-0.15, 1.063), (-0.135, 1.07), (-0.127, 1.08)])]
+    for sfx, s_ in (("L", 1), ("R", -1)):
+        for k, sl in segs:
+            x = SNOUT_LAYERS[k][1]
+            xr = (x - 0.001, x + 0.003) if s_ > 0 else (-x - 0.003, -x + 0.001)
+            add(side(P + f"smile{k}.{sfx}", outline(strip(sl, 0.0055)), *xr, m["black"], coll,
+                     bevel=0.0012), "smile")
+    mouth = [(-0.016, 1.066), (-0.008, 1.058), (0.0, 1.061), (0.008, 1.058), (0.016, 1.066)]
+    add(front(P + "mouth_front", outline(strip(mouth, 0.0055)), -0.287, 0.005, m["black"],
+              coll, bevel=0.0012), "mouth")
+    add(front(P + "philtrum", outline(strip([(0.0, 1.075), (0.0, 1.061)], 0.0045)), -0.288,
+              0.005, m["black"], coll, bevel=0.0012), "philtrum")
 
     # Open "O" mouth, tilted to follow the underside of the snout. At rest it is squashed
     # into a sliver hidden behind the mouth line; the whoa key opens it.
     mo_n = Vector((0.0, -0.78, -0.62)).normalized()
-    mo = panel(P + "mouth_open", outline(ellipse(0.017, 0.02, 28), jit=0.0004), 0.005,
+    mo = panel(P + "mouth_open", outline(ellipse(0.016, 0.019, 28), jit=0.0004), 0.005,
                MOUTH_O - mo_n * 0.003, mo_n, (0, -0.62, 0.78), m["black"], coll, bevel=0.0015)
     for v in mo.data.vertices:
         v.co.y = 0.018 - (0.018 - v.co.y) * 0.06
@@ -954,30 +975,28 @@ def _face(coll, m, arm):
     rig.attach(face, arm, "head")
 
     # ---- shape keys (face mesh verts are in rest-pose world space)
-    def smile_front(co):
-        if abs(co.x) < 0.04 and co.y < -0.27 and co.z < 1.06:  # front mouth corners curl up
-            return co + Vector((0, 0, 9.0 * co.x * co.x))
-        if abs(co.x) > 0.04:  # side smile lines: lift the back ends
-            t = max(0.0, min(1.0, (co.y + 0.25) / 0.1))
-            return co + Vector((0, 0.004 * t, 0.014 * t * t))
-        return co
-    rig.shape_key(face, "smile", [("mouth", smile_front),
+    def smile_side(co):  # lift the back ends of the smile
+        t = max(0.0, min(1.0, (co.y + 0.25) / 0.125))
+        return co + Vector((0, 0.002 * t, 0.012 * t * t))
+
+    def smile_front(co):  # front mouth corners curl up
+        return co + Vector((0, 0, 23.0 * co.x * co.x))
+    rig.shape_key(face, "smile", [("smile", smile_side), ("mouth", smile_front),
                                   ("brows", lambda co: co + Vector((0, 0, 0.003)))])
 
-    def open_mouth(co):
-        if abs(co.x) < 0.04 and co.y < -0.27 and co.z < 1.06:  # upper lip of the "O"
-            cm = Vector((0.0, co.y, 1.046))
-            r = co - cm
-            return cm + Vector((r.x * 0.75, 0, r.z * 0.6 + 0.002))
-        t = max(0.0, min(1.0, (co.y + 0.27) / 0.11))
-        return co + Vector((0, 0, -0.008 * (1 - t)))
+    def open_mouth(co):  # front mouth becomes the upper lip of the "O"
+        return Vector((co.x * 0.75, co.y, 1.061 + (co.z - 1.061) * 0.6 + 0.004))
+
+    def drop_smile(co):
+        t = max(0.0, min(1.0, (co.y + 0.25) / 0.125))
+        return co + Vector((0, 0, -0.006 * (1 - t)))
     mo_up = Vector((0.0, -0.62, 0.78)).normalized()
     mo_top = MOUTH_O + mo_up * 0.018
 
     def open_o(co):
         d = (co - mo_top).dot(mo_up)  # squashed by 0.06 at rest
         return co - mo_up * d + mo_up * (d / 0.06)
-    whoa = [("mouth", open_mouth), ("mouth_open", open_o),
+    whoa = [("mouth", open_mouth), ("smile", drop_smile), ("mouth_open", open_o),
             ("brows", lambda co: co + Vector((0, 0, 0.014)))]
     for sfx, s in (("L", 1), ("R", -1)):
         c, n, y, x = _eye_frame(s)

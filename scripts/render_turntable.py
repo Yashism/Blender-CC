@@ -32,6 +32,8 @@ ap.add_argument("--views", action="store_true", help="only render front/3-4/side
 ap.add_argument("--only", default="", help="comma list of frames to render")
 ap.add_argument("--out", default="")
 ap.add_argument("--save-blend", action="store_true")
+ap.add_argument("--fps", type=int, default=12)
+ap.add_argument("--loops", type=int, default=1, help="repeat the spin N times in the MP4")
 a = ap.parse_args(argv)
 
 studio.reset_scene()
@@ -65,4 +67,5 @@ elif a.only:
 else:
     fdir = os.path.join(out, "frames")
     studio.render_frames(fdir)
-    studio.encode_mp4(fdir, os.path.join(out, f"{a.asset}_turntable.mp4"), fps=12)
+    studio.encode_mp4(fdir, os.path.join(out, f"{a.asset}_turntable.mp4"), fps=a.fps,
+                      loops=a.loops, frames=a.frames)
