@@ -54,7 +54,7 @@ FL02_SEAT_POINT = (0.0, 0.25, 1.00)
 
 # Whole mock stands 0..1.37 m on the floor; ~70% of frame height.
 TURNTABLE = dict(height=1.4, radius=5.5, lens=50, target_z=0.70, cam_elev=0.2, fstop=8.0,
-                 key=480)
+                 key=320)
 
 SHAPE_KEYS = ["smile", "mouth_open", "mouth_o", "blink", "wink", "surprised_brows"]
 
@@ -64,8 +64,9 @@ FACE_Y = -0.085                           # front face of the front head slab
 EYE_X, EYE_Z = 0.064, 0.69
 EYE_W, EYE_H, EYE_TILT = 0.068, 0.05, math.radians(9)
 HAT_C = Vector((0.0, 0.03, 0.772))
-HEAD_SCALE = 1.12                         # whole head group scaled about HEAD_PIVOT (hat top)
+HEAD_SCALE = 1.27                         # whole head group scaled about HEAD_PIVOT (hat top)
 HEAD_PIVOT = Vector((0.0, 0.0, 0.92))
+HEAD_XWIDE = 1.14                         # extra width (X) for full cheek ruffs
 HAT_TILT = -0.12                          # about X; negative lifts the front brim
 
 WHEEL_C = Vector((0, -0.55, 0.38))
@@ -73,16 +74,16 @@ WHEEL_RAD = 0.19
 WHEEL_TILT = math.radians(35)
 GRIP_ANGLE = math.radians(15)            # above "9 and 3", toward 12 o'clock
 
-SHOULDER = Vector((0.15, -0.02, 0.445))
-UPPER_ARM_LEN, FOREARM_LEN = 0.29, 0.275
-HIP = Vector((0.11, 0.02, 0.10))
-KNEE = Vector((0.12, -0.27, 0.085))
-ANKLE = Vector((0.125, -0.355, -0.36))
-TOE = Vector((0.125, -0.49, -0.42))
+SHOULDER = Vector((0.2, -0.01, 0.40))
+UPPER_ARM_LEN, FOREARM_LEN = 0.28, 0.27
+HIP = Vector((0.15, 0.03, 0.15))
+KNEE = Vector((0.15, -0.29, 0.12))
+ANKLE = Vector((0.14, -0.37, -0.35))
+TOE = Vector((0.14, -0.52, -0.42))
 SCREEN = Vector((-0.34, -0.95, 0.10))
-TAIL_PTS = [Vector(p) for p in [(-0.03, 0.15, 0.06), (-0.15, 0.185, 0.055), (-0.265, 0.15, 0.05),
-                                 (-0.305, 0.07, -0.05), (-0.3, -0.02, -0.17),
-                                 (-0.3, -0.13, -0.1)]]
+TAIL_PTS = [Vector(p) for p in [(-0.08, 0.15, 0.07), (-0.2, 0.17, 0.07), (-0.3, 0.12, 0.07),
+                                 (-0.345, 0.03, -0.04), (-0.35, -0.06, -0.17),
+                                 (-0.345, -0.17, -0.1)]]
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 FWD = Vector((0, -1, 0))
 
@@ -96,7 +97,7 @@ def _mats():
         stripe=M.felt("Mittens_felt_stripe", "tabby_stripe", fiber=f, sheen=0.3),
         cream=M.felt("Mittens_felt_cream", "cream", fiber=f),
         pink=M.felt("Mittens_felt_pink", "pink_nose", fiber=f),
-        hat=M.felt("Mittens_felt_hardhat", "hardhat", fiber=f, sheen=0.2),
+        hat=M.felt("Mittens_felt_hardhat", "hardhat", fiber=f, sheen=0.05, rough=0.95),
         brown=M.felt("Mittens_felt_brown", "fl_dark", fiber=f),
         white=M.felt("Mittens_felt_white", "line_white", fiber=f),
         eye=M.glossy_eye("Mittens_eye_green", "cat_eye"),
@@ -489,17 +490,17 @@ def head_outline(scale=1.0, ruff=1.0, n=260):
     return fuzz(pts, 0.0012, 45, seed=scale * 10)
 
 
-TORSO_PROF = [(-0.12, 0.0), (0.07, 0.0), (0.118, 0.035), (0.125, 0.12), (0.124, 0.26),
-              (0.115, 0.38), (0.095, 0.47), (0.065, 0.55), (0.03, 0.60), (-0.05, 0.61),
-              (-0.085, 0.54), (-0.115, 0.43), (-0.145, 0.30), (-0.163, 0.17), (-0.16, 0.06)]
+# broad bean: round belly in front, big rump behind (fits in front of the FL-02 backrest)
+TORSO_PROF = [(-0.17, 0.0), (0.13, 0.0), (0.195, 0.045), (0.205, 0.14), (0.198, 0.25),
+              (0.175, 0.33), (0.135, 0.40), (0.08, 0.455), (0.0, 0.48), (-0.07, 0.47),
+              (-0.12, 0.42), (-0.155, 0.33), (-0.18, 0.22), (-0.19, 0.11), (-0.185, 0.04)]
 
 
-def torso_outline(inset=0.0):
+def torso_outline(sf=1.0, sz=1.0):
+    """Torso side profile, scaled toward the seat (outer layers lower = pear from the front)."""
     pts = catmull(TORSO_PROF, 6, closed=True)
-    pts = [V2(p) for p in pts]
-    if inset:
-        pts = offset(pts, -inset)
-    return fuzz(pts, 0.0015, 40, seed=inset * 100)
+    pts = [Vector((p[0] * sf, p[1] * sz)) for p in pts]
+    return fuzz(pts, 0.0015, 40, seed=sf * 100 + sz)
 
 
 def clip_z(pts, z0, keep_below=True):
@@ -564,56 +565,61 @@ def build(coll):
         return obj
 
     # ================================================================ torso (contour stack)
-    layers = [(0.0, 0.11, 0.0, "core")]          # (x centre, depth, inset)
+    # (x centre, depth, fwd scale, z scale): core, then lower/narrower side layers -> pear
+    layers = [(0.0, 0.16, 1.0, 1.0, "core")]
     for s in (1, -1):
-        layers.append((s * 0.0725, 0.035, 0.012, "mid"))
-        layers.append((s * 0.1025, 0.025, 0.032, "out"))
-    for k, (x, d, ins, tag) in enumerate(layers):
-        put(side(f"Mittens_torso_{tag}_{k}", torso_outline(ins), d, x, m["tabby"], coll,
-                 bevel=0.008), "spine.02")
+        layers.append((s * 0.105, 0.05, 0.94, 0.9, "mid"))
+        layers.append((s * 0.1525, 0.045, 0.85, 0.72, "out"))
+    for k, (x, d, sf, sz, tag) in enumerate(layers):
+        put(side(f"Mittens_torso_{tag}_{k}", torso_outline(sf, sz), d, x, m["tabby"], coll,
+                 bevel=0.01), "spine.02")
     for s, tag in ((1, "L"), (-1, "R")):
-        xo = s * 0.115
-        # cream chest edge (seen from the side, like the ref), pinked inner edge
-        crest = [(0.086, 0.06), (0.09, 0.2), (0.084, 0.33), (0.068, 0.42), (0.043, 0.49),
-                 (0.02, 0.46), (0.04, 0.38), (0.052, 0.3), (0.055, 0.2), (0.05, 0.09)]
+        xo = s * 0.13
+        # cream chest edge on the mid layer (seen from the side, like the ref), pinked inner edge
+        crest = [(0.175, 0.10), (0.18, 0.22), (0.16, 0.31), (0.125, 0.37), (0.09, 0.40),
+                 (0.07, 0.36), (0.1, 0.3), (0.12, 0.22), (0.125, 0.12)]
         crest = catmull(crest, 4, closed=True)
-        crest = pinked(resample(crest, 0.007), 0.0035, mask=lambda p: 1.0 if p.x < 0.085 else 0.0)
+        crest = pinked(resample(crest, 0.008), 0.004, mask=lambda p: 1.0 if p.x < 0.15 else 0.0)
         put(side(f"Mittens_chest_side_{tag}", crest, 0.005, xo, m["cream"], coll, s=s,
                  center=False, bevel=0.0015), "spine.02")
-        # side stripes: brush strokes sweeping from the back edge forward-down
+        # side stripes (mid layer, above the haunch disc): strokes sweeping forward-down
         for i, (p0, p1, w, b) in enumerate([
-                ((-0.064, 0.475), (0.0, 0.43), 0.034, 0.05),
-                ((-0.088, 0.38), (-0.005, 0.32), 0.04, 0.06),
-                ((-0.112, 0.27), (-0.02, 0.215), 0.04, 0.05),
-                ((-0.125, 0.16), (-0.045, 0.12), 0.034, 0.04)]):
-            put(side(f"Mittens_stripe_side_{tag}{i}", fuzz(stroke(p0, p1, w, b * s * 0 + b)),
+                ((-0.105, 0.415), (0.0, 0.385), 0.04, 0.05),
+                ((-0.14, 0.355), (-0.03, 0.315), 0.046, 0.06)]):
+            put(side(f"Mittens_stripe_side_{tag}{i}", fuzz(stroke(p0, p1, w, b)),
                      0.005, xo, m["stripe"], coll, s=s, center=False, bevel=0.0015), "spine.02")
-    # chest bib (front), pinked edges
-    bib = catmull([(-0.072, 0.49), (-0.07, 0.40), (-0.055, 0.28), (-0.035, 0.17), (0.0, 0.13),
-                   (0.035, 0.17), (0.055, 0.28), (0.07, 0.40), (0.072, 0.49), (0.0, 0.51)],
+        # outer (rump) layer stripes, peeking out behind the haunch disc
+        xo2 = s * 0.175
+        for i, (p0, p1, w) in enumerate((((-0.155, 0.26), (-0.09, 0.235), 0.036),
+                                          ((-0.16, 0.17), (-0.1, 0.15), 0.036))):
+            put(side(f"Mittens_stripe_rump_{tag}{i}", fuzz(stroke(p0, p1, w, 0.05)), 0.005, xo2,
+                     m["stripe"], coll, s=s, center=False, bevel=0.0015), "spine.02")
+    # big cream bib (front), pinked edges: vertical belly piece + upper piece leaning back
+    bib = catmull([(-0.11, 0.43), (-0.115, 0.34), (-0.1, 0.22), (-0.065, 0.12), (0.0, 0.06),
+                   (0.065, 0.12), (0.1, 0.22), (0.115, 0.34), (0.11, 0.43), (0.0, 0.455)],
                   5, closed=True)
-    bib = pinked(resample(bib, 0.008), 0.004, mask=lambda p: 1.0 if p.y < 0.475 else 0.0)
+    bib = pinked(resample(bib, 0.009), 0.005, mask=lambda p: 1.0 if p.y < 0.42 else 0.0)
     bib = fuzz(bib)
-    # two pieces following the chest: vertical belly piece + upper piece leaning back
-    lo = clip_z(bib, 0.36, keep_below=True)
-    put(front("Mittens_chest_bib", lo, 0.008, -0.1262, m["cream"], coll, center=False,
+    lo = clip_z(bib, 0.27, keep_below=True)
+    put(front("Mittens_chest_bib", lo, 0.008, -0.2065, m["cream"], coll, center=False,
               bevel=0.002), "spine.02")
-    hi = [Vector((p.x, p.y - 0.34)) for p in clip_z(bib, 0.34, keep_below=False)]
-    ang = math.atan2(0.02, 0.13)
+    hi = [Vector((p.x, p.y - 0.255)) for p in clip_z(bib, 0.255, keep_below=False)]
+    ang = math.atan2(0.063, 0.15)
     bv = Vector((0, math.sin(ang), math.cos(ang)))
-    put(panel("Mittens_chest_bib_upper", hi, 0.008, (0, -0.1185, 0.34), X, bv, m["cream"], coll,
-              center=False, out=FWD, bevel=0.002), "spine.02")
-    # back stripes: across the back slab edge, as short strokes on a panel facing +Y
-    for i, (z, w) in enumerate([(0.44, 0.1), (0.33, 0.12), (0.22, 0.13)]):
+    put(panel("Mittens_chest_bib_upper", hi, 0.008, (0, -0.2025, 0.255), X, bv, m["cream"], coll,
+              center=False, out=Vector((0, -math.cos(ang), math.sin(ang))), bevel=0.002),
+        "spine.02")
+    # back stripes: short strokes on the back edge (panel facing +Y)
+    for i, (z, w) in enumerate([(0.40, 0.14), (0.30, 0.17), (0.20, 0.18)]):
         fwd_back = _back_fwd(z) - 0.001
-        pts = stroke((-w * 0.5, z), (w * 0.55, z - 0.015), 0.032, 0.08)
-        o = put(front(f"Mittens_stripe_back_{i}", fuzz(pts), 0.005, -fwd_back, m["stripe"], coll,
-                      facing=1, center=False, bevel=0.0015), "spine.02")
+        pts = stroke((-w * 0.5, z), (w * 0.55, z - 0.015), 0.036, 0.08)
+        put(front(f"Mittens_stripe_back_{i}", fuzz(pts), 0.005, -fwd_back, m["stripe"], coll,
+                  facing=1, center=False, bevel=0.0015), "spine.02")
     # neck plug under the head + neck pin (visible from the back)
-    put(side("Mittens_neck", fuzz(catmull([(-0.06, 0.52), (0.05, 0.52), (0.055, 0.6), (-0.06, 0.6)],
-                                            4, closed=True)), 0.14, 0.0, m["tabby"], coll,
-             bevel=0.01), "neck")
-    put(pin("Mittens_pin_neck", (0, 0.078, 0.575), (0, 1, 0.2), 0.013, coll), "neck")
+    put(side("Mittens_neck", fuzz(catmull([(-0.08, 0.40), (0.07, 0.40), (0.07, 0.49), (-0.08, 0.49)],
+                                            4, closed=True)), 0.18, 0.0, m["tabby"], coll,
+             bevel=0.012), "neck")
+    put(pin("Mittens_pin_neck", (0, 0.128, 0.43), (0, 1, 0.3), 0.014, coll), "neck")
 
     # ================================================================ head (contour stack along Y)
     hc = HEAD_C
@@ -824,7 +830,8 @@ def build(coll):
         put(o, "head")
 
     # ---------------- scale the whole head group about the hat top (big cartoon head)
-    SM = (Matrix.Translation(HEAD_PIVOT) @ Matrix.Scale(HEAD_SCALE, 4) @
+    SM = (Matrix.Translation(HEAD_PIVOT) @
+          Matrix.Diagonal((HEAD_SCALE * HEAD_XWIDE, HEAD_SCALE, HEAD_SCALE, 1.0)) @
           Matrix.Translation(-HEAD_PIVOT))
     for name, bone in P.items():
         if bone == "head" or bone.startswith(("eye.", "ear.")):
@@ -834,7 +841,7 @@ def build(coll):
         eye_c[tag] = SM @ eye_c[tag]
         ear_pts[tag] = tuple(SM @ p for p in ear_pts[tag])
 
-    # ================================================================ arms
+    # ================================================================ arms (thick felt paddles)
     arm_pts = {}
     for s, tag in ((1, "L"), (-1, "R")):
         sh = Vector((s * SHOULDER.x, SHOULDER.y, SHOULDER.z))
@@ -844,42 +851,46 @@ def build(coll):
         arm_pts[tag] = (sh, el, wr, g)
         wout = Vector((s, 0, 0))
         fu = Frame(sh, el, wout, up_hint=Vector((0, 1, 0.3)))
-        up_arm = fpanel(f"Mittens_upper_arm_{tag}", fu, fuzz(limb2d(fu.L, 0.043, 0.035)), 0.034,
-                        m["tabby"], coll, bevel=0.007)
+        up_arm = fpanel(f"Mittens_upper_arm_{tag}", fu, fuzz(limb2d(fu.L, 0.078, 0.066)), 0.06,
+                        m["tabby"], coll, bevel=0.012)
         put(up_arm, f"upper_arm.{tag}")
-        for i, (al, w) in enumerate(((0.1, 0.028), (0.19, 0.025))):
-            st = stroke((al, 0.046), (al - 0.028, -0.012), w, 0.1)
-            put(fpanel(f"Mittens_stripe_uarm_{tag}{i}", fu, fuzz(st), 0.004, m["stripe"], coll,
-                       lift=0.017, center=False, bevel=0.001), f"upper_arm.{tag}")
-        # shoulder disc + pin
-        disc = fpanel(f"Mittens_shoulder_disc_{tag}", fu, fuzz(ellipse2d(0.0, 0.0, 0.068, 0.068, 48),
-                                                              0.0015), 0.02, m["tabby"], coll,
-                      lift=0.027, bevel=0.006)
+        for i, (al, w) in enumerate(((0.13, 0.042), (0.215, 0.04))):
+            st = stroke((al, 0.074), (al - 0.04, -0.02), w, 0.1)
+            put(fpanel(f"Mittens_stripe_uarm_{tag}{i}", fu, fuzz(st), 0.005, m["stripe"], coll,
+                       lift=0.03, center=False, bevel=0.0012), f"upper_arm.{tag}")
+        # big shoulder disc + pin
+        disc = fpanel(f"Mittens_shoulder_disc_{tag}", fu, fuzz(ellipse2d(0.0, 0.0, 0.1, 0.1, 56),
+                                                              0.0018), 0.026, m["tabby"], coll,
+                      lift=0.043, bevel=0.008)
         put(disc, f"upper_arm.{tag}")
-        put(pin(f"Mittens_pin_shoulder_{tag}", fu.a + fu.w * 0.038, fu.w, 0.016, coll),
+        for i, (p0, p1, w) in enumerate((((-0.06, 0.075), (0.0, 0.035), 0.03),
+                                          ((-0.09, 0.02), (-0.025, -0.01), 0.03))):
+            put(fpanel(f"Mittens_stripe_sdisc_{tag}{i}", fu, fuzz(stroke(p0, p1, w, 0.05)), 0.004,
+                       m["stripe"], coll, lift=0.056, center=False, bevel=0.001), f"upper_arm.{tag}")
+        put(pin(f"Mittens_pin_shoulder_{tag}", fu.a + fu.w * 0.057, fu.w, 0.02, coll),
             f"upper_arm.{tag}")
         # forearm, layered outside the upper arm at the elbow
         ff = Frame(el, wr, wout, up_hint=Vector((0, 1, 0.3)))
-        fa = fpanel(f"Mittens_forearm_{tag}", ff, fuzz(limb2d(ff.L, 0.036, 0.031)), 0.03,
-                    m["tabby"], coll, lift=0.022, bevel=0.007)
+        fa = fpanel(f"Mittens_forearm_{tag}", ff, fuzz(limb2d(ff.L, 0.068, 0.058)), 0.05,
+                    m["tabby"], coll, lift=0.035, bevel=0.011)
         put(fa, f"forearm.{tag}")
-        for i, al in enumerate((0.08, 0.16)):
-            st = stroke((al, 0.038), (al - 0.02, -0.01), 0.024, 0.1)
-            put(fpanel(f"Mittens_stripe_farm_{tag}{i}", ff, fuzz(st), 0.004, m["stripe"], coll,
-                       lift=0.037, center=False, bevel=0.001), f"forearm.{tag}")
-        put(pin(f"Mittens_pin_elbow_{tag}", ff.a + ff.w * 0.038, ff.w, 0.012, coll),
+        for i, al in enumerate((0.09, 0.17)):
+            st = stroke((al, 0.066), (al - 0.03, -0.018), 0.038, 0.1)
+            put(fpanel(f"Mittens_stripe_farm_{tag}{i}", ff, fuzz(st), 0.005, m["stripe"], coll,
+                       lift=0.06, center=False, bevel=0.0012), f"forearm.{tag}")
+        put(pin(f"Mittens_pin_elbow_{tag}", ff.a + ff.w * 0.061, ff.w, 0.015, coll),
             f"forearm.{tag}")
-        # cream paw gripping the rim (straddles it), toe lines on the outer face
+        # chunky cream mitt gripping the rim (straddles it), toe lines on the outer face
         fh = Frame(wr, g, wout, up_hint=Vector((0, 1, 0.3)))
-        paw = limb2d(fh.L + 0.03, 0.036, 0.034)
-        paw = [Vector((q.x - 0.01, q.y)) for q in paw]
-        put(fpanel(f"Mittens_paw_{tag}", fh, fuzz(paw), 0.05, m["cream"], coll, lift=0.012,
-                   bevel=0.01), f"hand.{tag}")
-        for i, acr in enumerate((-0.012, 0.0, 0.012)):
-            ln = limb2d(0.022, 0.0022, 0.0015, 4)
-            ln = [Vector((fh.L + 0.012 + q.x, acr + q.y)) for q in ln]
+        paw = limb2d(fh.L + 0.04, 0.062, 0.058)
+        paw = [Vector((q.x - 0.012, q.y)) for q in paw]
+        put(fpanel(f"Mittens_paw_{tag}", fh, fuzz(paw), 0.08, m["cream"], coll, lift=0.02,
+                   bevel=0.016), f"hand.{tag}")
+        for i, acr in enumerate((-0.022, 0.0, 0.022)):
+            ln = limb2d(0.034, 0.003, 0.002, 4)
+            ln = [Vector((fh.L + 0.035 + q.x, acr + q.y)) for q in ln]
             put(fpanel(f"Mittens_paw_toe_{tag}{i}", fh, ln, 0.003, m["brown"], coll,
-                       lift=0.037, center=False, bevel=0.0), f"hand.{tag}")
+                       lift=0.06, center=False, bevel=0.0), f"hand.{tag}")
 
     # ================================================================ legs
     leg_pts = {}
@@ -891,82 +902,83 @@ def build(coll):
         leg_pts[tag] = (hp, kn, an, to)
         wout = Vector((s, 0, 0))
         ft = Frame(hp, kn, wout)
-        th = fpanel(f"Mittens_thigh_{tag}", ft, fuzz(limb2d(ft.L, 0.075, 0.052)), 0.05,
-                    m["tabby"], coll, bevel=0.009)
+        th = fpanel(f"Mittens_thigh_{tag}", ft, fuzz(limb2d(ft.L, 0.112, 0.08)), 0.08,
+                    m["tabby"], coll, bevel=0.014)
         put(th, f"thigh.{tag}")
-        # big haunch disc with its pin (on the thigh bone so it swings with the leg)
-        hd_c = Vector((s * 0.11, 0.035, 0.115))
+        # huge haunch disc with its pin (on the thigh bone so it swings with the leg)
+        hd_c = Vector((s * 0.15, 0.05, 0.16))
         hf = Frame(hd_c, hd_c + FWD, wout)
-        put(fpanel(f"Mittens_haunch_disc_{tag}", hf, fuzz(ellipse2d(0, 0, 0.113, 0.113, 64), 0.002),
-                   0.03, m["tabby"], coll, lift=0.04, bevel=0.008), f"thigh.{tag}")
-        for i, (p0, p1, w) in enumerate((((-0.02, 0.1), (0.035, 0.045), 0.03),
-                                          ((-0.07, 0.075), (-0.005, 0.02), 0.032),
-                                          ((-0.1, 0.03), (-0.03, -0.01), 0.028))):
-            put(fpanel(f"Mittens_stripe_haunch_{tag}{i}", hf, fuzz(stroke(p0, p1, w, 0.08)), 0.004,
-                       m["stripe"], coll, lift=0.055, center=False, bevel=0.001), f"thigh.{tag}")
-        put(pin(f"Mittens_pin_hip_{tag}", hd_c + hf.w * 0.056, hf.w, 0.017, coll), f"thigh.{tag}")
-        for i, (al, r) in enumerate(((0.19, 0.057), (0.25, 0.052))):
-            st = stroke((al, r), (al - 0.02, 0.0), 0.026, 0.1)
-            put(fpanel(f"Mittens_stripe_thigh_{tag}{i}", ft, fuzz(st), 0.004, m["stripe"], coll,
-                       lift=0.025, center=False, bevel=0.001), f"thigh.{tag}")
-        # shin (outer layer), knee pin
+        put(fpanel(f"Mittens_haunch_disc_{tag}", hf, fuzz(ellipse2d(0, 0, 0.158, 0.158, 72), 0.0025),
+                   0.036, m["tabby"], coll, lift=0.058, bevel=0.01), f"thigh.{tag}")
+        for i, (p0, p1, w) in enumerate((((-0.03, 0.145), (0.05, 0.07), 0.042),
+                                          ((-0.1, 0.11), (-0.01, 0.03), 0.045),
+                                          ((-0.14, 0.05), (-0.05, -0.01), 0.04))):
+            put(fpanel(f"Mittens_stripe_haunch_{tag}{i}", hf, fuzz(stroke(p0, p1, w, 0.08)), 0.005,
+                       m["stripe"], coll, lift=0.076, center=False, bevel=0.0012), f"thigh.{tag}")
+        put(pin(f"Mittens_pin_hip_{tag}", hd_c + hf.w * 0.078, hf.w, 0.022, coll), f"thigh.{tag}")
+        for i, (al, r) in enumerate(((0.25, 0.087), (0.31, 0.082))):
+            st = stroke((al, r), (al - 0.03, -0.01), 0.04, 0.1)
+            put(fpanel(f"Mittens_stripe_thigh_{tag}{i}", ft, fuzz(st), 0.005, m["stripe"], coll,
+                       lift=0.04, center=False, bevel=0.0012), f"thigh.{tag}")
+        # broad shin (outer layer), knee pin
         fs_ = Frame(kn, an, wout, up_hint=FWD)
-        sh_ = fpanel(f"Mittens_shin_{tag}", fs_, fuzz(limb2d(fs_.L, 0.045, 0.036)), 0.048,
-                     m["tabby"], coll, lift=0.03, bevel=0.007)
+        sh_ = fpanel(f"Mittens_shin_{tag}", fs_, fuzz(limb2d(fs_.L, 0.07, 0.058)), 0.06,
+                     m["tabby"], coll, lift=0.045, bevel=0.011)
         put(sh_, f"shin.{tag}")
-        for i, al in enumerate((0.1, 0.19, 0.28)):
-            st = stroke((al, -0.036), (al + 0.018, 0.012), 0.024, 0.1)
-            put(fpanel(f"Mittens_stripe_shin_{tag}{i}", fs_, fuzz(st), 0.004, m["stripe"], coll,
-                       lift=0.054, center=False, bevel=0.001), f"shin.{tag}")
-        put(pin(f"Mittens_pin_knee_{tag}", kn + fs_.w * 0.055, fs_.w, 0.013, coll), f"shin.{tag}")
-        # cream paw on the floor (side-profile loaf), toe lines
+        for i, al in enumerate((0.12, 0.22, 0.32)):
+            st = stroke((al, -0.066), (al + 0.025, 0.02), 0.036, 0.1)
+            put(fpanel(f"Mittens_stripe_shin_{tag}{i}", fs_, fuzz(st), 0.005, m["stripe"], coll,
+                       lift=0.075, center=False, bevel=0.0012), f"shin.{tag}")
+        put(pin(f"Mittens_pin_knee_{tag}", kn + fs_.w * 0.076, fs_.w, 0.017, coll), f"shin.{tag}")
+        # chunky cream paw on the floor (side-profile loaf), toe lines
         fz = -0.442   # sole on the 8 mm TT foot plate (cab floor is -0.45)
-        paw = catmull([(0.335, fz), (0.43, fz), (0.505, fz + 0.003), (0.52, fz + 0.03),
-                       (0.49, fz + 0.062), (0.41, fz + 0.075), (0.35, fz + 0.1), (0.325, fz + 0.06)],
+        fx = s * (ANKLE.x + 0.035)
+        paw = catmull([(0.33, fz), (0.46, fz), (0.55, fz + 0.004), (0.572, fz + 0.04),
+                       (0.54, fz + 0.085), (0.45, fz + 0.1), (0.38, fz + 0.13), (0.325, fz + 0.075)],
                       5, closed=True)
-        put(side(f"Mittens_foot_{tag}", fuzz(paw), 0.068, s * ANKLE.x, m["cream"], coll,
-                 bevel=0.012), f"foot.{tag}")
-        for i, fw in enumerate((0.455, 0.48)):
-            ln = limb2d(0.028, 0.0022, 0.0016, 4)
-            ln = [Vector((fw + q.y, fz + 0.006 + q.x)) for q in ln]
-            put(side(f"Mittens_foot_toe_{tag}{i}", ln, 0.003, s * (ANKLE.x + 0.034), m["brown"],
+        put(side(f"Mittens_foot_{tag}", fuzz(paw), 0.1, fx, m["cream"], coll,
+                 bevel=0.02), f"foot.{tag}")
+        for i, fw in enumerate((0.5, 0.532)):
+            ln = limb2d(0.04, 0.003, 0.002, 4)
+            ln = [Vector((fw + q.y, fz + 0.008 + q.x)) for q in ln]
+            put(side(f"Mittens_foot_toe_{tag}{i}", ln, 0.003, fx + s * 0.05, m["brown"],
                      coll, s=s, center=False, bevel=0.0), f"foot.{tag}")
 
-    # ================================================================ tail (5 felt segments)
+    # ================================================================ tail (5 thick felt segments)
     for k in range(5):
         a_, b_ = TAIL_PTS[k], TAIL_PTS[k + 1]
         t = (b_ - a_).normalized()
         hint = Vector((0, 0, 1)) if abs(t.z) < 0.35 else Vector((-1, 0.2, 0))
         fr = Frame(a_, b_, hint)
-        r0 = 0.054 - 0.003 * k
-        r1 = 0.054 - 0.003 * (k + 1)
-        seg = fpanel(f"Mittens_tail_{k + 1}", fr, fuzz(limb2d(fr.L + 0.02, r0, r1), seed=k), 0.03,
-                     m["tabby"], coll, bevel=0.007)
+        r0 = 0.074 - 0.0045 * k
+        r1 = 0.074 - 0.0045 * (k + 1)
+        seg = fpanel(f"Mittens_tail_{k + 1}", fr, fuzz(limb2d(fr.L + 0.03, r0, r1), seed=k), 0.045,
+                     m["tabby"], coll, bevel=0.01)
         put(seg, f"tail.{k + 1:02d}")
         if k < 4:
             for side_ in (1, -1):
-                st = stroke((fr.L * 0.45, r0 * 1.02), (fr.L * 0.5, -r0 * 0.4), 0.028, 0.0)
+                st = stroke((fr.L * 0.45, r0 * 1.0), (fr.L * 0.52, -r0 * 0.45), 0.042, 0.0)
                 put(fpanel(f"Mittens_stripe_tail_{k}{'a' if side_ > 0 else 'b'}", fr, fuzz(st),
-                           0.004, m["stripe"], coll, lift=side_ * 0.015, center=False, bevel=0.001,
-                           face=side_), f"tail.{k + 1:02d}")
+                           0.005, m["stripe"], coll, lift=side_ * 0.0225, center=False,
+                           bevel=0.0012, face=side_), f"tail.{k + 1:02d}")
         else:
             # cream tail tip wrapping both faces, jagged boundary
-            tip = limb2d(fr.L * 0.6, r0 * 1.05, r1 * 1.05)
+            tip = limb2d(fr.L * 0.62, r0 * 1.05, r1 * 1.05)
             tip = [Vector((q.x + fr.L * 0.44, q.y)) for q in tip]
-            tip = pinked(resample(tip, 0.006), 0.003, mask=lambda p: 1.0 if p.x < fr.L * 0.5 else 0)
-            put(fpanel("Mittens_tail_tip", fr, fuzz(tip), 0.036, m["cream"], coll, bevel=0.008),
+            tip = pinked(resample(tip, 0.008), 0.004, mask=lambda p: 1.0 if p.x < fr.L * 0.5 else 0)
+            put(fpanel("Mittens_tail_tip", fr, fuzz(tip), 0.053, m["cream"], coll, bevel=0.01),
                 "tail.05")
     tb = TAIL_PTS[0]
-    put(pin("Mittens_pin_tail", tb + Vector((0, 0.0, 0.017)), (0, 0, 1), 0.012, coll), "tail.01")
+    put(pin("Mittens_pin_tail", tb + Vector((0, 0.0, 0.023)), (0, 0, 1), 0.015, coll), "tail.01")
 
     # ================================================================ seatbelt (lap belt + buckle)
-    belt_pts = [(-0.255, 0.11, 0.005), (-0.19, 0.06, 0.10), (-0.16, -0.03, 0.19),
-                (-0.1, -0.115, 0.19), (0.0, -0.137, 0.185), (0.1, -0.115, 0.19),
-                (0.16, -0.03, 0.19), (0.19, 0.06, 0.10), (0.255, 0.11, 0.005)]
+    belt_pts = [(-0.255, 0.11, 0.005), (-0.255, 0.02, 0.12), (-0.235, -0.1, 0.245),
+                (-0.13, -0.205, 0.262), (0.0, -0.224, 0.258), (0.13, -0.205, 0.262),
+                (0.235, -0.1, 0.245), (0.255, 0.02, 0.12), (0.255, 0.11, 0.005)]
     belt = ribbon("Mittens_seatbelt", belt_pts, 0.05, 0.007,
                   lambda p: (p.x, p.y + 0.02, 0.15), m["belt"], coll)
     put(belt, "hips")
-    bc = Vector((0.0, -0.142, 0.186))
+    bc = Vector((0.0, -0.229, 0.258))
     buckle = geo.box("Mittens_seatbelt_buckle", (0.075, 0.014, 0.058), bc, mat=m["buckle"],
                      coll=coll, bevel=0.005)
     put(buckle, "hips")
@@ -1093,12 +1105,12 @@ def _build_rig(coll, arm_pts, leg_pts, eye_c, ear_pts):
                       connect=connect, deform=deform, roll=roll))
 
     b("root", (0, 0, 0), (0, 0.25, 0), deform=False)
-    b("hips", (0, 0.02, 0.04), (0, 0.02, 0.16), "root")
-    b("spine.01", (0, 0.02, 0.16), (0, 0.015, 0.27), "hips", True)
-    b("spine.02", (0, 0.015, 0.27), (0, 0.005, 0.38), "spine.01", True)
-    b("spine.03", (0, 0.005, 0.38), (0, 0.0, 0.50), "spine.02", True)
-    b("neck", (0, 0.0, 0.50), (0, 0.0, 0.565), "spine.03", True)
-    b("head", (0, 0.0, 0.565), (0, 0.0, 0.84), "neck", True)
+    b("hips", (0, 0.02, 0.04), (0, 0.02, 0.14), "root")
+    b("spine.01", (0, 0.02, 0.14), (0, 0.015, 0.24), "hips", True)
+    b("spine.02", (0, 0.015, 0.24), (0, 0.005, 0.33), "spine.01", True)
+    b("spine.03", (0, 0.005, 0.33), (0, 0.0, 0.42), "spine.02", True)
+    b("neck", (0, 0.0, 0.42), (0, 0.0, 0.475), "spine.03", True)
+    b("head", (0, 0.0, 0.475), (0, 0.0, 0.84), "neck", True)
     for tag in ("L", "R"):
         base, tip = ear_pts[tag]
         b(f"ear.{tag}", base, tip, "head")

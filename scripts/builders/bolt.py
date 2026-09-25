@@ -953,9 +953,9 @@ def _build_hardhat(coll, mt, bind):
 def _leg_upper_pts(leg):
     a, j, _, _ = _leg_pts(leg)
     if leg[0] == "F":
-        ctrl = _stadium((a.y, a.z + 0.005), (j.y, j.z - 0.014), 0.074, 0.062, 8)
+        ctrl = _stadium((a.y, a.z + 0.005), (j.y, j.z + 0.036), 0.074, 0.06, 8)
     else:
-        ctrl = _stadium((a.y + 0.005, a.z), (j.y, j.z - 0.012), 0.096, 0.066, 8)
+        ctrl = _stadium((a.y + 0.005, a.z), (j.y - 0.004, j.z + 0.03), 0.096, 0.064, 8)
 
     def fr(p, n):
         if n.y < -0.5:
@@ -1122,10 +1122,17 @@ def pose_test(root):
     pb["head"].rotation_euler = (0, math.radians(-10), math.radians(8))
     pb["jaw"].rotation_euler = (math.radians(-12), 0, 0)
     pb["tongue.02"].rotation_euler = (math.radians(-15), 0, 0)
-    pb["ear.01.L"].rotation_euler = (math.radians(-12), 0, 0)
-    pb["ear.02.L"].rotation_euler = (math.radians(-18), 0, 0)
-    pb["ear.01.R"].rotation_euler = (math.radians(10), 0, 0)
-    pb["ear.02.R"].rotation_euler = (math.radians(16), 0, 0)
+    def world_rot(bone, axis, deg):
+        """Rotate a bone about a rest-space (armature) axis, whatever its roll."""
+        m = arm.data.bones[bone].matrix_local.to_3x3()
+        q = (m.inverted() @ Quaternion(Vector(axis), math.radians(deg)).to_matrix() @ m)
+        pb[bone].rotation_mode = "QUATERNION"
+        pb[bone].rotation_quaternion = q.to_quaternion()
+    # ears flop back (lagging behind the head turn); ear.02 swings a little further
+    world_rot("ear.01.L", (1, 0, 0), -14)
+    world_rot("ear.02.L", (1, 0, 0), -12)
+    world_rot("ear.01.R", (1, 0, 0), -8)
+    world_rot("ear.02.R", (1, 0, 0), -14)
     pb["IK_FL"].location = (0, 0.03, 0.07)  # paw lifted (bone-local)
     pb["spine.01"].rotation_euler = (math.radians(4), 0, 0)
     face = bpy.data.objects["Bolt_face"]
@@ -1133,7 +1140,8 @@ def pose_test(root):
     kb["smile"].value = 1.0
     kb["wink"].value = 1.0
     for b in pb:
-        b.keyframe_insert("rotation_euler", frame=1)
+        b.keyframe_insert("rotation_quaternion" if b.rotation_mode == "QUATERNION"
+                          else "rotation_euler", frame=1)
         b.keyframe_insert("location", frame=1)
     for k in ("smile", "wink"):
         kb[k].keyframe_insert("value", frame=1)

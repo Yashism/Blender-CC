@@ -255,6 +255,14 @@ def _box(name, size, loc, yaw, coll, m, label_face=None):
             a.location = (lx + k * lw * 0.22, -sy / 2 - 0.0021, lz - 0.019)
             parts.append(a)
     ob = _bake(geo.join(parts, name))
+    # handmade: slightly leaning, a touch saggy in the middle of the lid
+    kx, ky = _j(0.007), _j(0.006)
+    for v in ob.data.vertices:
+        t = max(0.0, v.co.z) / sz
+        v.co.x += kx * t
+        v.co.y += ky * t
+        if t > 0.95:
+            v.co.z -= 0.004 * (1 - (2 * v.co.x / sx) ** 2) * (1 - (2 * v.co.y / sy) ** 2)
     ob.location = loc
     ob.rotation_euler = (0, 0, yaw)
     return ob
@@ -288,7 +296,7 @@ def _stack(coll, m):
                 if ys[k] == 0.0 and RNG.random() < 0.45:
                     lab = "red" if RNG.random() < 0.3 else "ink"
                 b = _box(P + f"box_{layer:02d}_{i}{k}", (w, d, hh), (cx, cy, z),
-                         math.radians(RNG.uniform(-2.0, 2.0)), coll, m, lab)
+                         math.radians(RNG.uniform(-1.5, 1.5) * (2.0 - w / inner_w)), coll, m, lab)
                 boxes.append(b)
         z += h + 0.003
         layer += 1

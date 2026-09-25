@@ -52,6 +52,7 @@ EAR_ROOT = Vector((0.14, 0.045, 1.078))
 EAR_UP = Vector((0.32, 0.06, 1.0)).normalized()
 EYE_C = Vector((0.1405, -0.1425, 1.108))
 EYE_N = Vector((0.72, -0.69, 0.0)).normalized()
+MOUTH_O = Vector((0.0, -0.262, 1.03))
 EYE_RX, EYE_RY = 0.0245, 0.0335
 HAT_BASE = Vector((0.0, 0.012, 1.19))
 HAT_TILT = -11.0
@@ -721,6 +722,15 @@ def _head(coll, m, att):
         return outline(ruff, "sssffffff", fur=0.0325, fur_sp=0.0144, lean=0.35)
     for o in pair_side(P + "cheek_ruff", ruffp(), 0.126, 0.152, m["grey"], coll, 0.005, ruffp):
         att(o, "head")
+    # Pale cheek patch (muzzle felt) layered on the front of the ruff, as in the ref.
+    cheek = [(-0.118, 1.05), (-0.07, 1.045), (-0.02, 1.03), (0.01, 1.0), (-0.03, 0.965),
+             (-0.09, 0.97), (-0.12, 1.0)]
+
+    def cheekp():
+        return outline(cheek, "ssfffss", fur=0.018, fur_sp=0.012, lean=0.4)
+    for o in pair_side(P + "cheek_patch", cheekp(), 0.15, 0.157, m["muzzle"], coll, 0.002,
+                       cheekp):
+        att(o, "head")
     # Back of the head: a fringed panel so the head reads round from behind.
     bk, st = sym([(0.0, 1.17), (0.08, 1.15), (0.12, 1.08), (0.115, 1.0), (0.07, 0.96),
                   (0.0, 0.95)], "ssfff")
@@ -887,6 +897,14 @@ def _face(coll, m, arm):
     add(front(P + "philtrum", outline(strip([(0.0, 1.083), (0.0, 1.046)], 0.005)), -0.279,
               0.005, m["black"], coll, bevel=0.0015), "mouth")
 
+    # Open "O" mouth, tilted to follow the underside of the snout. At rest it is squashed
+    # into a sliver hidden behind the mouth line; the whoa key opens it.
+    mo_n = Vector((0.0, -0.78, -0.62)).normalized()
+    mo = panel(P + "mouth_open", outline(ellipse(0.017, 0.02, 28), jit=0.0004), 0.005,
+               MOUTH_O - mo_n * 0.003, mo_n, (0, -0.62, 0.78), m["black"], coll, bevel=0.0015)
+    for v in mo.data.vertices:
+        v.co.y = 0.018 - (0.018 - v.co.y) * 0.06
+    add(mo, "mouth_open")
     # Bake every part into world space so the face mesh has an identity transform.
     bpy.context.view_layer.update()
     for o in parts:
@@ -910,13 +928,20 @@ def _face(coll, m, arm):
                                   ("brows", lambda co: co + Vector((0, 0, 0.003)))])
 
     def open_mouth(co):
-        if abs(co.x) < 0.04 and co.y < -0.27 and co.z < 1.06:  # front mouth -> "O"
+        if abs(co.x) < 0.04 and co.y < -0.27 and co.z < 1.06:  # upper lip of the "O"
             cm = Vector((0.0, co.y, 1.046))
             r = co - cm
-            return cm + Vector((r.x * 0.55, 0, r.z * 4.5 - 0.004))
+            return cm + Vector((r.x * 0.75, 0, r.z * 0.6 + 0.002))
         t = max(0.0, min(1.0, (co.y + 0.27) / 0.11))
         return co + Vector((0, 0, -0.008 * (1 - t)))
-    whoa = [("mouth", open_mouth), ("brows", lambda co: co + Vector((0, 0, 0.014)))]
+    mo_up = Vector((0.0, -0.62, 0.78)).normalized()
+    mo_top = MOUTH_O + mo_up * 0.018
+
+    def open_o(co):
+        d = (co - mo_top).dot(mo_up)  # squashed by 0.06 at rest
+        return co - mo_up * d + mo_up * (d / 0.06)
+    whoa = [("mouth", open_mouth), ("mouth_open", open_o),
+            ("brows", lambda co: co + Vector((0, 0, 0.014)))]
     for sfx, s in (("L", 1), ("R", -1)):
         c, n, y, x = _eye_frame(s)
         whoa.append((f"pupil_{sfx}", rig.scale_about(c + n * 0.01, 0.78)))
