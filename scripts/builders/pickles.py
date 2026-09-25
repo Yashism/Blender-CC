@@ -818,7 +818,7 @@ def _face(coll, m, arm):
         c, n, y, x = _eye_frame(s)
         # black socket block chamfering the head corner so the eye sits on a flat face
         add(panel(P + f"eye_back.{sfx}", outline(ellipse(EYE_RX * 1.45, EYE_RY * 1.3, 30),
-                                                  "p" * 30, pink=0.002, pink_sp=0.006),
+                                                  jit=0.0008),
                   0.036, c - n * 0.032, n, (0, 0, 1), m["black"], coll, bevel=0.004), "mask")
         add(panel(P + f"eye.{sfx}", outline(ellipse(EYE_RX, EYE_RY, 30), jit=0.0005), 0.006,
                   c + n * 0.003, n, (0, 0, 1), m["eye"], coll, bevel=0.002), f"eye_{sfx}")
