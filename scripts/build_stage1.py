@@ -82,11 +82,11 @@ floor = geo.cylinder("Lineup_Floor", 14, 0.02, (1.8, 0, -0.01),
                      mat=__import__("lib.mats", fromlist=["x"]).card("studio_sweep", "#3A4150",
                                                                      rough=0.9, grain=40),
                      coll=C["Set"], segs=64)
-studio.area_light("Key_3200K", (-3.0, -6.0, 6.0), (1.8, 0, 0.9), 2600, temp=3200, size=3.0,
+studio.area_light("Key", (-3.0, -6.0, 6.0), (1.8, 0, 0.9), 1500, temp=4800, size=3.0,
                   coll=C["Lights"])
-studio.area_light("Fill_Moon_7000K", (7.0, -5.0, 3.5), (1.8, 0, 0.9), 1000, temp=7000, size=5.0,
+studio.area_light("Fill", (7.0, -5.0, 3.5), (1.8, 0, 0.9), 700, temp=6500, size=5.0,
                   coll=C["Lights"])
-studio.area_light("Rim", (2.5, 6.0, 5.0), (1.8, 0, 0.9), 2200, temp=5200, size=2.5,
+studio.area_light("Rim", (2.5, 6.0, 5.0), (1.8, 0, 0.9), 1400, temp=5200, size=2.5,
                   coll=C["Lights"])
 cam, tgt = studio.camera("CAM_Lineup", (1.9, -9.0, 2.4), (1.9, 0, 0.95), lens=40,
                          coll=C["Cameras"], fstop=11.0)
@@ -100,6 +100,7 @@ bpy.ops.wm.save_mainfile()
 print("[stage1] saved", blend)
 
 if a.lineup:
+    scene.cycles.adaptive_threshold = 0.005  # clean floor gradients for a hero still
     out = os.path.join(ROOT, "renders", "stage1", "cast_lineup.png")
     scene.render.filepath = out
     bpy.ops.render.render(write_still=True)
