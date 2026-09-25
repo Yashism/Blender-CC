@@ -512,7 +512,7 @@ def brass_pins(tex, data, masks):
     px = tri_uv_px(data, ti, W, H)
     _, cov = raster_tris(px, np.zeros((len(ti), 3, 1)), W, H, pad=2.0)
     h, s, v = _rgb_hsv(tex)
-    pin = cov & (v > 0.35) & (s < 0.5) & (h > 20) & (h < 80)
+    pin = cov & (v > 0.55) & (s > 0.08) & (s < 0.42) & (h > 30) & (h < 72)
     lum = tex.mean(-1)
     ref = np.median(lum[pin]) if pin.any() else 0.8
     shade = np.clip(lum / ref, 0.45, 1.25)[..., None]
@@ -644,6 +644,9 @@ def find_features(cv):
         cx, cz, rx, rz = F["eye" + side]
         bm = tan & (Z > cz + rz * 0.85) & (Z < cz + rz * 3.2) & (np.abs(X - cx) < rx * 1.5)
         F["brow" + side] = bm
+        r = np.hypot((X - cx) / rx, (Z - cz) / rz)
+        ring = (r > 1.3) & (r < 1.8) & (v < 0.3)
+        F["fur" + side] = tuple(np.median(img[ring], 0)) if ring.any() else (0.03, 0.03, 0.035)
     return F
 
 
@@ -658,31 +661,68 @@ def _fur(cv, mask, ring=0.003):
     return np.median(cv["img"][rim], 0), grown
 
 
-def _lid(cv, eye, lid_col, lash_col, frac_top=1.0, frac_bot=0.0, sag=0.35, lashes=True, side=1):
-    """Felt eyelid: covers the eye from the top down to a curved lash line."""
+def _soft_ellipse(cv, cx, cz, rx, rz, feather=0.003):
+    """Ellipse alpha with a wide feather (no hard circular outline on the fur). The feather
+    only spills onto dark fur, never onto the white blaze / tan markings."""
+    a = _ellipse_a(cv, cx, cz, rx, rz, aa=feather)
+    r = np.hypot((cv["X"] - cx) / rx, (cv["Z"] - cz) / rz)
+    dark = np.clip((0.4 - cv["base_v"]) / 0.15, 0, 1)
+    a = a * np.where(r < 0.88, 1.0, dark)
+    # the sculpted eye-white rim just outside the ellipse (but not the blaze / muzzle)
+    rim = ((r < 1.3) & (cv["base_v"] > 0.35) & (np.abs(cv["X"]) > 0.049)
+           & ((cv["Z"] > cz - 0.95 * rz / 1.24)
+              | ((cv["Z"] > cz - 1.2 * rz / 1.24) & (np.sign(cx) * (cv["X"] - cx) > -0.2 * rx)))
+           ).astype(float)
+    rim = (rim + np.roll(rim, 1, 0) + np.roll(rim, -1, 0) + np.roll(rim, 1, 1) + np.roll(rim, -1, 1)) / 5
+    return np.maximum(a, rim)
+
+
+def _lid_highlight(cv, cx, cz, rx, rz, z0, col=(0.27, 0.26, 0.28), strength=0.55):
+    """Soft lighter-felt band along the upper curve of a closed lid (reads as rounded)."""
+    pts = _arc((cx - 0.85 * rx, z0), (cx, cz + 1.25 * rz), (cx + 0.85 * rx, z0))
+    a = _line_a(cv, pts, 0.004, aa=0.004, taper=True) * strength
+    _paint(cv, a, col)
+
+
+def _lashes(cv, x, z, side, col, n=3, length=0.0058, width=0.0017):
+    for k, ang in enumerate((18, 42, 66)[:n]):
+        a = math.radians(ang)
+        p0 = (x - side * 0.0022 * k, z - 0.0006 * k)
+        q = (p0[0] + side * math.cos(a) * length, p0[1] + math.sin(a) * length)
+        _paint(cv, _line_a(cv, [p0, q], width, taper=True), col)
+
+
+def _closed_eye(cv, eye, fur, line_col, side=1):
+    """Happy closed eye: black-fur lid (feathered, no outline), soft highlight along the
+    upper curve, thick pale U-shaped closed-eye line with lashes at the outer end."""
     cx, cz, rx, rz = eye
-    ell = _ellipse_a(cv, cx, cz, rx * 1.2, rz * 1.16)
+    _paint(cv, _soft_ellipse(cv, cx, cz, rx * 1.28, rz * 1.24), fur)
+    _lid_highlight(cv, cx, cz, rx, rz, cz + 0.35 * rz)
+    p0 = (cx - 0.92 * rx, cz + 0.12 * rz)
+    p2 = (cx + 0.92 * rx, cz + 0.12 * rz)
+    pts = _arc(p0, (cx, cz - 0.95 * rz), p2, 60)
+    _paint(cv, _line_a(cv, pts, 0.0048, aa=0.0005, taper=True), line_col)
+    end = p2 if side > 0 else p0
+    _lashes(cv, end[0], end[1], side, line_col)
+
+
+def _squint_eye(cv, eye, fur, line_col, side=1):
+    """Half-closed eye: lid down to below the eye centre, the lower third of the iris and
+    a catchlight still showing, same pale lid line."""
+    cx, cz, rx, rz = eye
     X, Z = cv["X"], cv["Z"]
-    u = np.clip((X - cx) / (rx * 1.2), -1, 1)
-    edge = cz + rz * (1 - 2 * frac_top) - rz * sag * (1 - u ** 2)   # lash-line height
-    top = np.clip(0.5 + (Z - edge) / 0.0004, 0, 1) * ell
-    _paint(cv, top, lid_col)
-    if frac_bot > 0:
-        bedge = cz - rz * (1 - 2 * frac_bot) + rz * 0.15 * (1 - u ** 2)
-        bot = np.clip(0.5 + (bedge - Z) / 0.0004, 0, 1) * ell
-        _paint(cv, bot, lid_col)
-    xs = np.linspace(-0.98, 0.98, 41)
-    ex = cx + xs * rx * 1.08
-    ez = cz + rz * (1 - 2 * frac_top) - rz * sag * (1 - xs ** 2)
-    _paint(cv, _line_a(cv, np.stack([ex, ez], -1), rz * 0.2, taper=True), lash_col)
-    if lashes:   # three little lashes at the outer corner
-        for k, ang in enumerate((-35, -60, -85)):
-            t = 0.93 - 0.14 * k
-            px = cx + side * t * rx * 1.08
-            pz = cz + rz * (1 - 2 * frac_top) - rz * sag * (1 - t ** 2)
-            a = math.radians(ang)
-            q = (px + side * math.cos(a) * rz * 0.33, pz + math.sin(a) * rz * 0.33)
-            _paint(cv, _line_a(cv, [(px, pz), q], rz * 0.11), lash_col)
+    u = np.clip((X - cx) / (rx * 1.15), -1, 1)
+    edge = cz - 0.22 * rz - 0.1 * rz * (1 - u ** 2)
+    lid = _soft_ellipse(cv, cx, cz, rx * 1.28, rz * 1.24) * np.clip(0.5 + (Z - edge) / 0.0006, 0, 1)
+    _paint(cv, lid, fur)
+    _lid_highlight(cv, cx, cz, rx, rz, cz + 0.2 * rz, strength=0.45)
+    xs = np.linspace(-1.0, 1.0, 50)
+    pts = np.stack([cx + xs * rx * 1.05, cz - 0.22 * rz - 0.1 * rz * (1 - xs ** 2)], -1)
+    _paint(cv, _line_a(cv, pts, 0.0036, aa=0.0005, taper=True), line_col)
+    _paint(cv, _ellipse_a(cv, cx - side * 0.28 * rx, cz - 0.52 * rz, 0.12 * rx, 0.12 * rx),
+           (0.97, 0.97, 0.96))
+    _lashes(cv, pts[-1][0] if side > 0 else pts[0][0], pts[-1][1], side, line_col, n=2,
+            length=0.0045)
 
 
 def _wide(cv, base, eye, s=1.13, catch=True, side=1):
@@ -720,39 +760,37 @@ def _brow_tilt(cv, base, mask, ang, lift=0.0025):
 
 
 MOUTH_DARK = (0.10, 0.035, 0.045)
+WHOA_DARK = (0.03, 0.01, 0.014)
 
 
 def paint_variant(name, cv0, F):
     cv = dict(cv0, img=cv0["img"].copy(), alpha=np.zeros(cv0["X"].shape))
     base = cv0["img"]
-    # lid = the black felt around the eye; the lash line is a pale stitched seam so the
-    # closed eye reads on black fur
-    lid = (0.095, 0.092, 0.1)            # bolt_black felt, a touch lifted
-    lash = (0.8, 0.76, 0.68)
+    cv["base_v"] = base.max(-1)
+    line = (0.88, 0.8, 0.64)             # pale cream closed-eye line (pops on black fur)
     if name == "blink":
-        _lid(cv, F["eyeL"], lid, lash, side=1)
-        _lid(cv, F["eyeR"], lid, lash, side=-1)
+        _closed_eye(cv, F["eyeL"], F["furL"], line, side=1)
+        _closed_eye(cv, F["eyeR"], F["furR"], line, side=-1)
     elif name == "wink":
-        _lid(cv, F["eyeL"], lid, lash, side=1, sag=0.45)
+        _closed_eye(cv, F["eyeL"], F["furL"], line, side=1)
     elif name == "wide_eyes":
         _wide(cv, base, F["eyeL"], side=1)
         _wide(cv, base, F["eyeR"], side=-1)
     elif name == "squint":
-        for s, sg in (("L", 1), ("R", -1)):
-            _lid(cv, F["eye" + s], lid, lash, frac_top=0.5, frac_bot=0.28, sag=-0.12,
-                 lashes=False, side=sg)
+        _squint_eye(cv, F["eyeL"], F["furL"], line, side=1)
+        _squint_eye(cv, F["eyeR"], F["furR"], line, side=-1)
     elif name == "worried_brows":
         _brow_tilt(cv, base, F["browL"], math.radians(-28))
         _brow_tilt(cv, base, F["browR"], math.radians(28))
     elif name == "whoa":
         X, Z = cv["X"], cv["Z"]
-        o = _ellipse_a(cv, 0.0, 0.516, 0.047, 0.043)
+        o = _ellipse_a(cv, 0.0, 0.506, 0.043, 0.047, aa=0.0006)
         white = np.median(base[(np.abs(X) < 0.06) & (Z > 0.56) & (Z < 0.575) & (np.abs(X) > 0.04)], 0)
         for sg in (1, -1):      # erase the smile creases outside the O
             h, s, v = _rgb_hsv(base)
             crease = ((v < 0.45) & (np.hypot(X - sg * 0.07, Z - 0.548) < 0.016)).astype(float)
             _paint(cv, crease * (1 - o), white)
-        _paint(cv, o, MOUTH_DARK)
+        _paint(cv, o, WHOA_DARK)
     elif name == "smile":
         X, Z = cv["X"], cv["Z"]
         u = np.clip(X / 0.084, -1, 1)

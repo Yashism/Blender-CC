@@ -866,6 +866,91 @@ def _components(n, edges):
             return lab
 
 
+def _fan_caps(bm, uv_layer, uv=None, inset=0.12, relax=12):
+    """Close every boundary loop: a relaxed inner ring on the rim's best-fit plane (so the jagged
+    fur rim does not streak the shading), a fan to the centre. Each cap takes the UV of the rim
+    vertex whose texture colour is the rim median (lime on the vest side, fur on the arm)."""
+    from mathutils import Vector as V
+    colr = bm.verts.layers.float_color.get("tex_col")
+    bedges = [e for e in bm.edges if e.is_boundary]
+    adj = {}
+    for e in bedges:
+        for v in e.verts:
+            adj.setdefault(v, []).append(e)
+    seen = set()
+    groups = []
+    for e0 in bedges:
+        if e0 in seen:
+            continue
+        group, stack = [], [e0]
+        while stack:
+            e = stack.pop()
+            if e in seen:
+                continue
+            seen.add(e)
+            group.append(e)
+            for v in e.verts:
+                stack.extend(x for x in adj[v] if x not in seen)
+        groups.append(group)
+    caps = []
+    for group in groups:
+        rim = list({v for e in group for v in e.verts})
+        P_ = np.array([v.co[:] for v in rim])
+        c = P_.mean(0)
+        n = np.linalg.svd(P_ - c)[2][2]                      # plane normal
+        # ring: pulled towards the centre, relaxed along the rim, flattened onto the plane
+        R = P_ + (c - P_) * inset
+        nb = {v: [x for e in adj[v] for x in e.verts if x is not v] for v in rim}
+        idx = {v: i for i, v in enumerate(rim)}
+        for _ in range(relax):
+            R = 0.5 * R + 0.5 * np.array([np.mean([R[idx[x]] for x in nb[v]], 0) for v in rim])
+        R = R - np.outer((R - c) @ n, n)
+        ring = [bm.verts.new(V(r)) for r in R]
+        cv = bm.verts.new(V(c))
+        if colr is not None:
+            cols = np.array([v[colr][:3] for v in rim])
+            hh, ss, vv = meshy.hsv(np.clip(cols, 0, 1))
+            lime = (hh > 55) & (hh < 95) & (ss > 0.4) & (vv > 0.4)
+            fur = (ss < 0.2) & (vv > 0.3)
+            # winding tells the side: caps facing away from the midline close the torso (vest
+            # side panel), caps facing the midline close the arm's inner face (fur)
+            fn = np.zeros(3)
+            for e in group:
+                lp = e.link_loops[0]
+                a_, b_ = np.array(lp.vert.co[:]), np.array(lp.link_loop_next.vert.co[:])
+                fn += np.cross(a_ - b_, c - b_)
+            outward = fn[0] * np.sign(c[0]) > 0
+            cls = lime if (outward and lime.mean() > 0.15) else fur
+            if not cls.any():
+                cls = np.ones(len(rim), bool)
+            med = np.median(cols[cls], 0)
+            dist = np.linalg.norm(cols - med, axis=1) + (~cls) * 10
+            k = int(np.argmin(dist))
+            luv = rim[k].link_loops[0][uv_layer].uv.copy() if rim[k].link_loops else uv
+            ccol = rim[k][colr]
+            for v in ring + [cv]:
+                v[colr] = ccol
+        else:
+            luv = uv
+        for e in group:
+            lp = e.link_loops[0]
+            a, b = lp.vert, lp.link_loop_next.vert
+            ra, rb = ring[idx[a]], ring[idx[b]]
+            for vs in ((b, a, ra, rb), (rb, ra, cv)):
+                try:
+                    f = bm.faces.new(vs)
+                except ValueError:
+                    continue
+                f.smooth = False
+                f.material_index = lp.face.material_index
+                for l in f.loops:
+                    l[uv_layer].uv = luv
+        bm.verts.index_update()
+        caps.append((cv.index, [v.index for v in rim],
+                     [(r.index, v.index) for r, v in zip(ring, rim)]))
+    return caps
+
+
 def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     """The sculpt fuses each hanging arm onto the torso side (a ~0.12 x 0.3 m contact patch).
     Raised arms would pull webbing out of the torso, so cut each arm free along that seam
@@ -875,9 +960,11 @@ def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     me = ob.data
     edges = _neighbours(me)
     x, y, z = co.T
-    aw = W[:, arm_cols].sum(1)
-    armish = (aw > 0.5) & (np.abs(x) > 0.13) & (z > 0.34) & (z < 0.9)
-    piece = flood(handzone, edges, armish | handzone)
+    m = classify(co, col)
+    tail = (y > 0.13) & (z < 0.66)
+    box = ((np.abs(x) > 0.135) & (z > 0.34) & (z < 0.9) & (y > -0.09) & (y < 0.1) & ~tail
+           & ~m["lime"] & ~m["pink"])
+    piece = flood(handzone, edges, box | handzone)      # hand -> forearm -> upper arm -> pin
     cut = piece[edges[:, 0]] != piece[edges[:, 1]]
     # grey fur UV to paint the caps with (median UV of torso-side grey fur)
     h, s, v = _hsv(col)
@@ -897,14 +984,9 @@ def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     bm.verts.ensure_lookup_table()
     n1 = len(bm.verts)
     # new verts are copies of originals: remember where they came from (same position)
-    boundary = [e for e in bm.edges if e.is_boundary]
-    res = bmesh.ops.holes_fill(bm, edges=boundary, sides=0)
-    caps = res["faces"]
-    tri = bmesh.ops.triangulate(bm, faces=caps, quad_method="BEAUTY", ngon_method="BEAUTY")
-    for f in tri["faces"]:
-        f.smooth = True
-        for l in f.loops:
-            l[uv_layer].uv = grey_uv
+    caps = _fan_caps(bm, uv_layer, grey_uv)
+    bm.normal_update()
+    open_edges = sum(1 for e in bm.edges if e.is_boundary)
     bm.to_mesh(me)
     bm.free()
     me.update()
@@ -938,11 +1020,16 @@ def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     others = [j for j in range(W.shape[1]) if j not in arm_cols]
     W2[np.ix_(is_arm, others)] = 0
     W2[np.ix_(~is_arm, arm_cols)] = 0
+    for ci, members, ring in caps:     # cap verts: rim weights (same piece)
+        for ri, vi in ring:
+            W2[ri] = W2[vi]
+        W2[ci] = W2[members].mean(0)
     lost = W2.sum(1) < 1e-4
     for tag in ("L", "R"):
         side = (co2[:, 0] > 0) if tag == "L" else (co2[:, 0] < 0)
         W2[lost & is_arm & side, J_[f"upper_arm.{tag}"]] = 1
     W2[lost & ~is_arm, J_["spine.03"]] = 1
-    ob["arm_rip"] = "arms cut free along the fused torso seam: %d edges, %d cap faces" % (
-        int(cut.sum()), len(tri["faces"]))
+    ob["arm_rip"] = ("arms cut free along the fused torso seam: %d edges, %d cap loops, "
+                     "%d open edges left" % (int(cut.sum()), len(caps), open_edges))
+    print("[pickles]", ob["arm_rip"])
     return W2, co2, col2

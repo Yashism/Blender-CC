@@ -85,7 +85,7 @@ if a.what in ("pose_test", "all"):
     pickles.pose_test(root)
     shots = []
     for i, (yaw, z) in enumerate(((-30, 1.0), (45, 1.0))):
-        set_view(yaw, 3.0, z)
+        set_view(yaw, 3.7, z, target=(0, 0, 0.68))
         shots.append(render(os.path.join(a.out, f"_pt_{i}.png")))
     tile(shots, os.path.join(a.out, "pose_test.png"))
 

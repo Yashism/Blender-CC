@@ -253,6 +253,9 @@ def _faces_grid(root, path, res=(480, 400), samples=16):
     cam, tgt = studio.camera("Bolt_facecam", (0.16, -1.35, 0.70), (0.0, -0.26, 0.59), lens=85,
                              fstop=16)
     s.camera = cam
+    # soft front fill so the face tiles read (the turntable key is aimed at the body)
+    studio.area_light("Bolt_facefill", (0.25, -1.3, 0.95), (0.0, -0.28, 0.6), 60, temp=5200,
+                      size=0.8)
     s.render.resolution_x, s.render.resolution_y = res
     s.cycles.samples = samples
     label = bpy.data.curves.new("Bolt_facelabel", "FONT")
