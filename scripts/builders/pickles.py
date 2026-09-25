@@ -268,6 +268,16 @@ def _curve_to_mesh(obj):
     return new
 
 
+def _tilt(objs, pivot, axis, deg):
+    """Rotate already-placed pieces about a world pivot (e.g. flare a vest hem)."""
+    pv = Vector(pivot)
+    mx = Matrix.Translation(pv) @ Matrix.Rotation(math.radians(deg), 4, axis) \
+        @ Matrix.Translation(-pv)
+    bpy.context.view_layer.update()
+    for o in objs:
+        o.matrix_world = mx @ o.matrix_world
+
+
 def _pin(name, loc, normal, coll, r=0.016):
     return geo.split_pin(P + "pin_" + name, loc, normal, r=r, coll=coll)
 
@@ -442,44 +452,50 @@ def _torso(coll, m, att):
     # Hi-vis vest: real felt panels with visible cut edges.
     hem = 0.52
     for sfx, s in (("L", 1), ("R", -1)):
-        half = [(0.018, 0.735), (0.07, 0.83), (0.085, 0.885), (0.16, 0.885), (0.175, 0.835),
-                (0.2, 0.765), (0.205, 0.64), (0.212, hem), (0.02, hem - 0.005)]
-        pts = outline([(x * s, z) for x, z in half], "sssssssss", jit=0.0015)
-        att(front(P + f"vest_front.{sfx}", pts, -0.172, 0.024, m["hivis"], coll, bevel=0.005),
-            "spine.02")
+        half = [(0.018, 0.735), (0.07, 0.83), (0.085, 0.885), (0.16, 0.885), (0.178, 0.84),
+                (0.2, 0.77), (0.207, 0.66), (0.222, 0.56), (0.224, 0.53), (0.205, hem - 0.004),
+                (0.045, hem - 0.006), (0.02, hem + 0.02)]
+        pts = outline([(x * s, z) for x, z in half], "ssssssssssss", jit=0.0015)
+        vf = att(front(P + f"vest_front.{sfx}", pts, -0.172, 0.024, m["hivis"], coll,
+                       bevel=0.008), "spine.02")
         # stripe across the front half
         tp = outline([(0.02 * s, 0.628), (0.207 * s, 0.628), (0.208 * s, 0.672),
                       (0.02 * s, 0.672)], "cccc", jit=0.0006)
-        att(front(P + f"vest_stripe_front.{sfx}", tp, -0.195, 0.004, m["tape"], coll,
-                  bevel=0.001), "spine.02")
+        vs = att(front(P + f"vest_stripe_front.{sfx}", tp, -0.195, 0.004, m["tape"], coll,
+                       bevel=0.001), "spine.02")
         # strap tape over the shoulder
         tp = outline([(0.105 * s, 0.742), (0.14 * s, 0.742), (0.14 * s, 0.88),
                       (0.105 * s, 0.88)], "cccc", jit=0.0005)
-        att(front(P + f"vest_strap_tape.{sfx}", tp, -0.195, 0.004, m["tape"], coll,
-                  bevel=0.001), "spine.02")
+        vt = att(front(P + f"vest_strap_tape.{sfx}", tp, -0.195, 0.004, m["tape"], coll,
+                       bevel=0.001), "spine.02")
+        _tilt((vf, vs, vt), (0, -0.172, 0.88), "X", -5.0)  # hem flares forward
         # side panel (under the arm)
-        sp = outline([(-0.19, hem), (-0.19, 0.745), (-0.1, 0.77), (0.0, 0.775), (0.1, 0.77),
-                      (0.158, 0.745), (0.158, hem)], "sssssss", jit=0.0015)
+        sp = outline([(-0.19, hem + 0.02), (-0.19, 0.745), (-0.1, 0.77), (0.0, 0.775),
+                      (0.1, 0.77), (0.158, 0.745), (0.16, hem + 0.02), (0.14, hem - 0.004),
+                      (-0.17, hem - 0.004)], "sssssssss", jit=0.0015)
         x0 = 0.182 if s > 0 else -0.204
-        att(side(P + f"vest_side.{sfx}", sp, x0, x0 + 0.022, m["hivis"], coll, bevel=0.005),
-            "spine.02")
+        vd = att(side(P + f"vest_side.{sfx}", sp, x0, x0 + 0.022, m["hivis"], coll,
+                      bevel=0.008), "spine.02")
         sp = outline([(-0.19, 0.628), (0.158, 0.628), (0.158, 0.672), (-0.19, 0.672)], "cccc",
                      jit=0.0006)
         x0 = 0.203 if s > 0 else -0.207
-        att(side(P + f"vest_stripe_side.{sfx}", sp, x0, x0 + 0.004, m["tape"], coll,
-                 bevel=0.001), "spine.02")
+        ve = att(side(P + f"vest_stripe_side.{sfx}", sp, x0, x0 + 0.004, m["tape"], coll,
+                      bevel=0.001), "spine.02")
+        _tilt((vd, ve), (0.19 * s, 0, 0.77), "Y", -5.0 * s)  # hem flares out
         # shoulder yoke joining front and back
         yk = geo.box(P + f"vest_yoke.{sfx}", (0.078, 0.34, 0.02), (0.122 * s, -0.012, 0.886),
                      mat=m["hivis"], coll=coll, bevel=0.006)
         att(yk, "spine.02")
     back, _ = sym([(0.0, 0.845), (0.07, 0.86), (0.085, 0.885), (0.16, 0.885), (0.2, 0.8),
-                   (0.206, 0.64), (0.212, hem), (0.0, hem - 0.005)])
-    att(front(P + "vest_back", outline(back, jit=0.0015), 0.164, 0.022, m["hivis"], coll,
-              bevel=0.005), "spine.02")
+                   (0.207, 0.66), (0.222, 0.56), (0.224, 0.53), (0.205, hem - 0.004),
+                   (0.0, hem - 0.006)])
+    vb = att(front(P + "vest_back", outline(back, jit=0.0015), 0.164, 0.022, m["hivis"], coll,
+                   bevel=0.008), "spine.02")
     tp = outline([(-0.208, 0.628), (0.208, 0.628), (0.208, 0.672), (-0.208, 0.672)], "cccc",
                  jit=0.0006)
-    att(front(P + "vest_stripe_back", tp, 0.168, 0.004, m["tape"], coll, bevel=0.001),
-        "spine.02")
+    vbs = att(front(P + "vest_stripe_back", tp, 0.168, 0.004, m["tape"], coll, bevel=0.001),
+              "spine.02")
+    _tilt((vb, vbs), (0, 0.164, 0.88), "X", 5.0)
 
     # Neck with a fringed ruff collar under the chin.
     nk = outline([(-0.08, 0.86), (0.09, 0.86), (0.095, 0.99), (-0.085, 0.99)], "ssss")
@@ -531,14 +547,14 @@ def _arms(coll, m, att):
         sh, el, wr = SHOULDER, ELBOW, WRIST
 
         def upper(k=1.0):
-            pts, st = _limb(_yz(sh) + Vector((0, 0.03)), _yz(el), 0.105 * k, 0.078 * k,
-                            "ssssssss")
-            return outline(pts, st)
+            pts, st = _limb(_yz(sh) + Vector((0, 0.03)), _yz(el), 0.125 * k, 0.092 * k,
+                            "ffssffss" if k < 1 else "ssssssss")
+            return outline(pts, st, fur=0.02, fur_sp=0.013, lean=0.5)
 
         def fore(k=1.0):
-            pts, st = _limb(_yz(el), _yz(wr), 0.078 * k, 0.07 * k, "ssssssss")
+            pts, st = _limb(_yz(el), _yz(wr), 0.094 * k, 0.082 * k, "ssssssss")
             return outline(pts, st)
-        xs = (0.197, 0.232, 0.259) if s > 0 else (-0.259, -0.232, -0.197)
+        xs = (0.197, 0.234, 0.266) if s > 0 else (-0.266, -0.234, -0.197)
         if s > 0:
             inner, outer = (xs[0], xs[1]), (xs[1] - 0.004, xs[2])
         else:
@@ -555,13 +571,13 @@ def _arms(coll, m, att):
         d = (_yz(wr) - _yz(el)).normalized()
         nrm = Vector((-d.y, d.x))
         cw = _yz(wr) - d * 0.012
-        cuff = [cw + nrm * 0.045, cw + nrm * 0.04 + d * 0.022, cw - nrm * 0.04 + d * 0.022,
-                cw - nrm * 0.045]
+        cuff = [cw + nrm * 0.05, cw + nrm * 0.045 + d * 0.022, cw - nrm * 0.045 + d * 0.022,
+                cw - nrm * 0.05]
         cp = outline([(p.x, p.y) for p in cuff], "sfss", fur=0.02, fur_sp=0.0112)
-        xo = 0.254 if s > 0 else -0.264
+        xo = 0.261 if s > 0 else -0.271
         att(side(P + f"arm_cuff.{sfx}", cp, xo, xo + 0.01, m["grey"], coll), f"forearm.{sfx}")
         # Pins: shoulder and elbow on the outside.
-        xp = 0.262 * s
+        xp = 0.269 * s
         att(_pin(f"shoulder.{sfx}", Vector((xp, sh.y + 0.005, sh.z + 0.005)), (s, 0, 0), coll),
             f"upper_arm.{sfx}")
         att(_pin(f"elbow.{sfx}", Vector((xp, el.y, el.z)), (s, 0, 0), coll, r=0.013),
@@ -590,31 +606,34 @@ def _arms(coll, m, att):
 
 def _legs(coll, m, att):
     for sfx, s in (("L", 1), ("R", -1)):
-        def thigh(k=1.0):
-            c = [(-0.075, 0.56), (0.02, 0.575), (0.105, 0.55), (0.1, 0.4), (0.075, 0.275),
-                 (0.0, 0.25), (-0.07, 0.27), (-0.085, 0.42)]
-            if k != 1.0:
-                c = scaled(c, (k, 1.0), (0.01, 0.4))
-            return outline(c, "sssFFFss", fur=0.0275, fur_sp=0.0144)
+        def thigh(ky=1.0, kz=1.0):
+            c = [(-0.1, 0.55), (0.0, 0.58), (0.115, 0.555), (0.13, 0.44), (0.105, 0.31),
+                 (0.04, 0.245), (-0.04, 0.24), (-0.1, 0.29), (-0.115, 0.42)]
+            c = scaled(c, (ky, kz), (0.005, 0.42))
+            return outline(c, "ssspFFFss", fur=0.028, fur_sp=0.014)
 
-        def shin(k=1.0):
-            c = [(-0.058, 0.31), (0.06, 0.31), (0.07, 0.17), (0.068, 0.085), (0.0, 0.07),
-                 (-0.06, 0.085), (-0.062, 0.2)]
-            if k != 1.0:
-                c = scaled(c, (k, 1.0), (0.0, 0.2))
+        def shin(ky=1.0):
+            c = [(-0.075, 0.3), (0.08, 0.3), (0.09, 0.19), (0.085, 0.1), (0.0, 0.07),
+                 (-0.08, 0.1), (-0.085, 0.2)]
+            c = scaled(c, (ky, 1.0), (0.0, 0.2))
             return outline(c, "sssFFss", fur=0.025, fur_sp=0.0128)
 
         def X(a, b):
             return (a, b) if s > 0 else (-b, -a)
-        att(side(P + f"thigh.{sfx}", thigh(), *X(0.022, 0.088), m["grey"], coll, bevel=0.005),
+        # chunky rounded thigh: three layers, each smaller toward the outside
+        att(side(P + f"thigh.{sfx}", thigh(), *X(0.018, 0.098), m["grey"], coll, bevel=0.006),
             f"thigh.{sfx}")
-        att(side(P + f"thigh_outer.{sfx}", thigh(0.92), *X(0.084, 0.142), m["grey"], coll,
-                 bevel=0.005), f"thigh.{sfx}")
-        att(side(P + f"shin.{sfx}", shin(), *X(0.035, 0.132), m["grey"], coll, bevel=0.005),
+        att(side(P + f"thigh_outer.{sfx}", thigh(0.95, 0.93), *X(0.093, 0.16), m["grey"], coll,
+                 bevel=0.006), f"thigh.{sfx}")
+        att(side(P + f"thigh_cap.{sfx}", thigh(0.8, 0.74), *X(0.155, 0.195), m["grey"], coll,
+                 bevel=0.006), f"thigh.{sfx}")
+        att(side(P + f"shin.{sfx}", shin(), *X(0.028, 0.092), m["grey"], coll, bevel=0.006),
             f"shin.{sfx}")
-        att(_pin(f"hip.{sfx}", Vector((0.146 * s, 0.03, 0.475)), (s, 0, 0), coll),
+        att(side(P + f"shin_outer.{sfx}", shin(0.9), *X(0.087, 0.14), m["grey"], coll,
+                 bevel=0.006), f"shin.{sfx}")
+        att(_pin(f"hip.{sfx}", Vector((0.197 * s, 0.03, 0.455)), (s, 0, 0), coll),
             f"thigh.{sfx}")
-        att(_pin(f"knee.{sfx}", Vector((0.146 * s, -0.005, 0.3)), (s, 0, 0), coll, r=0.013),
+        att(_pin(f"knee.{sfx}", Vector((0.142 * s, 0.0, 0.215)), (s, 0, 0), coll, r=0.013),
             f"shin.{sfx}")
         # Foot: black felt, three toe layers with slits between them.
         heel = [(0.075, 0.006), (0.085, 0.045), (0.05, 0.1), (-0.03, 0.1), (-0.05, 0.06)]
@@ -770,8 +789,8 @@ def _head(coll, m, att):
         add(o)
     # Cheek fur flaring out at the sides (front-facing, so it reads from the front and 3/4).
     for sfx, s in (("L", 1), ("R", -1)):
-        fl = [(0.09, 1.075), (0.15, 1.07), (0.19, 1.035), (0.2, 0.985), (0.16, 0.945),
-              (0.1, 0.94), (0.08, 1.0)]
+        fl = [(0.09, 1.05), (0.14, 1.045), (0.175, 1.015), (0.182, 0.975), (0.15, 0.94),
+              (0.1, 0.935), (0.08, 0.99)]
         fl = [(x * s, z) for x, z in fl]
         o = add(front(P + f"cheek_flare.{sfx}", outline(fl, "sffffss", fur=0.026, fur_sp=0.014,
                                                         lean=0.35), -0.08, 0.022, m["grey"],
@@ -781,10 +800,10 @@ def _head(coll, m, att):
         o.matrix_world = (Matrix.Translation(pv) @ Matrix.Rotation(math.radians(35 * s), 4, "Z")
                           @ Matrix.Translation(-pv) @ o.matrix_world)
     # Back of the head: a fringed panel so the head reads round from behind.
-    bk, st = sym([(0.0, 1.17), (0.08, 1.15), (0.12, 1.08), (0.115, 1.0), (0.07, 0.96),
-                  (0.0, 0.95)], "ssfff")
+    bk, st = sym([(0.0, 1.06), (0.07, 1.055), (0.11, 1.03), (0.105, 0.98), (0.06, 0.95),
+                  (0.0, 0.945)], "ssfff")
     add(panel(P + "head_back", outline(bk, st, fur=0.022, fur_sp=0.016), 0.025,
-              (0, 0.142, 0), (0, 1, 0), (0, 0, 1), m["grey"], coll, bevel=0.005))
+              (0, 0.118, 0), (0, 1, 0), (0, 0, 1), m["grey"], coll, bevel=0.005))
     # Front face plate: round, with fringed cheeks.
     fp, st = sym([(0.0, 1.24), (0.075, 1.23), (0.118, 1.19), (0.132, 1.13), (0.13, 1.07),
                   (0.112, 1.015), (0.075, 0.978), (0.03, 0.962), (0.0, 0.96)], "sssfffffs")
