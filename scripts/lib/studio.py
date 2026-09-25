@@ -111,8 +111,8 @@ def world(color=(0.02, 0.025, 0.035), strength=1.0):
 
 def turntable_studio(height=1.0, radius=3.0, lens=50, target_z=None, coll_name="Studio",
                      cam_elev=0.28, fstop=5.6, key=320):
-    """Night-shift flavoured approval studio: felt floor disc on a card sweep,
-    warm 3200K key, cool 7000K fill, rim, and a camera orbiting nothing: the asset spins."""
+    """Neutral approval studio (colours judged true): felt disc on a card sweep, 4800K key,
+    6500K fill, rim. The asset spins; the camera stays. Night-shift lighting is Stage 2."""
     coll = geo.collection(coll_name)
     tz = target_z if target_z is not None else height * 0.5
     # Sweep backdrop (card) and a felt turntable disc.
@@ -124,10 +124,10 @@ def turntable_studio(height=1.0, radius=3.0, lens=50, target_z=None, coll_name="
                         mat=disc_mat, coll=coll, segs=96, bevel=0.01)
     world((0.018, 0.022, 0.032), 1.0)
     d = max(height, 1.0)
-    area_light("Key_3200K", (-2.6 * d, -2.8 * d, 2.8 * d), (0, 0, tz), key * d * d, temp=3200,
+    area_light("Key", (-2.6 * d, -2.8 * d, 2.8 * d), (0, 0, tz), key * d * d, temp=4800,
                size=1.6 * d, coll=coll)
-    area_light("Fill_Moon_7000K", (3.2 * d, -2.2 * d, 1.6 * d), (0, 0, tz), key * 0.35 * d * d,
-               temp=7000, size=3.0 * d, coll=coll)
+    area_light("Fill", (3.2 * d, -2.2 * d, 1.6 * d), (0, 0, tz), key * 0.35 * d * d,
+               temp=6500, size=3.0 * d, coll=coll)
     area_light("Rim", (1.0 * d, 3.2 * d, 2.6 * d), (0, 0, tz), key * 0.9 * d * d, temp=5200,
                size=1.0 * d, coll=coll)
     dist = radius

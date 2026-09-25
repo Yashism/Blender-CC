@@ -59,7 +59,7 @@ if __name__ == "__main__":  # allow `blender -b -P scripts/builders/bolt.py -- -
 from lib import geo, mats as M, rig  # noqa: E402
 from lib.palette import rgb  # noqa: E402
 
-TURNTABLE = dict(height=0.85, radius=3.1, lens=50, target_z=0.43, cam_elev=0.12, fstop=5.6)
+TURNTABLE = dict(height=0.85, radius=3.3, lens=50, target_z=0.43, cam_elev=0.12, fstop=5.6)
 
 SHAPE_KEYS = ["smile", "pant", "whoa", "wide_eyes", "squint", "wink", "worried_brows", "blink"]
 LEGS = ("FL", "FR", "HL", "HR")
@@ -540,7 +540,7 @@ def _build_body(coll, mt, bind):
 
     # white chest ruff: two front-facing fringed layers under the chin
     def rf(p, n):
-        return 1.0 if n.y < -0.2 else (0.5 if n.y < 0.5 else 0.0)
+        return 1.0 if n.y < -0.35 else 0.0
     ruff = [(-0.09, 0.50), (0.09, 0.50), (0.11, 0.42), (0.10, 0.33), (0.06, 0.285),
             (0.0, 0.27), (-0.06, 0.285), (-0.10, 0.33), (-0.11, 0.42)]
     r1 = _outline(ruff, step=0.011, fringe=rf, depth=0.016, seed=7)
@@ -568,7 +568,7 @@ FACE = [(0.0, 0.808), (0.085, 0.802), (0.132, 0.772), (0.155, 0.705), (0.16, 0.6
 
 
 FOLD_PIVOT = Vector((0, -0.32, 0))
-FOLD_ANGLE = math.radians(22)   # the face mask is folded down the blaze so it wraps round
+FOLD_ANGLE = math.radians(26)   # the face mask is folded down the blaze so it wraps round
 
 
 def _fold_m(sg=1.0):
@@ -615,10 +615,10 @@ def _build_head(coll, mt, bind):
     m1 = [(0.0, 0.668), (0.032, 0.66), (0.05, 0.618), (0.085, 0.605), (0.106, 0.59),
           (0.098, 0.572), (0.05, 0.57), (0.0, 0.56), (-0.05, 0.57), (-0.098, 0.572),
           (-0.106, 0.59), (-0.085, 0.605), (-0.05, 0.618), (-0.032, 0.66)]
-    m2 = [(0.0, 0.655), (0.045, 0.645), (0.078, 0.605), (0.084, 0.58), (0.045, 0.572),
-          (0.0, 0.565), (-0.045, 0.572), (-0.084, 0.58), (-0.078, 0.605), (-0.045, 0.645)]
-    m3 = [(0.0, 0.645), (0.04, 0.638), (0.062, 0.605), (0.055, 0.58), (0.0, 0.572),
-          (-0.055, 0.58), (-0.062, 0.605), (-0.04, 0.638)]
+    m2 = [(0.0, 0.652), (0.045, 0.643), (0.078, 0.605), (0.084, 0.584), (0.045, 0.576),
+          (0.0, 0.569), (-0.045, 0.576), (-0.084, 0.584), (-0.078, 0.605), (-0.045, 0.643)]
+    m3 = [(0.0, 0.638), (0.04, 0.632), (0.06, 0.607), (0.054, 0.588), (0.0, 0.58),
+          (-0.054, 0.588), (-0.06, 0.607), (-0.04, 0.632)]
     for i, (m, y0, y1, bw) in enumerate(((m1, -0.265, -0.36, 0.014), (m2, -0.35, -0.405, 0.014),
                                          (m3, -0.395, -0.435, 0.012))):
         objs.append(_front(f"Bolt_muzzle_{i + 1}", _outline(m, step=0.006, seed=15 + i), y0, y1,
@@ -658,7 +658,7 @@ def _build_face(coll, mt, bind):
 
     # --- eye (left): glossy iris dome, dark iris ring, pupil, two catchlights, lid
     base = Vector(P["eye"])
-    yaw = math.radians(8)
+    yaw = math.radians(12)
     d = Vector((math.sin(yaw), -math.cos(yaw), 0.06)).normalized()
     R = EYE_R
     thm = math.asin(EYE_RB / R)
@@ -674,7 +674,7 @@ def _build_face(coll, mt, bind):
     left.append((_cap("Bolt_lid", R * 1.09, 0, math.pi / 2, mt["black"], coll, c, lid_dir,
                       n=28, steps=8), "lid"))
     # brows (tan applique) and cheeks (tan applique on the mask + side jowl)
-    br = _outline(_ellipse(0.1, 0.72, 0.028, 0.017, 14, rot=-14), it=0, step=0.004, seed=30)
+    br = _outline(_ellipse(0.1, 0.711, 0.028, 0.017, 14, rot=-14), it=0, step=0.004, seed=30)
     left.append((_front("Bolt_brow", br, -0.316, -0.325, mt["tan"], coll, bevel=0.002), "brow"))
     ck = _outline(_ellipse(0.112, 0.56, 0.042, 0.052, 16, rot=10), it=0, step=0.007,
                   fringe=lambda p, n: 1.0 if n.x > 0.3 and n.y < 0.2 else 0.0,
@@ -719,7 +719,7 @@ def _build_face(coll, mt, bind):
     for s, sg in (("L", 1.0), ("R", -1.0)):
         curl = _stadium((0.088, 0.583), (0.108, 0.602), 0.005, 0.004, 6)
         curl = [(x * sg, z) for x, z in curl]
-        centre.append((_front(f"Bolt_mouth_corner_{s}", curl, -0.32, -0.352, mt["black"], coll,
+        centre.append((_front(f"Bolt_mouth_corner_{s}", curl, -0.334, -0.346, mt["black"], coll,
                               bevel=0.0015), "mouth"))
     ph = _stadium((0.0, 0.575), (0.0, 0.603), 0.0035, 0.0035, 6)
     centre.append((_front("Bolt_philtrum", ph, -0.418, -0.437, mt["black"], coll, bevel=0.0012),
@@ -875,8 +875,9 @@ def _build_hardhat(coll, mt, bind):
     tilt = Matrix.Rotation(math.radians(-11), 4, "X") @ Matrix.Rotation(math.radians(3), 4, "Y")
     mw = Matrix.Translation(hc) @ tilt
     sx, sy = 1.0, 1.1
-    prof = [(0.0, 0.152), (0.04, 0.151), (0.08, 0.140), (0.112, 0.116), (0.135, 0.08),
-            (0.147, 0.04), (0.151, 0.0)]
+    prof = [(z * 0.84, r) for z, r in ((0.0, 0.152), (0.04, 0.151), (0.08, 0.140),
+                                        (0.112, 0.116), (0.135, 0.08), (0.147, 0.04),
+                                        (0.151, 0.0))]
     dome = geo.lathe("Bolt_hardhat", prof, 48, mat=mt["hat"], coll=coll, cap_bottom=True,
                      cap_top=False, subsurf=1, squash=(sx, sy))
     dome.matrix_world = mw
@@ -893,12 +894,13 @@ def _build_hardhat(coll, mt, bind):
     b.data.transform(mw)
 
     # ribs: centre ridge + two side ribs following the dome
-    def rpt(z_r, t, off):
-        z, r = z_r
-        return (r * sx * math.cos(t) * off, r * sy * math.sin(t) * off, z * off)
-
     ribs = []
-    prof_ext = [(z, r) for z, r in prof]
+    prof_ext = []
+    for (z0, r0), (z1, r1) in zip(prof, prof[1:]):
+        for k in range(4):
+            t = k / 4
+            prof_ext.append((z0 + (z1 - z0) * t, r0 + (r1 - r0) * t))
+    prof_ext.append(prof[-1])
 
     def ridge(xoff, rad):
         pts = []
@@ -910,16 +912,18 @@ def _build_hardhat(coll, mt, bind):
                     continue
                 y = math.sqrt(max(0.0, (r * sy) ** 2 * (1 - (xoff / rr) ** 2)))
                 pts.append(Vector((xoff, sgn * y, z)))
-        # push outward along the local normal a touch
-        c = Vector((0, 0, -0.02))
-        return [p + (p - c).normalized() * rad * 0.6 for p in pts if p.z > 0.012]
+        return [p for p in pts if p.z > 0.004]
 
-    for nm, xo, rad in (("mid", 0.0, 0.008), ("L", 0.058, 0.0055), ("R", -0.058, 0.0055)):
-        pts = ridge(xo, rad)
-        tb = geo.tube(f"Bolt_hardhat_rib_{nm}", [tuple(p) for p in pts], rad, mat=mt["hat"],
-                      coll=coll)
-        tb.data.transform(mw)
-        ribs.append(tb)
+    c = Vector((0, 0, -0.03))
+    for nm, xo, wd in (("mid", 0.0, 0.024), ("L", 0.062, 0.014), ("R", -0.062, 0.014)):
+        pts = ridge(xo, 0)
+        nrm = [(p - c).normalized() for p in pts]
+        rb = _ribbon(f"Bolt_hardhat_rib_{nm}", pts, nrm, wd, 0.009, 0.0035, mt["hat"], coll,
+                     wdirs=[(1, 0, 0)] * len(pts))
+        geo.add_bevel(rb, 0.003, 2)
+        rb.data.shade_smooth()
+        rb.data.transform(mw)
+        ribs.append(rb)
     bind([dome, b] + ribs, "head")
 
 
@@ -963,7 +967,7 @@ def _build_legs(coll, mt, bind):
     for leg in ("FL", "HL"):
         a, j, k, toe = _leg_pts(leg)
         up = _side(f"Bolt_leg_upper_{leg}", _leg_upper_pts(leg), LX0, LX1, mt["black"], coll)
-        lo_ctrl = _stadium((j.y, j.z), (k.y, k.z - 0.01), 0.034, 0.028, 8)
+        lo_ctrl = _stadium((j.y, j.z), (k.y, k.z - 0.01), 0.04, 0.034, 8)
         lo = _side(f"Bolt_leg_lower_{leg}", _outline(lo_ctrl, it=1, step=0.007, seed=80),
                    LLX0, LLX1, mt["tan"], coll)
         paw = _paw(f"Bolt_paw_{leg}", leg, mt, coll)
@@ -1090,17 +1094,17 @@ def pose_test(root):
     for b in pb:
         b.rotation_mode = "XYZ"
     for i in range(1, 6):
-        pb[f"tail.{i:02d}"].rotation_euler = (math.radians(-12), 0, math.radians(9))
-    pb["neck.01"].rotation_euler = (math.radians(8), 0, math.radians(8))
-    pb["neck.02"].rotation_euler = (math.radians(6), math.radians(6), 0)
-    pb["head"].rotation_euler = (0, math.radians(-12), math.radians(10))
-    pb["jaw"].rotation_euler = (math.radians(-14), 0, 0)
-    pb["tongue.02"].rotation_euler = (math.radians(-20), 0, 0)
-    pb["ear.01.L"].rotation_euler = (0, 0, math.radians(-30))
-    pb["ear.02.L"].rotation_euler = (math.radians(30), 0, 0)
-    pb["ear.01.R"].rotation_euler = (math.radians(-25), 0, 0)
-    pb["ear.02.R"].rotation_euler = (math.radians(-35), 0, 0)
-    pb["IK_FL"].location = (0, 0.02, 0.08)  # paw lifted (bone-local)
+        pb[f"tail.{i:02d}"].rotation_euler = (math.radians(6), 0, math.radians(-9))
+    pb["neck.01"].rotation_euler = (math.radians(-8), 0, math.radians(8))
+    pb["neck.02"].rotation_euler = (math.radians(-6), 0, math.radians(6))
+    pb["head"].rotation_euler = (0, math.radians(-10), math.radians(8))
+    pb["jaw"].rotation_euler = (math.radians(-12), 0, 0)
+    pb["tongue.02"].rotation_euler = (math.radians(-15), 0, 0)
+    pb["ear.01.L"].rotation_euler = (0, 0, math.radians(-12))
+    pb["ear.02.L"].rotation_euler = (0, 0, math.radians(-15))
+    pb["ear.01.R"].rotation_euler = (0, 0, math.radians(10))
+    pb["ear.02.R"].rotation_euler = (0, 0, math.radians(18))
+    pb["IK_FL"].location = (0, 0.03, 0.07)  # paw lifted (bone-local)
     pb["spine.01"].rotation_euler = (math.radians(4), 0, 0)
     face = bpy.data.objects["Bolt_face"]
     kb = face.data.shape_keys.key_blocks

@@ -52,8 +52,8 @@ EAR_ROOT = Vector((0.14, 0.045, 1.078))
 EAR_UP = Vector((0.32, 0.06, 1.0)).normalized()
 EYE_C = Vector((0.1405, -0.1425, 1.108))
 EYE_N = Vector((0.72, -0.69, 0.0)).normalized()
-EYE_RX, EYE_RY = 0.022, 0.03
-HAT_BASE = Vector((0.0, 0.012, 1.198))
+EYE_RX, EYE_RY = 0.0245, 0.0335
+HAT_BASE = Vector((0.0, 0.012, 1.19))
 HAT_TILT = -11.0
 HAT_PROFILE = [(0.0, 0.166), (0.035, 0.162), (0.07, 0.148), (0.1, 0.12), (0.12, 0.08),
                (0.132, 0.04), (0.136, 0.0)]
@@ -61,7 +61,14 @@ HAT_SQ = 1.1
 TAIL_SPINE = [(0.1, 0.60), (0.2, 0.595), (0.3, 0.55), (0.385, 0.47), (0.445, 0.37),
               (0.475, 0.26), (0.48, 0.16)]
 
+TAIL_YAW = -14.0  # relaxed tail sweeps a little to his left, so it reads front and back
 RNG = random.Random(1307)
+
+
+def _tail_xf():
+    b = Vector((0.0, TAIL_SPINE[0][0], TAIL_SPINE[0][1]))
+    return (Matrix.Translation(b) @ Matrix.Rotation(math.radians(TAIL_YAW), 4, "Z")
+            @ Matrix.Translation(-b))
 
 
 def _mirror(v, side):
@@ -104,7 +111,10 @@ def outline(ctrl, styles=None, fur=0.035, fur_sp=0.0128, lean=0.4, pink=0.004, p
     rng = rng or RNG
     n = len(ctrl)
     styles = styles or "s" * n
-    cv = [Vector(c) for c in ctrl]
+    # handmade wobble lives on the control points (low frequency), not on every vertex,
+    # so smooth cut edges stay smooth and the angle-limited bevel doesn't striate them
+    cv = [Vector(c) + Vector((rng.uniform(-jit, jit), rng.uniform(-jit, jit))) * 1.6
+          for c in ctrl]
     area = sum(cv[i].x * cv[(i + 1) % n].y - cv[(i + 1) % n].x * cv[i].y for i in range(n))
     sgn = 1.0 if area > 0 else -1.0
     out = []
@@ -123,7 +133,7 @@ def outline(ctrl, styles=None, fur=0.035, fur_sp=0.0128, lean=0.4, pink=0.004, p
             p0, p3 = cv[(i - 1) % n], cv[(i + 2) % n]
             seg = [_cr(p0, a, b, p3, k / per) for k in range(per)] + [b]
         if st in "sc":
-            out += [jitter(p) for p in seg[:-1]]
+            out += seg[:-1]
             continue
         cum = [0.0]
         for k in range(1, len(seg)):
@@ -406,13 +416,13 @@ def _tail_bone_pts():
     out = []
     for i in range(6):
         p, _ = _tail_at(L * (0.02 + 0.98 * i / 5), pts, cum)
-        out.append(Vector((0.0, p.x, p.y)))
+        out.append(_tail_xf() @ Vector((0.0, p.x, p.y)))
     return out
 
 
 def _tail_width(t):
     # bushy: narrow at the root, fattest past the middle, round tip
-    return 0.11 + 0.19 * math.sin(math.pi * min(1.0, 0.18 + t * 0.95)) ** 0.8
+    return 0.12 + 0.22 * math.sin(math.pi * min(1.0, 0.18 + t * 0.95)) ** 0.8
 
 
 # ----------------------------------------------------------------- body parts
@@ -561,7 +571,7 @@ def _arms(coll, m, att):
         base = _yz(wr) - hd * 0.012
 
         def hp(a, b):
-            q = base + hd * a + hn * b
+            q = base + (hd * a + hn * b) * 1.18
             return (q.x, q.y)
         palm = [hp(0.0, 0.034), hp(0.05, 0.04), hp(0.09, 0.03), hp(0.1, 0.0), hp(0.09, -0.035),
                 hp(0.05, -0.046), hp(0.0, -0.036)]
@@ -595,28 +605,34 @@ def _legs(coll, m, att):
 
         def X(a, b):
             return (a, b) if s > 0 else (-b, -a)
-        att(side(P + f"thigh.{sfx}", thigh(), *X(0.03, 0.085), m["grey"], coll, bevel=0.005),
+        att(side(P + f"thigh.{sfx}", thigh(), *X(0.022, 0.088), m["grey"], coll, bevel=0.005),
             f"thigh.{sfx}")
-        att(side(P + f"thigh_outer.{sfx}", thigh(0.92), *X(0.082, 0.132), m["grey"], coll,
+        att(side(P + f"thigh_outer.{sfx}", thigh(0.92), *X(0.084, 0.142), m["grey"], coll,
                  bevel=0.005), f"thigh.{sfx}")
-        att(side(P + f"shin.{sfx}", shin(), *X(0.04, 0.125), m["grey"], coll, bevel=0.005),
+        att(side(P + f"shin.{sfx}", shin(), *X(0.035, 0.132), m["grey"], coll, bevel=0.005),
             f"shin.{sfx}")
-        att(_pin(f"hip.{sfx}", Vector((0.136 * s, 0.03, 0.475)), (s, 0, 0), coll),
+        att(_pin(f"hip.{sfx}", Vector((0.146 * s, 0.03, 0.475)), (s, 0, 0), coll),
             f"thigh.{sfx}")
-        att(_pin(f"knee.{sfx}", Vector((0.136 * s, -0.005, 0.3)), (s, 0, 0), coll, r=0.013),
+        att(_pin(f"knee.{sfx}", Vector((0.146 * s, -0.005, 0.3)), (s, 0, 0), coll, r=0.013),
             f"shin.{sfx}")
         # Foot: black felt, three toe layers with slits between them.
-        heel = [(0.075, 0.0), (0.085, 0.045), (0.05, 0.1), (-0.03, 0.1), (-0.05, 0.06)]
-        att(side(P + f"foot.{sfx}", outline(heel + [(-0.06, 0.0)], "ssssss"),
+        heel = [(0.075, 0.006), (0.085, 0.045), (0.05, 0.1), (-0.03, 0.1), (-0.05, 0.06)]
+        att(side(P + f"foot.{sfx}", outline(heel + [(-0.06, 0.006)], "cssssc", jit=0.0),
                  *X(0.045, 0.125), m["black"], coll, bevel=0.005), f"foot.{sfx}")
         for k, (x0, ln) in enumerate(((0.038, 0.14), (0.068, 0.165), (0.098, 0.15))):
-            tp = [(0.0, 0.0), (0.0, 0.07), (-0.07, 0.066), (-ln + 0.02, 0.05), (-ln, 0.025),
-                  (-ln + 0.012, 0.0)]
-            att(side(P + f"toe{k}.{sfx}", outline(tp, "ssssss"), *X(x0, x0 + 0.027),
+            tp = [(0.0, 0.006), (0.0, 0.07), (-0.07, 0.066), (-ln + 0.02, 0.05), (-ln, 0.028),
+                  (-ln + 0.014, 0.006)]
+            att(side(P + f"toe{k}.{sfx}", outline(tp, "sssssc", jit=0.0), *X(x0, x0 + 0.027),
                      m["black"], coll, bevel=0.004), f"foot.{sfx}")
 
 
 def _tail(coll, m, att):
+    xf = _tail_xf()
+    att0 = att
+
+    def att(o, bone):
+        o.matrix_world = xf @ o.matrix_world
+        return att0(o, bone)
     pts, cum = _tail_curve()
     L = cum[-1]
     n_rings = 7
@@ -627,7 +643,7 @@ def _tail(coll, m, att):
         last = i == n_rings - 1
         mat = m["black"] if i % 2 == 0 else m["grey"]
 
-        def ring(k):
+        def ring(k, sts="fffffffs", fur=0.024):
             ctrl = []
             for s_ in (sa, (sa + sb) / 2, min(sb, L)):
                 p, t = _tail_at(s_, pts, cum)
@@ -641,18 +657,19 @@ def _tail(coll, m, att):
                 nrm = Vector((-t.y, t.x))
                 right.append(p - nrm * _tail_width(s_ / L) * 0.5 * k)
             c = ctrl + [cap] + right
-            return outline([(q.x, q.y) for q in c], "fffffffs", fur=0.0325 * k, fur_sp=0.016,
-                           lean=0.25)
-        h = 0.05 - 0.004 * i
+            return outline([(q.x, q.y) for q in c], sts, fur=fur, fur_sp=0.02, lean=0.45,
+                           pink=0.004, pink_sp=0.009)
+        h = 0.058 - 0.004 * i
         bone = f"tail.{min(5, 1 + int(5 * ((sa + sb) / 2) / L)):02d}"
         att(side(P + f"tail_ring.{i + 1:02d}", ring(1.0), -h, h, mat, coll, bevel=0.005), bone)
-        ho = 0.078 - 0.004 * i
-        att(side(P + f"tail_ring.{i + 1:02d}.L", ring(0.8), h - 0.01, ho, mat, coll,
+        ho = 0.1 - 0.005 * i
+        att(side(P + f"tail_ring.{i + 1:02d}.L", ring(0.78, "pppffpps", 0.017), h - 0.01, ho, mat, coll,
                  bevel=0.005), bone)
-        att(side(P + f"tail_ring.{i + 1:02d}.R", ring(0.8), -ho, -h + 0.01, mat, coll,
+        att(side(P + f"tail_ring.{i + 1:02d}.R", ring(0.78, "pppffpps", 0.017), -ho, -h + 0.01, mat, coll,
                  bevel=0.005), bone)
     p0 = tb[0]
-    att(_pin("tail_base", Vector((0.08, p0.y + 0.03, p0.z + 0.0)), (1, 0, 0), coll, r=0.013),
+    att(_pin("tail_base", Vector((0.103, TAIL_SPINE[0][0] + 0.05, TAIL_SPINE[0][1] - 0.01)),
+             (1, 0, 0), coll, r=0.013),
         "tail.01")
 
 
@@ -679,7 +696,7 @@ def _head(coll, m, att):
     centre = [(-0.125, 1.22), (-0.136, 1.13), (-0.13, 1.02), (-0.1, 0.965), (-0.04, 0.945),
               (0.05, 0.95), (0.12, 0.99), (0.15, 1.07), (0.145, 1.16), (0.09, 1.23),
               (0.0, 1.255), (-0.08, 1.245)]
-    st = "sssfffFsssss"
+    st = "sssfffssssss"
     att(side(P + "head", outline(centre, st, fur=0.025), -0.05, 0.05, m["grey"], coll,
              bevel=0.006), "head")
     mid = scaled(centre, 0.97, (0.01, 1.09))
@@ -825,8 +842,8 @@ def _face(coll, m, arm):
         fwd = Vector((0, -1, 0))
         fwd = (fwd - n * fwd.dot(n)).normalized()
         pc = c + n * 0.009 + fwd * 0.0075 - y * 0.002
-        pupil = geo.lathe(P + f"pupil.{sfx}", [(0.0, 0.0145), (0.003, 0.014), (0.006, 0.01),
-                                               (0.0075, 0.0)], 24, mat=m["pupil"], coll=coll,
+        pupil = geo.lathe(P + f"pupil.{sfx}", [(0.0, 0.016), (0.003, 0.0155), (0.006, 0.011),
+                                               (0.008, 0.0)], 24, mat=m["pupil"], coll=coll,
                           cap_bottom=True, cap_top=False)
         pupil.scale = (1.0, 1.2, 1.0)
         pupil.rotation_mode = "QUATERNION"
