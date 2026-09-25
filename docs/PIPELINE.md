@@ -30,7 +30,11 @@ Run headless: `blender -b --factory-startup -P scripts/<script>.py -- <args>`.
 | **Pickles** (biped raccoon) | ~1.35 m to top of hard hat. His roll cage is 0.8 x 0.6 x 1.8 m, taller than him |
 | **FL-02** (forklift) | overhead guard underside z 2.10, top z 2.18. Seat top z 1.00 at y +0.25. Steering wheel centre (0, -0.30, 1.38), radius 0.19, tilted about 35 deg toward the driver. Forks point -Y |
 
-**Mittens in the cab.** The root is placed at the FL-02 seat point `(0, 0.25, 1.00)`. Her hands rest at about `(±0.15, -0.28, 1.40)` (10 and 2 on the wheel). Her eyes sit at about z 1.75 world, and the in-cab screen is to her right-front at about `(-0.42, -0.30, 1.45)`. Screen-right is -X because she faces -Y.
+**Mittens in the cab.** The root is placed at the FL-02 seat point `(0, 0.25, 1.00)`; the cab floor top is z 0.55. Her hands rest at about `(±0.15, -0.28, 1.40)` (10 and 2 on the wheel) and her eyes sit at about z 1.75 world. The in-cab screen sits low on the right of the dash (her right is -X because she faces -Y): RAM base `(-0.34, -0.70, 1.045)`, glass centre about `(-0.33, -0.76, 1.22)`, turned to face her eyes.
+
+## Style (from the client refs in assets/refs/)
+
+Characters are **layered felt cut-out puppets**: thick flat felt panels (extruded silhouettes, soft bevels) with pinked/fringed fur edges, appliqué markings as separate thin felt layers, round joint discs with brass split pins. Heads are built from stacked layers so they hold up in 3/4 and front views.
 
 ## Look rules
 

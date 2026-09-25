@@ -110,7 +110,7 @@ def world(color=(0.02, 0.025, 0.035), strength=1.0):
 
 
 def turntable_studio(height=1.0, radius=3.0, lens=50, target_z=None, coll_name="Studio",
-                     cam_elev=0.28, fstop=5.6, key=900):
+                     cam_elev=0.28, fstop=5.6, key=320):
     """Night-shift flavoured approval studio: felt floor disc on a card sweep,
     warm 3200K key, cool 7000K fill, rim, and a camera orbiting nothing: the asset spins."""
     coll = geo.collection(coll_name)

@@ -37,7 +37,7 @@ GUARD_Z = 2.10
 FRONT_Y, REAR_Y = -0.90, 0.66
 POST_X = 0.52
 TURNTABLE = dict(height=2.35, radius=8.2, lens=50, target_z=1.05, cam_elev=0.22, fstop=11.0,
-                 key=1100)
+                 key=360)
 
 
 def beam(name, p1, p2, w, d, mat, coll, bevel=0.012):
@@ -293,10 +293,13 @@ def build(coll):
                             coll=coll, bevel=0.015))
     body.append(geo.box("FL02_mast_window_top", (0.42, 0.06, 0.16), (0, my, 2.26), mat=darkcard,
                         coll=coll, bevel=0.012))
-    body.append(geo.cylinder("FL02_lift_cyl", 0.045, 1.5, (0, my + 0.08, 1.1), mat=dark,
-                             coll=coll, segs=20))
-    body.append(geo.cylinder("FL02_lift_rod", 0.025, 0.8, (0, my + 0.08, 2.0), mat=chrome,
-                             coll=coll, segs=16))
+    # Twin lift cylinders beside the channels keep the centre clear for the RAMS camera view.
+    for sx in (1, -1):
+        n = "L" if sx > 0 else "R"
+        body.append(geo.cylinder(f"FL02_lift_cyl_{n}", 0.04, 1.5, (sx * 0.2, my + 0.08, 1.1),
+                                 mat=dark, coll=coll, segs=20))
+        body.append(geo.cylinder(f"FL02_lift_rod_{n}", 0.022, 0.8, (sx * 0.2, my + 0.08, 2.0),
+                                 mat=chrome, coll=coll, segs=16))
 
     carriage = geo.empty("FL02_carriage", (0, my - 0.1, 0.0), coll, 0.2)
     cparts = [geo.box("FL02_carriage_plate", (0.92, 0.06, 0.36), (0, my - 0.1, 0.3),
@@ -348,7 +351,9 @@ def build(coll):
     body += label("FL02_label_guard", "FL-02", (0, FRONT_Y - 0.047, gz + 0.04), (math.radians(90), 0, 0), coll, 0.24, 0.07)
 
     # ---- RAMS AI camera: centre of the front crossbar, facing forward, tilted down ----
+    # Scaled up 1.6x from product size so it reads in wide shots (cartoon exaggeration).
     cam = rams_camera.build(coll, glow=0.35)
+    cam.scale = (1.6, 1.6, 1.6)
     cam.location = (0.0, FRONT_Y - 0.01, gz)
     cam.rotation_euler = (math.radians(12), 0, 0)
 
@@ -362,7 +367,7 @@ def build(coll):
 
     # ---- cable: camera gland -> under the guard -> down the right front post -> screen ----
     cz = gz - 0.035
-    cable_pts = [(0.0, FRONT_Y + 0.07, gz - 0.12), (0.0, FRONT_Y + 0.1, cz),
+    cable_pts = [(0.0, FRONT_Y + 0.07, gz - 0.26), (0.0, FRONT_Y + 0.12, gz - 0.2), (0.0, FRONT_Y + 0.14, cz),
                  (-0.25, FRONT_Y + 0.1, cz), (-POST_X + 0.07, FRONT_Y + 0.1, cz - 0.02),
                  (-POST_X + 0.055, -0.83, 1.8), (-POST_X + 0.05, -0.72, 1.35),
                  (-POST_X + 0.07, -0.66, 1.08), (-0.4, -0.68, 1.05), (scr_base.x, scr_base.y + 0.03, 1.05)]
