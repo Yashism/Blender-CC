@@ -47,12 +47,13 @@ def build(coll):
     co, off = K.recentre(body, col)
     arm = K.build_armature(coll)
     geo.parent(arm, root)
-    _, _, _, co, col = K.skin(body, arm, coll, co, col)
+    W, names, masks, co, col = K.skin(body, arm, coll, co, col)
     body.parent = arm
     body.parent_type = "OBJECT"
     md = body.modifiers.new("Armature", "ARMATURE")
     md.object = arm
     md.use_deform_preserve_volume = True
+    K.cap_panels(coll, arm, body, co, col, W, names, masks["is_arm"], masks["caps"])
     src_png = os.path.join(SRC, "pickles_meshy.png")
     K.brass_pins(body, co, col, src_png, os.path.join(FACE_DIR, "pickles_pinmask.png"))
     K.face_rig(root, body, co, col, FACE_DIR, FACES, src_png)

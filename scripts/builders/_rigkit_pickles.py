@@ -448,11 +448,12 @@ def skin(ob, arm, coll, co, col):
     W[phones, J_["neck"]] = 1
 
     W = limit_normalize(fallback(np.clip(W, 0, None)), 4)
-    W, co, col = rip_arms(ob, names, W, co, col, J_, arm_cols, handzone)
+    W, co, col, is_arm, caps = rip_arms(ob, names, W, co, col, J_, arm_cols, handzone)
     W = limit_normalize(W, 4)
     write_weights(ob, names, W)
     ob["rigid_parts"] = "hat->head, headphones->neck, vest->spine (smoothed), tail->tail chain"
-    return W, names, dict(hat=hat, phones=phones, vest=vest, tail=tail), co, col
+    return W, names, dict(hat=hat, phones=phones, vest=vest, tail=tail, is_arm=is_arm,
+                          caps=caps), co, col
 
 
 def weight_debug_colours(ob, W, names):
@@ -729,6 +730,21 @@ def paint_faces(ob, co, col, base_img_path, out_dir, names):
     if lime_t.any() and dark_t.any():
         mitten = np.median(hcol[dark_t], 0)
         base[hr[lime_t], hc[lime_t]] = mitten + rng.normal(0, 0.01, (int(lime_t.sum()), 1))
+    # headphones: the sculpt's magenta (s ~0.9) renders red; remap to the brief's #E84A8C
+    # keeping each texel's shading. Black cushions are untouched (value/saturation gate).
+    ph = (z > 0.76) & (z < 1.0) & (np.abs(x) < 0.2)
+    pr, pc, _ = texel_positions(ob, co, ph, (W, H))
+    pcol = base[pr, pc]
+    ph_h, ph_s, ph_v = _hsv(pcol)
+    pinkt = ((ph_h > 295) | (ph_h < 12)) & (ph_s > 0.3) & (ph_v > 0.2)
+    if pinkt.any():
+        tgt = np.array([0xE8, 0x4A, 0x8C]) / 255.0
+        _, ts, tv = _hsv(tgt[None])
+        ref_v = np.median(ph_v[pinkt & (ph_s > 0.6)]) if (pinkt & (ph_s > 0.6)).any() else tv[0]
+        wgt = np.clip((ph_s[pinkt] - 0.3) / 0.3, 0, 1)[:, None]     # soft at cushion edges
+        shade = np.clip(ph_v[pinkt] / ref_v, 0, 1.25)[:, None]
+        new = np.clip(tgt * shade, 0, 1)
+        base[pr[pinkt], pc[pinkt]] = pcol[pinkt] * (1 - wgt) + new * wgt
     paths = []
     for i, n in enumerate(names):
         img = base.copy()
@@ -886,7 +902,7 @@ def _components(n, edges):
             return lab
 
 
-def _fan_caps(bm, uv_layer, uv=None, inset=0.12, relax=12):
+def _fan_caps(bm, uv_layer, uv=None, inset=0.12, relax=12, uv_lime=None, uv_fur=None):
     """Close every boundary loop: a relaxed inner ring on the rim's best-fit plane (so the jagged
     fur rim does not streak the shading), a fan to the centre. Each cap takes the UV of the rim
     vertex whose texture colour is the rim median (lime on the vest side, fur on the arm)."""
@@ -940,6 +956,7 @@ def _fan_caps(bm, uv_layer, uv=None, inset=0.12, relax=12):
                 a_, b_ = np.array(lp.vert.co[:]), np.array(lp.link_loop_next.vert.co[:])
                 fn += np.cross(a_ - b_, c - b_)
             outward = fn[0] * np.sign(c[0]) > 0
+            info = dict(c=c, n=fn / max(np.linalg.norm(fn), 1e-12), rim=P_, outward=bool(outward))
             cls = lime if (outward and lime.mean() > 0.15) else fur
             if not cls.any():
                 cls = np.ones(len(rim), bool)
@@ -947,11 +964,16 @@ def _fan_caps(bm, uv_layer, uv=None, inset=0.12, relax=12):
             dist = np.linalg.norm(cols - med, axis=1) + (~cls) * 10
             k = int(np.argmin(dist))
             luv = rim[k].link_loops[0][uv_layer].uv.copy() if rim[k].link_loops else uv
+            if cls is lime and uv_lime is not None:
+                luv = uv_lime
+            elif cls is fur and uv_fur is not None:
+                luv = uv_fur
             ccol = rim[k][colr]
             for v in ring + [cv]:
                 v[colr] = ccol
         else:
             luv = uv
+            info = dict(c=c, n=n, rim=P_, outward=True)
         for e in group:
             lp = e.link_loops[0]
             a, b = lp.vert, lp.link_loop_next.vert
@@ -967,7 +989,7 @@ def _fan_caps(bm, uv_layer, uv=None, inset=0.12, relax=12):
                     l[uv_layer].uv = luv
         bm.verts.index_update()
         caps.append((cv.index, [v.index for v in rim],
-                     [(r.index, v.index) for r, v in zip(ring, rim)]))
+                     [(r.index, v.index) for r, v in zip(ring, rim)], info))
     return caps
 
 
@@ -1004,7 +1026,12 @@ def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     bm.verts.ensure_lookup_table()
     n1 = len(bm.verts)
     # new verts are copies of originals: remember where they came from (same position)
-    caps = _fan_caps(bm, uv_layer, grey_uv)
+    mm = classify(co, col)
+    piece_ = np.zeros(len(co), bool)
+    piece_[:len(piece)] = piece
+    uv_lime = _panel_uv(ob, co, col, (0.08, -0.2, 0.7), mm["lime"] & ~piece_)
+    uv_fur = _panel_uv(ob, co, col, (0.21, 0.0, 0.72), mm["grey"] & piece_)
+    caps = _fan_caps(bm, uv_layer, grey_uv, uv_lime=uv_lime, uv_fur=uv_fur)
     bm.normal_update()
     open_edges = sum(1 for e in bm.edges if e.is_boundary)
     bm.to_mesh(me)
@@ -1040,7 +1067,7 @@ def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     others = [j for j in range(W.shape[1]) if j not in arm_cols]
     W2[np.ix_(is_arm, others)] = 0
     W2[np.ix_(~is_arm, arm_cols)] = 0
-    for ci, members, ring in caps:     # cap verts: rim weights (same piece)
+    for ci, members, ring, _ in caps:  # cap verts: rim weights (same piece)
         for ri, vi in ring:
             W2[ri] = W2[vi]
         W2[ci] = W2[members].mean(0)
@@ -1052,4 +1079,158 @@ def rip_arms(ob, names, W, co, col, J_, arm_cols, handzone):
     ob["arm_rip"] = ("arms cut free along the fused torso seam: %d edges, %d cap loops, "
                      "%d open edges left" % (int(cut.sum()), len(caps), open_edges))
     print("[pickles]", ob["arm_rip"])
-    return W2, co2, col2
+    return W2, co2, col2, is_arm, [c[3] for c in caps]
+
+
+# --------------------------------------------------------------------------- armhole panels
+
+def _smooth_outline(q, bins=72, keep=5, pct=80):
+    """Star-shaped, low-pass outline (bins x 2) of 2D points around their origin."""
+    ang = np.arctan2(q[:, 1], q[:, 0])
+    rad = np.hypot(q[:, 0], q[:, 1])
+    idx = ((ang + np.pi) / (2 * np.pi) * bins).astype(int) % bins
+    r = np.full(bins, np.nan)
+    for b in range(bins):
+        m = idx == b
+        if m.any():
+            r[b] = np.percentile(rad[m], pct)
+    ok = ~np.isnan(r)
+    xs = np.arange(bins)
+    r = np.interp(xs, xs[ok], r[ok], period=bins)
+    F = np.fft.rfft(r)
+    F[keep + 1:] = 0
+    r = np.fft.irfft(F, bins)
+    th = (xs + 0.5) / bins * 2 * np.pi - np.pi
+    return np.stack([np.cos(th) * r, np.sin(th) * r], 1)
+
+
+def _panel_uv(ob, co, col, target, cls):
+    """UV of the vertex of class `cls` nearest `target` (a clean spot of the texture)."""
+    cand = np.nonzero(cls)[0]
+    i = int(cand[np.argmin(np.linalg.norm(co[cand] - np.asarray(target), axis=1))])
+    me = ob.data
+    lv = np.empty(len(me.loops), dtype=np.int64)
+    me.loops.foreach_get("vertex_index", lv)
+    li = int(np.nonzero(lv == i)[0][0])
+    return tuple(me.uv_layers.active.data[li].uv)
+
+
+def _mesh_from_curve(cu_ob, name, coll):
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(cu_ob.evaluated_get(dg))
+    me.name = name
+    bpy.data.objects.remove(cu_ob, do_unlink=True)
+    ob = bpy.data.objects.new(name, me)
+    coll.objects.link(ob)
+    return ob
+
+
+def cap_panels(coll, arm, body, co, col, W, names, is_arm, caps):
+    """Tidy felt panels over the arm-cut caps: a bevelled hi-vis armhole panel with a dark
+    stitched seam on the vest side, a rounded fur joint panel on the arm's inner face. At rest
+    each panel sits inside the other piece; they only show when the arm lifts."""
+    from mathutils import Matrix as M3, Vector as V
+    from mathutils.kdtree import KDTree
+    from lib import mats
+    m = classify(co, col)
+    uv_lime = _panel_uv(body, co, col, (0.08, -0.2, 0.7), m["lime"] & ~is_arm)
+    uv_fur = _panel_uv(body, co, col, (0.21, 0.0, 0.72), m["grey"] & is_arm)
+    mat = body.data.materials[0]
+    seam_mat = mats.felt(P + "seam_felt", "mask", fiber=140)
+    kds = {}
+    for key, mask in (("arm", is_arm), ("body", ~is_arm)):
+        ids = np.nonzero(mask)[0]
+        kd = KDTree(len(ids))
+        for i in ids:
+            kd.insert(co[i], int(i))
+        kd.balance()
+        kds[key] = kd
+    from mathutils.bvhtree import BVHTree
+    me = body.data
+    polys = [tuple(pp.vertices) for pp in me.polygons]
+    bvh = {}
+    for key, mask in (("arm", is_arm), ("body", ~is_arm)):
+        sel = [pp for pp in polys if mask[pp[0]]]
+        bvh[key] = BVHTree.FromPolygons([tuple(v) for v in co], sel)
+
+    def conform(obj, tree, c, n, u, v, outline):
+        """Wrap the panel's outer margin onto the piece's surface (keeping each vertex's
+        height); the middle stays flat over the cap."""
+        th_o = np.arctan2(outline[:, 1], outline[:, 0])
+        r_o = np.hypot(outline[:, 0], outline[:, 1])
+        order = np.argsort(th_o)
+        th_o, r_o = th_o[order], r_o[order]
+        for vv in obj.data.vertices:
+            p = np.array(vv.co[:])
+            hgt = (p - c) @ n
+            qx, qy = (p - c) @ u, (p - c) @ v
+            frac = np.hypot(qx, qy) / np.interp(np.arctan2(qy, qx), th_o, r_o, period=2 * np.pi)
+            w = float(np.clip((frac - 0.75) / 0.25, 0, 1))
+            if w <= 0:
+                continue
+            hit, nrm, _, _ = tree.find_nearest(V(p - n * hgt))
+            if hit is None:
+                continue
+            nrm = np.array(nrm[:])
+            if nrm @ n < 0:
+                nrm = -nrm
+            nn = (nrm + n) / np.linalg.norm(nrm + n)     # half-way normal: no folding
+            tgt = np.array(hit[:]) + nn * hgt
+            vv.co = V(p * (1 - w) + tgt * w)
+
+    made = []
+    for info in caps:
+        P_ = info["rim"]
+        if len(P_) < 80:
+            continue
+        c, n = np.asarray(info["c"]), np.asarray(info["n"])
+        vest = info["outward"]
+        side = "L" if c[0] > 0 else "R"
+        u = np.linalg.svd(P_ - c)[2][0]
+        u = u - n * (u @ n)
+        u /= np.linalg.norm(u)
+        v = np.cross(n, u)
+        q = np.stack([(P_ - c) @ u, (P_ - c) @ v], 1)
+        outline = (_smooth_outline(q, keep=6, pct=100) * 1.04 if vest
+                   else _smooth_outline(q, pct=80) * 0.97)
+        depth, proud = 0.009, (0.0025 if vest else 0.002)
+        name = P + (f"armhole.{side}" if vest else f"arm_disc.{side}")
+        pan = geo.extrude_poly(name, [tuple(p) for p in outline], depth, coll=coll)
+        geo.add_bevel(pan, 0.0035, 3)
+        for md in list(pan.modifiers):
+            geo._apply_modifier(pan, md)
+        pan.data.materials.clear()
+        pan.data.materials.append(mat)
+        uvl = pan.data.uv_layers.new(name="UVMap")
+        uvp = uv_lime if vest else uv_fur
+        for d in uvl.data:
+            d.uv = uvp
+        base = V(c + n * (proud - depth))
+        R = M3((tuple(u), tuple(v), tuple(n))).transposed()
+        pan.data.transform(M3.Translation(base) @ R.to_4x4())
+        conform(pan, bvh["body" if vest else "arm"], c, n, u, v, outline)
+        pan.data.shade_smooth()
+        parts = [pan]
+        if vest:
+            ring = outline * 0.86
+            pts = [tuple(c + n * (proud + 0.0006) + p[0] * u + p[1] * v) for p in ring]
+            pts.append(pts[0])
+            tb = geo.tube(name + "_seam", pts, 0.0011, mat=seam_mat, coll=coll, res=2)
+            seam = _mesh_from_curve(tb, name + "_seam", coll)
+            conform(seam, bvh["body"], c, n, u, v, outline)
+            seam.data.uv_layers.new(name="UVMap")
+            parts.append(seam)
+            pan = geo.join(parts, name)
+        # weights from the same piece only (the two pieces coincide at rest)
+        kd = kds["body" if vest else "arm"]
+        pc = np.array([vv.co[:] for vv in pan.data.vertices])
+        Wp = np.zeros((len(pc), len(names)), np.float32)
+        for k, p in enumerate(pc):
+            hits = kd.find_n(p, 6)
+            Wp[k] = np.mean([W[i] for _, i, _ in hits], 0)
+        write_weights(pan, names, limit_normalize(Wp, 4))
+        pan.parent = arm
+        md = pan.modifiers.new("Armature", "ARMATURE")
+        md.object = arm
+        made.append(pan)
+    return made
