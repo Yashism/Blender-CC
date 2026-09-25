@@ -79,8 +79,8 @@ if cage:
 # Look-dev lights and a line-up camera.
 studio.world((0.018, 0.022, 0.032), 1.0)
 floor = geo.cylinder("Lineup_Floor", 14, 0.02, (1.8, 0, -0.01),
-                     mat=__import__("lib.mats", fromlist=["x"]).card("studio_sweep", "#3A4150",
-                                                                     rough=0.9, grain=40),
+                     mat=__import__("lib.mats", fromlist=["x"]).plastic("lineup_floor", "#3A4150",
+                                                                        rough=0.9),
                      coll=C["Set"], segs=64)
 studio.area_light("Key", (-3.0, -6.0, 6.0), (1.8, 0, 0.9), 1500, temp=4800, size=3.0,
                   coll=C["Lights"])
