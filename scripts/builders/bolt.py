@@ -1117,9 +1117,9 @@ def pose_test(root):
         b.rotation_mode = "XYZ"
     for i in range(1, 6):
         pb[f"tail.{i:02d}"].rotation_euler = (math.radians(6), 0, math.radians(-9))
-    pb["neck.01"].rotation_euler = (math.radians(-8), 0, math.radians(8))
-    pb["neck.02"].rotation_euler = (math.radians(-6), 0, math.radians(6))
-    pb["head"].rotation_euler = (0, math.radians(-10), math.radians(8))
+    pb["neck.01"].rotation_euler = (math.radians(-8), 0, math.radians(4))
+    pb["neck.02"].rotation_euler = (math.radians(-6), 0, 0)
+    pb["head"].rotation_euler = (0, math.radians(-12), math.radians(6))
     pb["jaw"].rotation_euler = (math.radians(-12), 0, 0)
     pb["tongue.02"].rotation_euler = (math.radians(-15), 0, 0)
     def world_rot(bone, axis, deg):
@@ -1129,7 +1129,7 @@ def pose_test(root):
         pb[bone].rotation_mode = "QUATERNION"
         pb[bone].rotation_quaternion = q.to_quaternion()
     # ears flop back (lagging behind the head turn); ear.02 swings a little further
-    world_rot("ear.01.L", (1, 0, 0), -14)
+    world_rot("ear.01.L", (0, 1, 0), 10)   # upper-side ear hangs in against the head tilt
     world_rot("ear.02.L", (1, 0, 0), -12)
     world_rot("ear.01.R", (1, 0, 0), -8)
     world_rot("ear.02.R", (1, 0, 0), -14)
