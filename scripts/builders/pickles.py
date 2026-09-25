@@ -1,14 +1,23 @@
 """PICKLES: raccoon picker in the warehouse (biped felt puppet, male).
 
-~1.35 m to the top of his hard hat. Grey felt raccoon with a black eye mask, white brows,
-light-grey muzzle, round white-rimmed ears, bushy ringed tail and black 'gloved' hands.
-Lime hi-vis vest with a silver reflective stripe, yellow felt hard hat, and pink headphones
-worn AROUND HIS NECK (band behind the neck, cups on the collarbones). Series safety rule:
-the headphones are never on his ears.
+Construction follows assets/refs/pickles_side_ref.png: a LAYERED FELT CUT-OUT puppet.
+Every piece is a thick flat felt panel (extruded silhouette, soft bevel) with pinked or
+fur-fringed edges. Volume comes from stacking panels: the head is a stack of side-profile
+slabs (centre / mid / outer / cheek-ruff) plus a front face plate, so it reads in side,
+3/4 and front views. Markings are appliqué layers (black mask, white brows, light-grey
+muzzle, black nose, smile line). Hands and feet are split into finger/toe layers so the
+slits read from the front. Brass split pins at shoulders, elbows, hips, knees (plus neck,
+tail base, ear roots, per the series rule).
 
-Default pose: standing, arms forward and slightly down, ready for a cage push bar.
+~1.35 m to the top of his hard hat. Lime hi-vis vest built as four felt panels (front
+halves, sides, back) with a silver reflective stripe, yellow felt hard hat with ridge fins
+and a peaked brim, pink headphones worn AROUND HIS NECK (band behind the neck, big cups on
+the collarbones). Series safety rule: the headphones are never on his ears.
 
-Rig `Pickles_rig` (puppet style: rigid felt pieces bone-parented, brass split pins at joints):
+Default pose: standing, arms slightly forward, hands out in front ready for a push bar
+(hands at ~0.72 m; drive IK_hand.* to reach a 1.0 m bar).
+
+Rig `Pickles_rig` (puppet style: rigid felt pieces bone-parented):
     root, hips, spine.01-03, neck, head, ear.L/R,
     upper_arm/forearm/hand .L/.R  + IK_hand.L/R, pole_hand.L/R
     thigh/shin/foot .L/.R         + IK_foot.L/R, pole_foot.L/R
@@ -16,6 +25,7 @@ Rig `Pickles_rig` (puppet style: rigid felt pieces bone-parented, brass split pi
 Face: one joined mesh `Pickles_face` bound to `head`, shape keys smile, whoa, blink, brows_up.
 """
 import math
+import random
 
 import bpy
 from mathutils import Matrix, Vector
@@ -23,27 +33,35 @@ from mathutils import Matrix, Vector
 from lib import geo, mats as M, rig
 
 P = "Pickles_"
-TURNTABLE = dict(height=1.35, radius=4.6, lens=50, target_z=0.66, cam_elev=0.22, fstop=5.6,
+TURNTABLE = dict(height=1.35, radius=4.75, lens=50, target_z=0.68, cam_elev=0.2, fstop=5.6,
                  key=520)
 
 SHAPE_KEYS = ["smile", "whoa", "blink", "brows_up"]
 
 # ----------------------------------------------------------------- proportions (metres)
-HEAD_C = Vector((0.0, 0.0, 1.0))
-HEAD_R = Vector((0.2, 0.172, 0.165))
-EYE_R = 0.041
-SHOULDER = Vector((0.185, 0.005, 0.735))
-ELBOW = Vector((0.235, -0.075, 0.585))
-WRIST = Vector((0.185, -0.265, 0.655))
-HIP = Vector((0.1, 0.0, 0.31))
-KNEE = Vector((0.105, -0.035, 0.19))
-ANKLE = Vector((0.105, 0.0, 0.08))
-TOE = Vector((0.105, -0.13, 0.07))
-HAT_PROFILE = [(0.0, 0.176), (0.03, 0.172), (0.08, 0.16), (0.125, 0.132), (0.165, 0.09),
-               (0.19, 0.045), (0.198, 0.0)]
-EAR_PHI, EAR_EL = 52, 44
-TAIL_PTS = [Vector(p) for p in [(0.0, 0.15, 0.33), (0.03, 0.27, 0.34), (0.07, 0.37, 0.41),
-                                (0.1, 0.42, 0.52), (0.11, 0.43, 0.64), (0.09, 0.40, 0.75)]]
+# Side-view coordinates are (y, z): -y is forward (his face), +y is back (tail side).
+SHOULDER = Vector((0.226, 0.03, 0.83))
+ELBOW = Vector((0.232, -0.035, 0.635))
+WRIST = Vector((0.228, -0.225, 0.715))
+HAND_TIP = Vector((0.228, -0.33, 0.705))
+HIP = Vector((0.085, 0.03, 0.47))
+KNEE = Vector((0.085, -0.005, 0.265))
+ANKLE = Vector((0.085, 0.025, 0.08))
+TOE = Vector((0.085, -0.14, 0.03))
+EAR_ROOT = Vector((0.14, 0.045, 1.078))
+EAR_UP = Vector((0.32, 0.06, 1.0)).normalized()
+EYE_C = Vector((0.1405, -0.1425, 1.108))
+EYE_N = Vector((0.72, -0.69, 0.0)).normalized()
+EYE_RX, EYE_RY = 0.022, 0.03
+HAT_BASE = Vector((0.0, 0.012, 1.198))
+HAT_TILT = -11.0
+HAT_PROFILE = [(0.0, 0.166), (0.035, 0.162), (0.07, 0.148), (0.1, 0.12), (0.12, 0.08),
+               (0.132, 0.04), (0.136, 0.0)]
+HAT_SQ = 1.1
+TAIL_SPINE = [(0.1, 0.60), (0.2, 0.595), (0.3, 0.55), (0.385, 0.47), (0.445, 0.37),
+              (0.475, 0.26), (0.48, 0.16)]
+
+RNG = random.Random(1307)
 
 
 def _mirror(v, side):
@@ -54,38 +72,173 @@ def _mirror(v, side):
 
 def _mats():
     return dict(
-        grey=M.felt(P + "felt_raccoon", "raccoon"),
-        black=M.felt(P + "felt_mask", "mask", sheen=0.6),
-        white=M.felt(P + "felt_white", "bolt_white"),
-        muzzle=M.felt(P + "felt_muzzle", "reflective"),
-        hivis=M.felt(P + "felt_hivis", "hivis", sheen=0.5),
-        hat=M.felt(P + "felt_hardhat", "hardhat"),
-        pink=M.felt(P + "felt_headphones", "headphones"),
+        grey=M.felt(P + "felt_raccoon", "raccoon", fiber=70),
+        black=M.felt(P + "felt_mask", "mask", sheen=0.6, fiber=70),
+        white=M.felt(P + "felt_white", "bolt_white", fiber=70),
+        muzzle=M.felt(P + "felt_muzzle", "reflective", fiber=70),
+        hivis=M.felt(P + "felt_hivis", "hivis", sheen=0.5, fiber=60),
+        hat=M.felt(P + "felt_hardhat", "hardhat", fiber=60),
+        pink=M.felt(P + "felt_headphones", "headphones", fiber=70),
         eye=M.glossy_eye(P + "eye_white", "bolt_white", rough=0.12),
         pupil=M.glossy_eye(P + "eye_pupil", "mask"),
-        nose=M.glossy_eye(P + "nose_gloss", "mask", rough=0.25),
         catch=M.emissive(P + "catchlight", "line_white", strength=4.0),
         tape=M.reflective_tape(),
-        metal=M.plastic(P + "headphone_slider", "reflective", rough=0.35, metallic=0.9),
     )
 
 
-# ----------------------------------------------------------------- small helpers
+# ----------------------------------------------------------------- outline helpers
 
-def _wobble(obj, amp=0.004, seed=0.0, freq=9.0):
-    """Handmade irregularity: push verts in/out along their direction from the centroid."""
-    me = obj.data
-    if not len(me.vertices):
-        return obj
-    c = sum((v.co for v in me.vertices), Vector()) / len(me.vertices)
-    for v in me.vertices:
-        d = v.co - c
-        if d.length < 1e-6:
+def _cr(p0, p1, p2, p3, t):
+    return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t
+                  + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t)
+
+
+def outline(ctrl, styles=None, fur=0.035, fur_sp=0.0128, lean=0.4, pink=0.004, pink_sp=0.008,
+            jit=0.0012, rng=None):
+    """Closed handmade outline through control points (Catmull-Rom).
+
+    styles: one char per segment ctrl[i] -> ctrl[i+1]:
+      's' smooth cut, 'p' pinking-shear zigzag, 'f' fur fringe leaning forward along the
+      outline, 'F' fur fringe leaning backward, 'c' sharp corner (straight segment).
+    """
+    rng = rng or RNG
+    n = len(ctrl)
+    styles = styles or "s" * n
+    cv = [Vector(c) for c in ctrl]
+    area = sum(cv[i].x * cv[(i + 1) % n].y - cv[(i + 1) % n].x * cv[i].y for i in range(n))
+    sgn = 1.0 if area > 0 else -1.0
+    out = []
+
+    def jitter(p, a=jit):
+        return p + Vector((rng.uniform(-a, a), rng.uniform(-a, a)))
+
+    for i in range(n):
+        st = styles[i]
+        a, b = cv[i], cv[(i + 1) % n]
+        L = (b - a).length
+        per = max(3, int(L / 0.005))
+        if st == "c":
+            seg = [a.lerp(b, k / per) for k in range(per)] + [b]
+        else:
+            p0, p3 = cv[(i - 1) % n], cv[(i + 2) % n]
+            seg = [_cr(p0, a, b, p3, k / per) for k in range(per)] + [b]
+        if st in "sc":
+            out += [jitter(p) for p in seg[:-1]]
             continue
-        f = (math.sin(freq * v.co.x * 1.13 + seed) * math.sin(freq * v.co.y * 0.97 + 2.1 * seed)
-             + 0.6 * math.sin(freq * 1.9 * v.co.z + 1.7 + seed * 0.5))
-        v.co += d.normalized() * amp * f
+        cum = [0.0]
+        for k in range(1, len(seg)):
+            cum.append(cum[-1] + (seg[k] - seg[k - 1]).length)
+        total = cum[-1]
+
+        def at(s):
+            s = max(0.0, min(total, s))
+            for k in range(1, len(seg)):
+                if cum[k] >= s:
+                    t = (s - cum[k - 1]) / max(1e-9, cum[k] - cum[k - 1])
+                    tan = (seg[k] - seg[k - 1]).normalized()
+                    return seg[k - 1].lerp(seg[k], t), tan
+            return seg[-1], (seg[-1] - seg[-2]).normalized()
+
+        if st in "fF":
+            # irregular tufts: uneven spacing, lengths and lean, like hand-snipped felt
+            s0 = 0.0
+            while s0 < total - fur_sp * 0.4:
+                step = min(total - s0, fur_sp * rng.uniform(0.7, 1.35))
+                if total - (s0 + step) < fur_sp * 0.4:
+                    step = total - s0
+                p, _ = at(s0)
+                out.append(jitter(p))
+                d = fur * rng.uniform(0.45, 1.3)
+                ln = lean * rng.uniform(0.6, 1.6)
+                s_tip = s0 + step * (0.5 + (ln if st == "f" else -ln))
+                pt, tt = at(s_tip)
+                nn = Vector((tt.y, -tt.x)) * sgn
+                out.append(jitter(pt + nn * d, jit * 0.5))
+                if rng.random() < 0.3:  # little secondary snip
+                    pm, tm = at(s0 + step * 0.8)
+                    out.append(pm + Vector((tm.y, -tm.x)) * sgn * d * 0.35)
+                s0 += step
+        else:  # pinked
+            N = max(1, round(total / pink_sp))
+            step = total / N
+            for k in range(N):
+                p, _ = at(k * step)
+                out.append(p)
+                pt, tt = at((k + 0.5) * step)
+                out.append(pt + Vector((tt.y, -tt.x)) * sgn * pink)
+    # drop near-duplicates (bmesh faces hate zero-length edges)
+    clean = []
+    for p in out:
+        if not clean or (p - clean[-1]).length > 0.0008:
+            clean.append(p)
+    if len(clean) > 3 and (clean[0] - clean[-1]).length < 0.0008:
+        clean.pop()
+    return [(p.x, p.y) for p in clean]
+
+
+def sym(half, styles_half=None):
+    """half: control points from top-centre (x=0) round the +x side to bottom-centre (x=0).
+    Returns a closed symmetric control list and styles."""
+    styles_half = styles_half or "s" * (len(half) - 1)
+    pts = list(half) + [(-x, y) for x, y in reversed(half[1:-1])]
+    sts = styles_half + styles_half[::-1]
+    return pts, sts
+
+
+def ellipse(rx, ry, n=36, cx=0.0, cy=0.0):
+    return [(cx + math.cos(2 * math.pi * i / n) * rx, cy + math.sin(2 * math.pi * i / n) * ry)
+            for i in range(n)]
+
+
+def scaled(pts, s, c):
+    sx, sy = (s, s) if not hasattr(s, "__len__") else s
+    return [(c[0] + (x - c[0]) * sx, c[1] + (y - c[1]) * sy) for x, y in pts]
+
+
+def panel(name, pts, thick, origin, nrm, up, mat, coll, bevel=0.003):
+    """Extruded felt panel. pts are 2D in a frame whose +Z is `nrm`, +Y is `up`."""
+    obj = geo.extrude_poly(name, pts, thick, mat=mat, coll=coll,
+                           bevel=min(bevel, thick * 0.4))
+    z = Vector(nrm).normalized()
+    u = Vector(up)
+    y = (u - z * u.dot(z)).normalized()
+    x = y.cross(z)
+    m = Matrix((x, y, z)).transposed().to_4x4()
+    m.translation = Vector(origin)
+    obj.matrix_world = m
     return obj
+
+
+def side(name, pts_yz, x0, x1, mat, coll, bevel=0.003):
+    """Side-profile slab: pts are world (y, z), slab spans world x0..x1."""
+    return panel(name, pts_yz, x1 - x0, (x0, 0, 0), (1, 0, 0), (0, 0, 1), mat, coll, bevel)
+
+
+def front(name, pts_xz, y0, thick, mat, coll, bevel=0.003):
+    """Front-facing slab: pts are world (x, z); back face at y0, front face at y0 - thick."""
+    return panel(name, pts_xz, thick, (0, y0, 0), (0, -1, 0), (0, 0, 1), mat, coll, bevel)
+
+
+def pair_side(name, pts_yz, x0, x1, mat, coll, bevel=0.003, rebuild=None):
+    """L/R slabs at +x0..x1 and -x1..-x0. rebuild() regenerates pts for R (new jitter)."""
+    a = side(name + ".L", pts_yz, x0, x1, mat, coll, bevel)
+    b = side(name + ".R", rebuild() if rebuild else pts_yz, -x1, -x0, mat, coll, bevel)
+    return a, b
+
+
+def strip(pts, w):
+    """Closed outline of a ribbon of width w along an open 2D polyline."""
+    pv = [Vector(p) for p in pts]
+    left, right = [], []
+    for i, p in enumerate(pv):
+        a = pv[max(0, i - 1)]
+        b = pv[min(len(pv) - 1, i + 1)]
+        t = (b - a).normalized()
+        nrm = Vector((-t.y, t.x))
+        ww = w * (0.55 if i in (0, len(pv) - 1) else 1.0)
+        left.append(p + nrm * ww / 2)
+        right.append(p - nrm * ww / 2)
+    return [(p.x, p.y) for p in left + list(reversed(right))]
 
 
 def _curve_to_mesh(obj):
@@ -104,88 +257,24 @@ def _curve_to_mesh(obj):
     return new
 
 
-def _frame(normal, up=(0, 0, 1), roll=0.0):
-    """Rotation whose local -Y points along `normal` (thin felt pieces lie on a surface)."""
-    y = -Vector(normal).normalized()
-    x = y.cross(Vector(up))
-    if x.length < 1e-5:
-        x = Vector((1, 0, 0))
-    x.normalize()
-    z = x.cross(y).normalized()
-    m = Matrix((x, y, z)).transposed()
-    return m @ Matrix.Rotation(roll, 3, "Y")
-
-
-def _place(obj, loc, rot3):
-    obj.rotation_mode = "XYZ"
-    obj.matrix_world = Matrix.Translation(loc) @ rot3.to_4x4()
-    return obj
-
-
-def _head_dir(phi, el):
-    p, e = math.radians(phi), math.radians(el)
-    return Vector((math.cos(e) * math.sin(p), -math.cos(e) * math.cos(p), math.sin(e)))
-
-
-def head_pt(phi, el, off=0.0):
-    """Point on the head ellipsoid at azimuth phi (0 = front, + = his left) / elevation el."""
-    u = _head_dir(phi, el)
-    p = HEAD_C + Vector((u.x * HEAD_R.x, u.y * HEAD_R.y, u.z * HEAD_R.z))
-    n = Vector((u.x / HEAD_R.x, u.y / HEAD_R.y, u.z / HEAD_R.z)).normalized()
-    return p + n * off, n
-
-
-def _head_deform(v):
-    # Raccoon cheeks: widen the lower sides, gently flatten the crown.
-    k = max(0.0, 1.0 - ((v.z + 0.3) / 0.5) ** 2)
-    v.x *= 1.0 + 0.13 * k
-    if v.z > 0:
-        v.z *= 0.96
-    if v.y < 0 and v.z < 0:  # soft chin tuck
-        v.y *= 1.0 - 0.06 * (-v.z)
-    return v
-
-
-def _shell_patch(name, keep, mat, coll, thick=0.004, lift=1.012, segs=96, rings=48):
-    """Felt patch cut from a shell just over the head. keep(phi, el) -> bool. World-space verts."""
-    import bmesh
-    bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=1.0)
-    dead = []
-    for f in bm.faces:
-        c = f.calc_center_median()
-        d = c.normalized()
-        phi = math.degrees(math.atan2(d.x, -d.y))
-        el = math.degrees(math.asin(max(-1.0, min(1.0, d.z))))
-        if not keep(phi, el):
-            dead.append(f)
-    bmesh.ops.delete(bm, geom=dead, context="FACES")
-    for v in bm.verts:
-        co = _head_deform(v.co.copy())
-        v.co = HEAD_C + Vector((co.x * HEAD_R.x, co.y * HEAD_R.y, co.z * HEAD_R.z)) * lift
-    obj = geo._finish(name, bm, mat, coll)
-    sm = obj.modifiers.new("Solidify", "SOLIDIFY")
-    sm.thickness = thick
-    sm.offset = 1.0
-    geo.add_subsurf(obj, 1)
-    return obj
-
-
-def _cut_faces(obj, kill):
-    """Delete faces whose centre (world space of the unparented mesh) satisfies kill(c)."""
-    import bmesh
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    mw = obj.matrix_world
-    dead = [f for f in bm.faces if kill(mw @ f.calc_center_median())]
-    bmesh.ops.delete(bm, geom=dead, context="FACES")
-    bm.to_mesh(obj.data)
-    bm.free()
-    return obj
-
-
-def _pin(name, loc, normal, coll, r=0.013):
+def _pin(name, loc, normal, coll, r=0.016):
     return geo.split_pin(P + "pin_" + name, loc, normal, r=r, coll=coll)
+
+
+def _limb(p0, p1, w0, w1, st="ssssssss", cap0=1.0, cap1=1.0):
+    """Control points for a rounded limb panel between two 2D points."""
+    a, b = Vector(p0), Vector(p1)
+    d = (b - a).normalized()
+    nrm = Vector((-d.y, d.x))
+    m = (a + b) / 2
+    wm = (w0 + w1) / 2
+    ctrl = [a + nrm * w0 / 2, m + nrm * wm / 2 * 1.04, b + nrm * w1 / 2, b + d * w1 / 2 * cap1,
+            b - nrm * w1 / 2, m - nrm * wm / 2 * 1.04, a - nrm * w0 / 2, a - d * w0 / 2 * cap0]
+    return [(p.x, p.y) for p in ctrl], st
+
+
+def _yz(v):
+    return Vector((v.y, v.z))
 
 
 # ----------------------------------------------------------------- rig
@@ -193,23 +282,23 @@ def _pin(name, loc, normal, coll, r=0.013):
 def _bones():
     b = [
         dict(name="root", head=(0, 0, 0), tail=(0, 0.3, 0), deform=False),
-        dict(name="hips", head=(0, 0, 0.31), tail=(0, 0, 0.42), parent="root"),
-        dict(name="spine.01", head=(0, 0, 0.42), tail=(0, 0, 0.54), parent="hips", connect=True),
-        dict(name="spine.02", head=(0, 0, 0.54), tail=(0, 0, 0.66), parent="spine.01",
+        dict(name="hips", head=(0, 0.03, 0.47), tail=(0, 0.03, 0.58), parent="root"),
+        dict(name="spine.01", head=(0, 0.03, 0.58), tail=(0, 0.03, 0.68), parent="hips",
              connect=True),
-        dict(name="spine.03", head=(0, 0, 0.66), tail=(0, 0, 0.8), parent="spine.02",
+        dict(name="spine.02", head=(0, 0.03, 0.68), tail=(0, 0.03, 0.78), parent="spine.01",
              connect=True),
-        dict(name="neck", head=(0, 0, 0.8), tail=(0, -0.005, 0.88), parent="spine.03",
+        dict(name="spine.03", head=(0, 0.03, 0.78), tail=(0, 0.02, 0.87), parent="spine.02",
              connect=True),
-        dict(name="head", head=(0, -0.005, 0.88), tail=(0, -0.005, 1.2), parent="neck",
+        dict(name="neck", head=(0, 0.02, 0.87), tail=(0, 0.01, 0.96), parent="spine.03",
+             connect=True),
+        dict(name="head", head=(0, 0.01, 0.96), tail=(0, 0.01, 1.3), parent="neck",
              connect=True),
     ]
     for sfx, s in (("L", 1), ("R", -1)):
-        er, eup, _ = _ear_frame(s)
-        et = er + eup * 0.15
+        er = _mirror(EAR_ROOT, s)
+        et = er + _mirror(EAR_UP, s) * 0.11
         sh, el, wr = _mirror(SHOULDER, s), _mirror(ELBOW, s), _mirror(WRIST, s)
-        hd = (wr - el).normalized()
-        ht = wr + hd * 0.11
+        ht = _mirror(HAND_TIP, s)
         hp, kn, an, to = _mirror(HIP, s), _mirror(KNEE, s), _mirror(ANKLE, s), _mirror(TOE, s)
         b += [
             dict(name=f"ear.{sfx}", head=tuple(er), tail=tuple(et), parent="head"),
@@ -228,7 +317,7 @@ def _bones():
             dict(name=f"IK_foot.{sfx}", head=tuple(an), tail=tuple(to), parent="root",
                  deform=False),
         ]
-        # Poles: elbows point back/out, knees point forward.
+        # Poles: elbows point back, knees point forward.
         for limb, a, m, c, push in (("hand", sh, el, wr, 0.35), ("foot", hp, kn, an, 0.4)):
             line = (c - a).normalized()
             proj = a + line * (m - a).dot(line)
@@ -237,9 +326,10 @@ def _bones():
             b.append(dict(name=f"pole_{limb}.{sfx}", head=tuple(p),
                           tail=tuple(p + Vector((0, 0, 0.06))), parent="root", deform=False))
     prev = "hips"
+    tp = _tail_bone_pts()
     for i in range(5):
-        b.append(dict(name=f"tail.{i + 1:02d}", head=tuple(TAIL_PTS[i]),
-                      tail=tuple(TAIL_PTS[i + 1]), parent=prev, connect=i > 0))
+        b.append(dict(name=f"tail.{i + 1:02d}", head=tuple(tp[i]), tail=tuple(tp[i + 1]),
+                      parent=prev, connect=i > 0))
         prev = f"tail.{i + 1:02d}"
     return b
 
@@ -285,89 +375,114 @@ def _build_rig(coll, root):
     return arm
 
 
+# ----------------------------------------------------------------- tail geometry
+
+def _tail_curve(n=120):
+    cv = [Vector(p) for p in TAIL_SPINE]
+    ext = [cv[0] * 2 - cv[1]] + cv + [cv[-1] * 2 - cv[-2]]
+    pts = []
+    for i in range(1, len(ext) - 2):
+        for k in range(12):
+            pts.append(_cr(ext[i - 1], ext[i], ext[i + 1], ext[i + 2], k / 12))
+    pts.append(cv[-1])
+    cum = [0.0]
+    for k in range(1, len(pts)):
+        cum.append(cum[-1] + (pts[k] - pts[k - 1]).length)
+    return pts, cum
+
+
+def _tail_at(s, pts, cum):
+    s = max(0.0, min(cum[-1], s))
+    for k in range(1, len(pts)):
+        if cum[k] >= s:
+            t = (s - cum[k - 1]) / max(1e-9, cum[k] - cum[k - 1])
+            return pts[k - 1].lerp(pts[k], t), (pts[k] - pts[k - 1]).normalized()
+    return pts[-1], (pts[-1] - pts[-2]).normalized()
+
+
+def _tail_bone_pts():
+    pts, cum = _tail_curve()
+    L = cum[-1]
+    out = []
+    for i in range(6):
+        p, _ = _tail_at(L * (0.02 + 0.98 * i / 5), pts, cum)
+        out.append(Vector((0.0, p.x, p.y)))
+    return out
+
+
+def _tail_width(t):
+    # bushy: narrow at the root, fattest past the middle, round tip
+    return 0.11 + 0.19 * math.sin(math.pi * min(1.0, 0.18 + t * 0.95)) ** 0.8
+
+
 # ----------------------------------------------------------------- body parts
 
-def _torso_profile():
-    return [(0.37, 0.0), (0.375, 0.09), (0.40, 0.155), (0.45, 0.19), (0.51, 0.2), (0.58, 0.194),
-            (0.65, 0.178), (0.71, 0.157), (0.765, 0.128), (0.81, 0.095), (0.845, 0.06),
-            (0.855, 0.0)]
+def _torso(coll, m, att):
+    # Grey body core (mostly hidden by the vest; shows in the V-neck and below the hem).
+    core, _ = sym([(0.0, 0.915), (0.09, 0.9), (0.155, 0.86), (0.175, 0.78), (0.172, 0.6),
+                   (0.155, 0.47), (0.0, 0.445)])
+    att(front(P + "torso", outline(core), 0.135, 0.3, m["grey"], coll, bevel=0.008), "spine.02")
+    # Chest fluff showing in the V-neck: lighter felt with a fringed bottom.
+    ch, st = sym([(0.0, 0.9), (0.06, 0.885), (0.07, 0.8), (0.045, 0.72), (0.0, 0.69)],
+                 "sfff")
+    att(front(P + "chest_fluff", outline(ch, st, fur=0.0175, fur_sp=0.0104), -0.163, 0.012,
+              m["grey"], coll), "spine.02")
 
+    # Hi-vis vest: real felt panels with visible cut edges.
+    hem = 0.52
+    for sfx, s in (("L", 1), ("R", -1)):
+        half = [(0.018, 0.735), (0.07, 0.83), (0.085, 0.885), (0.16, 0.885), (0.175, 0.835),
+                (0.2, 0.765), (0.205, 0.64), (0.212, hem), (0.02, hem - 0.005)]
+        pts = outline([(x * s, z) for x, z in half], "sssssssss", jit=0.0015)
+        att(front(P + f"vest_front.{sfx}", pts, -0.172, 0.024, m["hivis"], coll, bevel=0.005),
+            "spine.02")
+        # stripe across the front half
+        tp = outline([(0.02 * s, 0.628), (0.207 * s, 0.628), (0.208 * s, 0.672),
+                      (0.02 * s, 0.672)], "cccc", jit=0.0006)
+        att(front(P + f"vest_stripe_front.{sfx}", tp, -0.195, 0.004, m["tape"], coll,
+                  bevel=0.001), "spine.02")
+        # strap tape over the shoulder
+        tp = outline([(0.105 * s, 0.742), (0.14 * s, 0.742), (0.14 * s, 0.88),
+                      (0.105 * s, 0.88)], "cccc", jit=0.0005)
+        att(front(P + f"vest_strap_tape.{sfx}", tp, -0.195, 0.004, m["tape"], coll,
+                  bevel=0.001), "spine.02")
+        # side panel (under the arm)
+        sp = outline([(-0.19, hem), (-0.19, 0.745), (-0.1, 0.77), (0.0, 0.775), (0.1, 0.77),
+                      (0.158, 0.745), (0.158, hem)], "sssssss", jit=0.0015)
+        x0 = 0.182 if s > 0 else -0.204
+        att(side(P + f"vest_side.{sfx}", sp, x0, x0 + 0.022, m["hivis"], coll, bevel=0.005),
+            "spine.02")
+        sp = outline([(-0.19, 0.628), (0.158, 0.628), (0.158, 0.672), (-0.19, 0.672)], "cccc",
+                     jit=0.0006)
+        x0 = 0.203 if s > 0 else -0.207
+        att(side(P + f"vest_stripe_side.{sfx}", sp, x0, x0 + 0.004, m["tape"], coll,
+                 bevel=0.001), "spine.02")
+        # shoulder yoke joining front and back
+        yk = geo.box(P + f"vest_yoke.{sfx}", (0.078, 0.34, 0.02), (0.122 * s, -0.012, 0.886),
+                     mat=m["hivis"], coll=coll, bevel=0.006)
+        att(yk, "spine.02")
+    back, _ = sym([(0.0, 0.845), (0.07, 0.86), (0.085, 0.885), (0.16, 0.885), (0.2, 0.8),
+                   (0.206, 0.64), (0.212, hem), (0.0, hem - 0.005)])
+    att(front(P + "vest_back", outline(back, jit=0.0015), 0.164, 0.022, m["hivis"], coll,
+              bevel=0.005), "spine.02")
+    tp = outline([(-0.208, 0.628), (0.208, 0.628), (0.208, 0.672), (-0.208, 0.672)], "cccc",
+                 jit=0.0006)
+    att(front(P + "vest_stripe_back", tp, 0.168, 0.004, m["tape"], coll, bevel=0.001),
+        "spine.02")
 
-def _profile_r(prof, z):
-    for (z0, r0), (z1, r1) in zip(prof, prof[1:]):
-        if z0 <= z <= z1:
-            t = (z - z0) / max(1e-6, z1 - z0)
-            return r0 + (r1 - r0) * t
-    return prof[-1][1]
-
-
-TORSO_SQ = (1.0, 0.86)
-
-
-def _body(coll, m, att):
-    pelvis = geo.blob(P + "pelvis", (0.165, 0.15, 0.1), (0, 0.01, 0.37), mat=m["grey"],
-                      coll=coll, segs=28, rings=16)
-    _wobble(pelvis, 0.004, 1.0)
-    att(pelvis, "hips")
-
-    prof = _torso_profile()
-    torso = geo.lathe(P + "torso", prof, 40, mat=m["grey"], coll=coll, subsurf=1,
-                      squash=TORSO_SQ, cap_bottom=False, cap_top=False)
-    _wobble(torso, 0.003, 2.0)
-    att(torso, "spine.02")
-
-    # Hi-vis vest: an open felt shell over the chest, a touch loose, with a rolled hem.
-    zs = [0.41 + i * 0.02 for i in range(20)]
-    vprof = [(z, _profile_r(prof, z) * 1.055 + 0.007) for z in zs]
-    vest = geo.lathe(P + "vest", vprof, 48, mat=m["hivis"], coll=coll, cap_bottom=False,
-                     cap_top=False, squash=TORSO_SQ)
-    _wobble(vest, 0.0025, 3.0, freq=14)
-    _cut_faces(vest, lambda c: (c.y < 0 and c.z > 0.6 + 2.2 * abs(c.x))       # V-neck
-               or (c.z > 0.63 and abs(c.x) > 0.128)                            # armholes
-               or (c.y > 0 and c.z > 0.745 + 0.9 * abs(c.x)))                  # back scoop
-    sol = vest.modifiers.new("Solidify", "SOLIDIFY")
-    sol.thickness = 0.007
-    sol.offset = 1.0
-    geo.add_subsurf(vest, 1)
-    att(vest, "spine.02")
-    hem = geo.lathe(P + "vest_hem", [(0.405, vprof[0][1] + 0.004), (0.418, vprof[0][1] + 0.006)],
-                    48, mat=m["hivis"], coll=coll, cap_bottom=False, cap_top=False,
-                    squash=TORSO_SQ)
-    sol = hem.modifiers.new("Solidify", "SOLIDIFY")
-    sol.thickness = 0.006
-    att(hem, "spine.02")
-
-    # Shoulder straps over the collarbones, each with a strip of reflective tape.
-    for sfx, sd in (("L", 1), ("R", -1)):
-        x = 0.1 * sd
-        pts = []
-        for z in (0.6, 0.67, 0.72, 0.765):
-            rr = _profile_r(vprof, z) + 0.006
-            pts.append(Vector((x, -math.sqrt(max(1e-6, rr * rr - x * x)) * TORSO_SQ[1], z)))
-        top = [Vector((x * 1.02, -0.035, 0.797)), Vector((x * 1.02, 0.035, 0.797))]
-        back = [Vector((p_.x, -p_.y, p_.z)) for p_ in reversed(pts)]
-        path = pts + top + back
-        st = _curve_to_mesh(geo.strap(P + f"vest_strap.{sfx}", path, 0.058, 0.008, m["hivis"], coll))
-        att(st, "spine.02")
-        tp = [p_ + (p_ - Vector((x * 0.6, 0, 0.62))).normalized() * 0.005 for p_ in path]
-        tape = _curve_to_mesh(geo.strap(P + f"vest_strap_tape.{sfx}", tp, 0.022, 0.004,
-                                        m["tape"], coll))
-        att(tape, "spine.02")
-
-    # Reflective stripe right around the torso.
-    z0, z1 = 0.505, 0.55
-    sprof = [(z0, _profile_r(vprof, z0) + 0.009), (z1, _profile_r(vprof, z1) + 0.009)]
-    stripe = geo.lathe(P + "vest_stripe", sprof, 64, mat=m["tape"], coll=coll,
-                       cap_bottom=False, cap_top=False, squash=TORSO_SQ)
-    sol = stripe.modifiers.new("Solidify", "SOLIDIFY")
-    sol.thickness = 0.003
-    sol.offset = 1.0
-    att(stripe, "spine.02")
-
-    neck = geo.capsule(P + "neck", (0, 0.0, 0.78), (0, -0.005, 0.9), 0.075, 0.07,
-                       mat=m["grey"], coll=coll)
-    att(neck, "neck")
-    _pin("neck", Vector((0, -0.078, 0.83)), (0, -1, 0.15), coll, r=0.012)
+    # Neck with a fringed ruff collar under the chin.
+    nk = outline([(-0.08, 0.86), (0.09, 0.86), (0.095, 0.99), (-0.085, 0.99)], "ssss")
+    att(side(P + "neck", nk, -0.075, 0.075, m["grey"], coll, bevel=0.006), "neck")
+    ruff, st = sym([(0.0, 1.0), (0.1, 0.995), (0.125, 0.955), (0.09, 0.915), (0.0, 0.9)],
+                   "sfff")
+    att(front(P + "neck_ruff", outline(ruff, st, fur=0.025, fur_sp=0.0128), -0.07, 0.03,
+              m["grey"], coll), "neck")
+    for sfx, s in (("L", 1), ("R", -1)):
+        rp = outline([(-0.08, 0.99), (0.1, 0.99), (0.12, 0.93), (0.05, 0.895), (-0.06, 0.9)],
+                     "sfffs", fur=0.0275, fur_sp=0.0144)
+        x0 = 0.07 if s > 0 else -0.1
+        att(side(P + f"neck_ruff_side.{sfx}", rp, x0, x0 + 0.03, m["grey"], coll), "neck")
+    _pin("neck", Vector((0, -0.102, 0.925)), (0, -1, 0.1), coll, r=0.012)
     att(bpy.data.objects[P + "pin_neck"], "neck")
 
 
@@ -375,390 +490,439 @@ def _headphones(coll, m, att):
     """Pink headphones round his NECK: band behind the neck, cups resting on the collarbones."""
     cups = []
     for sfx, s in (("L", 1), ("R", -1)):
-        z = 0.735
-        r = _profile_r(_torso_profile(), z)
-        x = 0.105 * s
-        # front surface of the squashed torso at this x
-        y = -math.sqrt(max(1e-6, 1 - (x / r) ** 2)) * r * TORSO_SQ[1]
-        n = Vector((0.45 * s, -1.0, 0.55)).normalized()
-        base = Vector((x, y - 0.012, z)) + n * 0.004
-        cushion = geo.lathe(P + f"headphones_cushion.{sfx}",
-                            [(0.0, 0.034), (0.005, 0.047), (0.015, 0.05), (0.022, 0.04)], 28,
-                            mat=m["black"], coll=coll, cap_bottom=True, cap_top=False,
-                            subsurf=1)
-        cup = geo.lathe(P + f"headphones_cup.{sfx}",
-                        [(0.017, 0.054), (0.036, 0.057), (0.05, 0.051), (0.057, 0.036),
-                         (0.06, 0.0)], 32, mat=m["pink"], coll=coll, cap_bottom=True,
-                        subsurf=1)
-        for o in (cushion, cup):
-            o.location = base
-            o.rotation_mode = "QUATERNION"
-            o.rotation_quaternion = n.to_track_quat("Z", "Y")
+        c = Vector((0.13 * s, -0.12, 0.905))
+        n = Vector((0.55 * s, -0.72, 0.42)).normalized()
+        up = Vector((0, 0.3, 1))
+        parts = [
+            panel(P + f"headphones_cushion.{sfx}", outline(ellipse(0.055, 0.058, 30), jit=0.001),
+                  0.018, c, n, up, m["black"], coll, bevel=0.005),
+            panel(P + f"headphones_cup.{sfx}", outline(ellipse(0.074, 0.078, 36), jit=0.0012),
+                  0.028, c + n * 0.016, n, up, m["pink"], coll, bevel=0.007),
+            panel(P + f"headphones_cap.{sfx}", outline(ellipse(0.05, 0.053, 30), jit=0.001),
+                  0.012, c + n * 0.042, n, up, m["pink"], coll, bevel=0.004),
+            panel(P + f"headphones_dot.{sfx}", outline(ellipse(0.027, 0.029, 24), jit=0.0008),
+                  0.006, c + n * 0.052, n, up, m["black"], coll, bevel=0.002),
+        ]
+        for o in parts:
             att(o, "spine.03")
-        cups.append((base, n, s))
-    # Band: from the top of each cup, up over the collar and round BEHIND the neck.
-    (bl, nl, _), (br, nr, _) = cups
-    pts = [bl + nl * 0.03 + Vector((0.004, 0.02, 0.035)),
-           Vector((0.115, -0.045, 0.8)), Vector((0.1, 0.05, 0.815)), Vector((0.0, 0.09, 0.82)),
-           Vector((-0.1, 0.05, 0.815)), Vector((-0.115, -0.045, 0.8)),
-           br + nr * 0.03 + Vector((-0.004, 0.02, 0.035))]
-    band = geo.tube(P + "headphones_band", pts, 0.014, m["pink"], coll, res=4)
-    band = _curve_to_mesh(band)
+        cups.append((c, n, s))
+    (cl, nl, _), (cr, nr, _) = cups
+    pts = [cl + nl * 0.015 + Vector((0.01, 0.05, 0.03)), Vector((0.168, 0.02, 0.93)),
+           Vector((0.14, 0.12, 0.93)), Vector((0.0, 0.165, 0.93)),
+           Vector((-0.14, 0.12, 0.93)), Vector((-0.168, 0.02, 0.93)),
+           cr + nr * 0.015 + Vector((-0.01, 0.05, 0.03))]
+    band = _curve_to_mesh(geo.strap(P + "headphones_band", pts, 0.036, 0.014, m["pink"], coll))
     att(band, "spine.03")
-    for (b, n, s) in cups:
-        # little yoke joining band to cup
-        yk = geo.capsule(P + ("headphones_yoke.L" if s > 0 else "headphones_yoke.R"),
-                         b + n * 0.028 + Vector((0, 0.012, 0.03)), b + n * 0.03 + Vector((0, 0.0, 0.012)),
-                         0.009, 0.009, mat=m["metal"], coll=coll)
-        att(yk, "spine.03")
 
 
 def _arms(coll, m, att):
     for sfx, s in (("L", 1), ("R", -1)):
-        sh, el, wr = _mirror(SHOULDER, s), _mirror(ELBOW, s), _mirror(WRIST, s)
-        up = geo.capsule(P + f"upper_arm.{sfx}", sh, el, 0.056, 0.046, mat=m["grey"], coll=coll)
-        _wobble(up, 0.002, 4 + s)
-        att(up, f"upper_arm.{sfx}")
-        fa = geo.capsule(P + f"forearm.{sfx}", el, wr, 0.046, 0.041, mat=m["grey"], coll=coll)
-        _wobble(fa, 0.002, 5 + s)
-        att(fa, f"forearm.{sfx}")
-        # Pins on the outside of shoulder and elbow.
-        out = Vector((s, 0, 0))
-        p = _pin(f"shoulder.{sfx}", sh + out * 0.058 + Vector((0, 0, 0.004)), out, coll)
-        att(p, f"upper_arm.{sfx}")
-        side = (el - sh).cross(wr - el).normalized()
-        if side.x * s < 0:
-            side = -side
-        eo = (out + Vector((0, 0.35, -0.25))).normalized()
-        p = _pin(f"elbow.{sfx}", el + eo * 0.049, eo, coll, r=0.011)
-        att(p, f"forearm.{sfx}")
-        # Black felt mitten hand, palm down, with a thumb on the inside.
-        d = (wr - el).normalized()
-        hand = geo.blob(P + f"hand.{sfx}", (0.052, 0.036, 0.062), mat=m["black"], coll=coll,
-                        deform=lambda v: Vector((v.x * (1 + 0.12 * v.z), v.y, v.z)))
-        q = d.to_track_quat("Z", "Y")
-        hand.rotation_mode = "QUATERNION"
-        hand.location = wr + d * 0.05
-        hand.rotation_quaternion = q
-        att(hand, f"hand.{sfx}")
-        inner = Vector((-s, 0, 0))
-        th = geo.capsule(P + f"thumb.{sfx}", wr + d * 0.03 + inner * 0.03 + Vector((0, 0, 0.012)),
-                         wr + d * 0.07 + inner * 0.05 + Vector((0, 0, 0.02)), 0.018, 0.016,
-                         mat=m["black"], coll=coll)
-        att(th, f"hand.{sfx}")
-        cuff = geo.lathe(P + f"cuff.{sfx}", [(-0.012, 0.043), (0.0, 0.047), (0.014, 0.045)], 24,
-                         mat=m["black"], coll=coll, cap_bottom=False, cap_top=False, subsurf=1)
-        cuff.location = wr - d * 0.004
-        cuff.rotation_mode = "QUATERNION"
-        cuff.rotation_quaternion = q
-        att(cuff, f"hand.{sfx}")
+        sh, el, wr = SHOULDER, ELBOW, WRIST
+
+        def upper(k=1.0):
+            pts, st = _limb(_yz(sh) + Vector((0, 0.03)), _yz(el), 0.105 * k, 0.078 * k,
+                            "ssssssss")
+            return outline(pts, st)
+
+        def fore(k=1.0):
+            pts, st = _limb(_yz(el), _yz(wr), 0.078 * k, 0.07 * k, "ssssssss")
+            return outline(pts, st)
+        xs = (0.197, 0.232, 0.259) if s > 0 else (-0.259, -0.232, -0.197)
+        if s > 0:
+            inner, outer = (xs[0], xs[1]), (xs[1] - 0.004, xs[2])
+        else:
+            inner, outer = (xs[1], xs[2]), (xs[0], xs[1] + 0.004)
+        att(side(P + f"upper_arm.{sfx}", upper(), *inner, m["grey"], coll, bevel=0.005),
+            f"upper_arm.{sfx}")
+        att(side(P + f"upper_arm_outer.{sfx}", upper(0.9), *outer, m["grey"], coll,
+                 bevel=0.005), f"upper_arm.{sfx}")
+        att(side(P + f"forearm.{sfx}", fore(), *inner, m["grey"], coll, bevel=0.005),
+            f"forearm.{sfx}")
+        att(side(P + f"forearm_outer.{sfx}", fore(0.9), *outer, m["grey"], coll,
+                 bevel=0.005), f"forearm.{sfx}")
+        # fringe cuff where the fur meets the black glove
+        d = (_yz(wr) - _yz(el)).normalized()
+        nrm = Vector((-d.y, d.x))
+        cw = _yz(wr) - d * 0.012
+        cuff = [cw + nrm * 0.045, cw + nrm * 0.04 + d * 0.022, cw - nrm * 0.04 + d * 0.022,
+                cw - nrm * 0.045]
+        cp = outline([(p.x, p.y) for p in cuff], "sfss", fur=0.02, fur_sp=0.0112)
+        xo = 0.254 if s > 0 else -0.264
+        att(side(P + f"arm_cuff.{sfx}", cp, xo, xo + 0.01, m["grey"], coll), f"forearm.{sfx}")
+        # Pins: shoulder and elbow on the outside.
+        xp = 0.262 * s
+        att(_pin(f"shoulder.{sfx}", Vector((xp, sh.y + 0.005, sh.z + 0.005)), (s, 0, 0), coll),
+            f"upper_arm.{sfx}")
+        att(_pin(f"elbow.{sfx}", Vector((xp, el.y, el.z)), (s, 0, 0), coll, r=0.013),
+            f"forearm.{sfx}")
+        # Mitten hand split into finger layers so the slits read from the front too.
+        hd = (_yz(HAND_TIP) - _yz(wr)).normalized()
+        hn = Vector((-hd.y, hd.x))  # 'up' in the hand plane
+        base = _yz(wr) - hd * 0.012
+
+        def hp(a, b):
+            q = base + hd * a + hn * b
+            return (q.x, q.y)
+        palm = [hp(0.0, 0.034), hp(0.05, 0.04), hp(0.09, 0.03), hp(0.1, 0.0), hp(0.09, -0.035),
+                hp(0.05, -0.046), hp(0.0, -0.036)]
+        att(side(P + f"hand.{sfx}", outline(palm, "sssssss"),
+                 *((0.207, 0.25) if s > 0 else (-0.25, -0.207)), m["black"], coll, bevel=0.004),
+            f"hand.{sfx}")
+        for k, (x0, ln) in enumerate(((0.204, 0.028), (0.219, 0.036), (0.234, 0.031),
+                                      (0.249, 0.022))):
+            fl = [hp(0.06, 0.028), hp(0.07 + ln, 0.02), hp(0.085 + ln, -0.01),
+                  hp(0.075 + ln, -0.04), hp(0.05, -0.048), hp(0.04, -0.01)]
+            xr = (x0, x0 + 0.0125) if s > 0 else (-x0 - 0.0125, -x0)
+            att(side(P + f"finger{k}.{sfx}", outline(fl, "ssssss"), *xr, m["black"], coll,
+                     bevel=0.003), f"hand.{sfx}")
 
 
 def _legs(coll, m, att):
     for sfx, s in (("L", 1), ("R", -1)):
-        hp, kn, an = _mirror(HIP, s), _mirror(KNEE, s), _mirror(ANKLE, s)
-        th = geo.capsule(P + f"thigh.{sfx}", hp, kn, 0.084, 0.068, mat=m["grey"], coll=coll)
-        _wobble(th, 0.002, 7 + s)
-        att(th, f"thigh.{sfx}")
-        sh = geo.capsule(P + f"shin.{sfx}", kn, an, 0.066, 0.056, mat=m["grey"], coll=coll)
-        _wobble(sh, 0.002, 8 + s)
-        att(sh, f"shin.{sfx}")
-        out = Vector((s, 0, 0))
-        att(_pin(f"hip.{sfx}", hp + out * 0.083 + Vector((0, -0.01, -0.03)), out, coll),
-            f"thigh.{sfx}")
-        att(_pin(f"knee.{sfx}", kn + out * 0.068, out, coll, r=0.012), f"shin.{sfx}")
+        def thigh(k=1.0):
+            c = [(-0.075, 0.56), (0.02, 0.575), (0.105, 0.55), (0.1, 0.4), (0.075, 0.275),
+                 (0.0, 0.25), (-0.07, 0.27), (-0.085, 0.42)]
+            if k != 1.0:
+                c = scaled(c, (k, 1.0), (0.01, 0.4))
+            return outline(c, "sssFFFss", fur=0.0275, fur_sp=0.0144)
 
-        def fdef(v):
-            v = Vector(v)
-            if v.z < -0.35:  # flat felt sole
-                v.z = -0.35 - (v.z + 0.35) * 0.25
-            v.x *= 1.0 + 0.12 * max(0.0, -v.y)  # wider toe
-            return v
-        foot = geo.blob(P + f"foot.{sfx}", (0.07, 0.11, 0.06), mat=m["black"], coll=coll,
-                        deform=fdef, segs=28, rings=16)
-        foot.location = Vector((an.x + 0.006 * s, -0.045, 0.0))
-        foot.rotation_euler = (0, 0, math.radians(-8 * s))
-        bpy.context.view_layer.update()
-        zmin = min((foot.matrix_world @ v.co).z for v in foot.data.vertices)
-        foot.location.z -= zmin - 0.002
-        att(foot, f"foot.{sfx}")
+        def shin(k=1.0):
+            c = [(-0.058, 0.31), (0.06, 0.31), (0.07, 0.17), (0.068, 0.085), (0.0, 0.07),
+                 (-0.06, 0.085), (-0.062, 0.2)]
+            if k != 1.0:
+                c = scaled(c, (k, 1.0), (0.0, 0.2))
+            return outline(c, "sssFFss", fur=0.025, fur_sp=0.0128)
+
+        def X(a, b):
+            return (a, b) if s > 0 else (-b, -a)
+        att(side(P + f"thigh.{sfx}", thigh(), *X(0.03, 0.085), m["grey"], coll, bevel=0.005),
+            f"thigh.{sfx}")
+        att(side(P + f"thigh_outer.{sfx}", thigh(0.92), *X(0.082, 0.132), m["grey"], coll,
+                 bevel=0.005), f"thigh.{sfx}")
+        att(side(P + f"shin.{sfx}", shin(), *X(0.04, 0.125), m["grey"], coll, bevel=0.005),
+            f"shin.{sfx}")
+        att(_pin(f"hip.{sfx}", Vector((0.136 * s, 0.03, 0.475)), (s, 0, 0), coll),
+            f"thigh.{sfx}")
+        att(_pin(f"knee.{sfx}", Vector((0.136 * s, -0.005, 0.3)), (s, 0, 0), coll, r=0.013),
+            f"shin.{sfx}")
+        # Foot: black felt, three toe layers with slits between them.
+        heel = [(0.075, 0.0), (0.085, 0.045), (0.05, 0.1), (-0.03, 0.1), (-0.05, 0.06)]
+        att(side(P + f"foot.{sfx}", outline(heel + [(-0.06, 0.0)], "ssssss"),
+                 *X(0.045, 0.125), m["black"], coll, bevel=0.005), f"foot.{sfx}")
+        for k, (x0, ln) in enumerate(((0.038, 0.14), (0.068, 0.165), (0.098, 0.15))):
+            tp = [(0.0, 0.0), (0.0, 0.07), (-0.07, 0.066), (-ln + 0.02, 0.05), (-ln, 0.025),
+                  (-ln + 0.012, 0.0)]
+            att(side(P + f"toe{k}.{sfx}", outline(tp, "ssssss"), *X(x0, x0 + 0.027),
+                     m["black"], coll, bevel=0.004), f"foot.{sfx}")
 
 
 def _tail(coll, m, att):
-    n_rings = 10
-    radii = [0.078, 0.092, 0.102, 0.108, 0.11, 0.108, 0.102, 0.092, 0.078, 0.058]
+    pts, cum = _tail_curve()
+    L = cum[-1]
+    n_rings = 7
+    tb = _tail_bone_pts()
     for i in range(n_rings):
-        seg = min(4, i // 2)
-        a, b = TAIL_PTS[seg], TAIL_PTS[seg + 1]
-        t = 0.28 + 0.5 * (i % 2)
-        c = a.lerp(b, t)
-        d = (b - a)
-        r = radii[i]
-        mat = m["grey"] if i % 2 == 0 else m["black"]
-        if i == n_rings - 1:
-            mat = m["black"]
-        ring = geo.blob(P + f"tail_ring.{i + 1:02d}", (r, r * 0.95, d.length * 0.62),
-                        mat=mat, coll=coll, segs=22, rings=12)
-        _wobble(ring, 0.004, 11 + i, freq=30)
-        ring.location = c
-        ring.rotation_mode = "QUATERNION"
-        ring.rotation_quaternion = d.to_track_quat("Z", "Y")
-        att(ring, f"tail.{seg + 1:02d}")
-    att(_pin("tail_base", TAIL_PTS[0] + Vector((0, 0.035, 0.06)), (0, 0.6, 0.8), coll, r=0.013),
+        sa = L * i / n_rings - (0.03 if i else 0.0)
+        sb = L * (i + 1) / n_rings + 0.018
+        last = i == n_rings - 1
+        mat = m["black"] if i % 2 == 0 else m["grey"]
+
+        def ring(k):
+            ctrl = []
+            for s_ in (sa, (sa + sb) / 2, min(sb, L)):
+                p, t = _tail_at(s_, pts, cum)
+                nrm = Vector((-t.y, t.x))
+                ctrl.append(p + nrm * _tail_width(s_ / L) * 0.5 * k)
+            p, t = _tail_at(L, pts, cum) if last else _tail_at(sb, pts, cum)
+            cap = p + t * (0.07 * k if last else 0.012)
+            right = []
+            for s_ in (min(sb, L), (sa + sb) / 2, sa):
+                p, t = _tail_at(s_, pts, cum)
+                nrm = Vector((-t.y, t.x))
+                right.append(p - nrm * _tail_width(s_ / L) * 0.5 * k)
+            c = ctrl + [cap] + right
+            return outline([(q.x, q.y) for q in c], "fffffffs", fur=0.0325 * k, fur_sp=0.016,
+                           lean=0.25)
+        h = 0.05 - 0.004 * i
+        bone = f"tail.{min(5, 1 + int(5 * ((sa + sb) / 2) / L)):02d}"
+        att(side(P + f"tail_ring.{i + 1:02d}", ring(1.0), -h, h, mat, coll, bevel=0.005), bone)
+        ho = 0.078 - 0.004 * i
+        att(side(P + f"tail_ring.{i + 1:02d}.L", ring(0.8), h - 0.01, ho, mat, coll,
+                 bevel=0.005), bone)
+        att(side(P + f"tail_ring.{i + 1:02d}.R", ring(0.8), -ho, -h + 0.01, mat, coll,
+                 bevel=0.005), bone)
+    p0 = tb[0]
+    att(_pin("tail_base", Vector((0.08, p0.y + 0.03, p0.z + 0.0)), (1, 0, 0), coll, r=0.013),
         "tail.01")
 
 
-def _ear_frame(s):
-    """Ear root on the head, the up/out direction the ear points, and its facing normal."""
-    root, _ = head_pt(EAR_PHI * s, EAR_EL)
-    up = Vector((0.6 * s, 0.05, 0.8)).normalized()
-    face = Vector((0.28 * s, -1.0, 0.05)).normalized()
-    return root, up, face
-
-
 def _ears(coll, m, att):
-    """Round raccoon ears with white felt rims. They poke up through slots in the hard hat
-    so they can never be mistaken for headphone cups."""
-    def ear_shape(v):
-        v = Vector(v)
-        v.x *= 1.0 - 0.28 * max(0.0, v.z)  # rounded triangle, soft point at the top
-        return v
+    """Round raccoon ears poking out sideways from under the hard hat, darker inside."""
+    shape = [(-0.045, 0.0), (-0.052, 0.04), (-0.036, 0.08), (0.0, 0.1), (0.036, 0.08),
+             (0.052, 0.04), (0.045, 0.0)]
     for sfx, s in (("L", 1), ("R", -1)):
-        root, up, face = _ear_frame(s)
-        c = root + up * 0.085
-        # local Z along `up`, local -Y along `face`
-        rot = _frame(face, up=up)
-        rim = geo.blob(P + f"ear_rim.{sfx}", (0.056, 0.02, 0.068), mat=m["white"], coll=coll,
-                       segs=24, rings=12, deform=ear_shape)
-        _place(rim, c, rot)
-        _wobble(rim, 0.0015, 50 + s)
-        inner = geo.blob(P + f"ear.{sfx}", (0.044, 0.018, 0.054), mat=m["grey"], coll=coll,
-                         segs=24, rings=12, deform=ear_shape)
-        _place(inner, c + face * 0.008 - up * 0.008, rot)
-        stalk = geo.capsule(P + f"ear_root.{sfx}", root, c - up * 0.02, 0.03, 0.035,
-                            mat=m["grey"], coll=coll, segs=12)
-        for o in (rim, inner, stalk):
+        root = _mirror(EAR_ROOT, s)
+        up = _mirror(EAR_UP, s)
+        n = Vector((0.85 * s, -0.5, 0.0))
+        n = (n - up * n.dot(up)).normalized()
+        ear = panel(P + f"ear.{sfx}", outline(shape, "sssssss"), 0.022,
+                    root - n * 0.011, n, up, m["grey"], coll, bevel=0.005)
+        inner = panel(P + f"ear_inner.{sfx}", outline(scaled(shape, 0.66, (0, 0.03)), jit=0.001),
+                      0.006, root + n * 0.01 + up * 0.012, n, up, m["black"], coll, bevel=0.002)
+        for o in (ear, inner):
             att(o, f"ear.{sfx}")
-        att(_pin(f"ear.{sfx}", c - up * 0.03 + face * 0.024, face, coll, r=0.009),
-            f"ear.{sfx}")
+        att(_pin(f"ear.{sfx}", root + up * 0.02 + n * 0.017, n, coll, r=0.009), f"ear.{sfx}")
 
 
 def _head(coll, m, att):
-    head = geo.blob(P + "head", HEAD_R, HEAD_C, mat=m["grey"], coll=coll, segs=32, rings=18,
-                    deform=_head_deform)
-    _wobble(head, 0.003, 21.0)
-    att(head, "head")
-    # Cheek fluff tufts (raccoon ruff) poking out at the jaw.
-    for sfx, s in (("L", 1), ("R", -1)):
-        for k, (dz, ang, sc) in enumerate(((0.0, 35, 1.0), (-0.035, 55, 0.8))):
-            p, n = head_pt(78 * s, -18 + dz * 300)
-            tuft = geo.blob(P + f"cheek_fluff.{sfx}{k}", (0.03 * sc, 0.028 * sc, 0.06 * sc),
-                            mat=m["grey"], coll=coll, segs=16, rings=10,
-                            deform=lambda v: Vector((v.x, v.y, v.z * (1.0 if v.z < 0 else 1 - 0.3 * abs(v.x)))))
-            tuft.location = p + n * 0.0
-            tuft.rotation_mode = "XYZ"
-            tuft.rotation_euler = (0, math.radians(ang * s + 30 * s), math.radians(-20 * s))
-            att(tuft, "head")
+    # Centre slab: full side profile (crown, face, jaw fringe, back of the head).
+    centre = [(-0.125, 1.22), (-0.136, 1.13), (-0.13, 1.02), (-0.1, 0.965), (-0.04, 0.945),
+              (0.05, 0.95), (0.12, 0.99), (0.15, 1.07), (0.145, 1.16), (0.09, 1.23),
+              (0.0, 1.255), (-0.08, 1.245)]
+    st = "sssfffFsssss"
+    att(side(P + "head", outline(centre, st, fur=0.025), -0.05, 0.05, m["grey"], coll,
+             bevel=0.006), "head")
+    mid = scaled(centre, 0.97, (0.01, 1.09))
+
+    def midp():
+        return outline(mid, st, fur=0.0275)
+    for o in pair_side(P + "head_mid", midp(), 0.045, 0.1, m["grey"], coll, 0.006, midp):
+        att(o, "head")
+    outer = [(-0.11, 1.2), (-0.126, 1.12), (-0.122, 1.03), (-0.09, 0.97), (-0.03, 0.935),
+             (0.05, 0.935), (0.12, 0.975), (0.14, 1.06), (0.13, 1.15), (0.07, 1.21),
+             (-0.03, 1.225)]
+
+    def outp():
+        return outline(outer, "ssssfffssss", fur=0.0275)
+    for o in pair_side(P + "head_outer", outp(), 0.095, 0.13, m["grey"], coll, 0.005, outp):
+        att(o, "head")
+    # Cheek ruff: fringed crescent layered on the outside of the jaw, sweeping back.
+    ruff = [(-0.1, 1.035), (-0.05, 1.03), (0.02, 1.02), (0.09, 1.0), (0.15, 0.975),
+            (0.13, 0.935), (0.06, 0.912), (-0.03, 0.92), (-0.085, 0.97)]
+
+    def ruffp():
+        return outline(ruff, "sssffffff", fur=0.0325, fur_sp=0.0144, lean=0.35)
+    for o in pair_side(P + "cheek_ruff", ruffp(), 0.126, 0.152, m["grey"], coll, 0.005, ruffp):
+        att(o, "head")
+    # Front face plate (so the face reads from the front), fringed cheeks.
+    fp, st = sym([(0.0, 1.235), (0.1, 1.215), (0.13, 1.15), (0.13, 1.08), (0.122, 1.02),
+                  (0.085, 0.975), (0.035, 0.955), (0.0, 0.952)], "sssffffs")
+    att(front(P + "face_plate", outline(fp, st, fur=0.0225, fur_sp=0.0128), -0.112, 0.028,
+              m["grey"], coll, bevel=0.005), "head")
+    # Light-grey muzzle: layered side slabs pointing forward and a touch up.
+    muz = [(-0.105, 1.145), (-0.17, 1.135), (-0.24, 1.118), (-0.278, 1.1), (-0.288, 1.07),
+           (-0.272, 1.04), (-0.22, 1.012), (-0.16, 0.995), (-0.105, 0.99)]
+    att(side(P + "muzzle", outline(muz, "sssssssss"), -0.032, 0.032, m["muzzle"], coll,
+             bevel=0.006), "head")
+    mo = scaled(muz, 0.9, (-0.1, 1.06))
+
+    def mop():
+        return outline(mo, "sssssssss")
+    for o in pair_side(P + "muzzle_side", mop(), 0.028, 0.052, m["muzzle"], coll, 0.005, mop):
+        att(o, "head")
+    # Chin: pale fringed layer under the muzzle.
+    chin, st = sym([(0.0, 1.02), (0.055, 1.015), (0.07, 0.985), (0.04, 0.96), (0.0, 0.955)],
+                   "sfff")
+    att(front(P + "chin", outline(chin, st, fur=0.0175, fur_sp=0.0096), -0.138, 0.012,
+              m["muzzle"], coll), "head")
 
 
 def _hardhat(coll, m, att):
-    base = Vector((0.0, 0.012, 1.118))
-    tilt = Matrix.Rotation(math.radians(-7), 4, "X") @ Matrix.Rotation(math.radians(4), 4, "Y")
-    mw = Matrix.Translation(base) @ tilt
-    dome = geo.lathe(P + "hardhat", HAT_PROFILE, 40,
-                     mat=m["hat"], coll=coll, cap_bottom=False, subsurf=1, squash=(1.0, 1.08))
-    _wobble(dome, 0.002, 31.0)
-    dome.matrix_world = mw
+    mw = Matrix.Translation(HAT_BASE) @ Matrix.Rotation(math.radians(HAT_TILT), 4, "X")
+    parts = []
+    dome = geo.lathe(P + "hardhat", HAT_PROFILE, 48, mat=m["hat"], coll=coll, cap_bottom=False,
+                     subsurf=0, squash=(1.0, HAT_SQ))
     sol = dome.modifiers.new("Solidify", "SOLIDIFY")
-    sol.thickness = 0.006
-    dome.modifiers.move(len(dome.modifiers) - 1, 0)
-    brim = geo.lathe(P + "hardhat_brim", [(-0.004, 0.168), (-0.01, 0.2), (-0.006, 0.225),
-                                          (0.004, 0.228), (0.008, 0.205), (0.006, 0.168),
-                                          (-0.004, 0.168)], 48, mat=m["hat"], coll=coll,
-                     cap_bottom=False, cap_top=False, subsurf=1, squash=(1.0, 1.14))
-    brim.matrix_world = mw @ Matrix.Translation((0, -0.028, 0.0))
-    # Ridge: a felt crest from front to back over the crown, ends sunk into the shell.
-    prof = HAT_PROFILE
-    zs = [0.05, 0.09, 0.13, 0.165, 0.19]
-    front = [(z, -(_profile_r(prof, z) * 1.08 + 0.004)) for z in zs]
-    pts = [Vector((0, y, z)) for z, y in front] + [Vector((0, 0, 0.206))] + \
-          [Vector((0, -y, z)) for z, y in reversed(front)]
-    pts[0].y *= 0.9
-    pts[-1].y *= 0.9
-    pts = [(mw @ p).to_tuple() for p in pts]
-    ridge = _curve_to_mesh(geo.tube(P + "hardhat_ridge", pts, 0.016, m["hat"], coll, res=3))
-    for v in ridge.data.vertices:  # narrow it sideways: a moulded crest, not a pipe
-        v.co.x *= 0.75
-    # Felt grommets where the ears come through the hat.
-    for sfx, s in (("L", 1), ("R", -1)):
-        root, up, face = _ear_frame(s)
-        gp = root + up * 0.04
-        g = geo.lathe(P + f"hardhat_ear_slot.{sfx}", [(-0.006, 0.036), (0.0, 0.046),
-                                                      (0.006, 0.04), (0.004, 0.032)], 20,
-                      mat=m["hat"], coll=coll, cap_bottom=False, cap_top=False, subsurf=1)
-        g.location = gp
-        g.rotation_mode = "QUATERNION"
-        g.rotation_quaternion = up.to_track_quat("Z", "Y")
-        att(g, "head")
-    for o in (dome, brim, ridge):
+    sol.thickness = 0.012
+    geo.add_subsurf(dome, 1)
+    parts.append(dome)
+    # Peaked brim: a flat felt panel, long at the front, short at the sides and back.
+    br = []
+    for i in range(64):
+        a = 2 * math.pi * i / 64
+        x = math.cos(a) * 0.19
+        y = math.sin(a) * (0.205 if math.sin(a) > 0 else 0.27)
+        br.append((x, y))
+    parts.append(panel(P + "hardhat_brim", outline(br, jit=0.0015), 0.016, (0, 0, -0.01),
+                       (0, 0, 1), (0, 1, 0), m["hat"], coll, bevel=0.005))
+    # Ridge fins front-to-back (centre + two side ridges) and a crown band.
+    for k, xf in enumerate((0.0, 0.078, -0.078)):
+        o, i_ = [], []
+        for z, r in HAT_PROFILE:
+            if r <= abs(xf) + 1e-3:
+                continue
+            yy = HAT_SQ * math.sqrt(r * r - xf * xf)
+            o.append((z, yy))
+        arc = [(-y, z) for z, y in o] + [(y, z) for z, y in reversed(o)][1:]
+        # outer and inner offsets (radially from the dome centre)
+        cen = Vector((0, 0.03))
+        outer = [tuple(Vector(p) + (Vector(p) - cen).normalized() * (0.011 - 0.003 * (k > 0)))
+                 for p in arc]
+        inner = [tuple(Vector(p) - (Vector(p) - cen).normalized() * 0.006) for p in arc]
+        pts = outline(outer + list(reversed(inner)),
+                      "s" * (len(outer) - 1) + "c" + "s" * (len(inner) - 1) + "c", jit=0.0008)
+        w = 0.024 if k == 0 else 0.018
+        parts.append(side(P + f"hardhat_ridge{k}", pts, xf - w / 2, xf + w / 2, m["hat"], coll,
+                          bevel=0.005))
+    band = geo.lathe(P + "hardhat_band", [(0.0, 0.17), (0.024, 0.167)], 48, mat=m["hat"],
+                     coll=coll, cap_bottom=False, cap_top=False, squash=(1.0, HAT_SQ))
+    sol = band.modifiers.new("Solidify", "SOLIDIFY")
+    sol.thickness = 0.008
+    sol.offset = 1.0
+    parts.append(band)
+    for o in parts:
+        o.matrix_world = mw @ o.matrix_world
         att(o, "head")
-    return dome
+
+
+def _eye_frame(s):
+    n = _mirror(EYE_N, s)
+    up = Vector((0, 0, 1))
+    y = (up - n * up.dot(n)).normalized()
+    x = y.cross(n)
+    return _mirror(EYE_C, s), n, y, x
 
 
 def _face(coll, m, arm):
     """Every face feature is its own object, tagged, then joined into Pickles_face."""
     parts = []
 
-    # Mask first: world-space verts, identity transform, so the face mesh is in world space.
-    def mask_keep(phi, el):
-        a = abs(phi)
-        if a > 70 or el < -35 or el > 40:
-            return False
-        tilt = 0.18 * (a - 26)
-        v = ((a - 26) / 36.0) ** 2 + ((el - 7 + tilt) / 17.5) ** 2
-        return v < 1.0
+    def add(obj, group):
+        rig.group_all(obj, group)
+        parts.append(obj)
+        return obj
 
-    mask = _shell_patch(P + "face_mask", mask_keep, m["black"], coll, thick=0.004, lift=1.012)
-    rig.group_all(mask, "mask")
-    parts.append(mask)
-
-    # Eyes: white glossy ball, big black pupil, catchlight, black felt upper lid.
-    eye_data = {}
+    # Front mask (black bandit band across the eyes).
+    mk, st = sym([(0.0, 1.13), (0.03, 1.138), (0.065, 1.165), (0.105, 1.172), (0.13, 1.155),
+                  (0.132, 1.075), (0.11, 1.048), (0.065, 1.058), (0.03, 1.09), (0.0, 1.1)],
+                 "spppppppp")
+    add(front(P + "mask_front", outline(mk, st, pink=0.003, pink_sp=0.007), -0.139, 0.008,
+              m["black"], coll, bevel=0.002), "mask")
     for sfx, s in (("L", 1), ("R", -1)):
-        c = Vector((0.074 * s, -0.142, 1.028))
-        yaw = math.radians(10 * s)
-        rot = Matrix.Rotation(yaw, 3, "Z")
-        ball = geo.blob(P + f"eye.{sfx}", (EYE_R, EYE_R, EYE_R * 1.05), c, mat=m["eye"],
-                        coll=coll, segs=24, rings=14)
-        ball.rotation_euler = (0, 0, yaw)
-        rig.group_all(ball, f"eye_{sfx}")
-        pdir = (rot @ Vector((-0.2 * s, -1.0, -0.08))).normalized()
-        pupil = geo.blob(P + f"pupil.{sfx}", (0.024, 0.01, 0.028), mat=m["pupil"], coll=coll,
-                         segs=20, rings=12)
-        _place(pupil, c + pdir * (EYE_R * 0.94), _frame(pdir))
-        rig.group_all(pupil, f"pupil_{sfx}")
-        cdir = (pdir + Vector((-0.2, 0.0, 0.28))).normalized()
-        catch = geo.blob(P + f"catchlight.{sfx}", (0.0065, 0.003, 0.0065), mat=m["catch"],
-                         coll=coll, segs=12, rings=8, subsurf=0)
-        _place(catch, c + cdir * (EYE_R * 1.02 + 0.004), _frame(cdir))
-        rig.group_all(catch, f"pupil_{sfx}")
-        # Lid: a hemisphere shell tilted up/back; rim sits ~40 deg up the eye at rest.
-        import bmesh
-        bm = bmesh.new()
-        bmesh.ops.create_uvsphere(bm, u_segments=28, v_segments=16, radius=EYE_R * 1.13)
-        beta = math.radians(38)
-        dead = []
-        for f in bm.faces:
-            d = f.calc_center_median().normalized()
-            # front rim elevation = beta: keep where sin(el - beta)>0 on the front
-            if d.dot(Vector((0.0, math.sin(beta), math.cos(beta)))) < 0.0:
-                dead.append(f)
-        bmesh.ops.delete(bm, geom=dead, context="FACES")
-        lid = geo._finish(P + f"lid.{sfx}", bm, m["black"], coll)
-        lid.location = c
-        lid.rotation_euler = (0, 0, yaw)
-        sm = lid.modifiers.new("Solidify", "SOLIDIFY")
-        sm.thickness = 0.003
-        geo.add_subsurf(lid, 1)
-        rig.group_all(lid, f"lid_{sfx}")
-        parts += [ball, pupil, catch, lid]
-        eye_data[sfx] = (c, yaw)
-
-    # White brows above the mask: soft crescents, inner ends lifted (sweet, a bit shy).
+        # Side mask: wraps from the eye back towards the ear, tapering down the cheek.
+        sm = [(-0.134, 1.16), (-0.09, 1.172), (-0.03, 1.15), (0.03, 1.105), (0.075, 1.06),
+              (0.045, 1.04), (-0.03, 1.05), (-0.1, 1.045), (-0.134, 1.062)]
+        x0 = 0.128 if s > 0 else -0.136
+        add(side(P + f"mask_side.{sfx}", outline(sm, "sppppppps", pink=0.003, pink_sp=0.007),
+                 x0, x0 + 0.008, m["black"], coll, bevel=0.002), "mask")
+        # White brows: side crescent + front crescent, inner end lifted (sweet, a bit shy).
+        bs = [(-0.125, 1.178), (-0.08, 1.2), (-0.035, 1.19), (-0.06, 1.176), (-0.1, 1.168)]
+        x0 = 0.134 if s > 0 else -0.142
+        add(side(P + f"brow_side.{sfx}", outline(bs, "sssss"), x0, x0 + 0.008, m["white"], coll,
+                 bevel=0.002), "brows")
+        bf = [(0.03 * s, 1.178), (0.07 * s, 1.2), (0.12 * s, 1.188), (0.135 * s, 1.172),
+              (0.09 * s, 1.18), (0.05 * s, 1.17)]
+        add(front(P + f"brow_front.{sfx}", outline(bf, "ssssss"), -0.144, 0.008, m["white"],
+                  coll, bevel=0.002), "brows")
+        # Eye: glossy white felt oval, glossy pupil dome looking forward, catchlight, lid.
+        c, n, y, x = _eye_frame(s)
+        # black socket block chamfering the head corner so the eye sits on a flat face
+        add(panel(P + f"eye_back.{sfx}", outline(ellipse(EYE_RX * 1.45, EYE_RY * 1.3, 30),
+                                                  "p" * 30, pink=0.002, pink_sp=0.006),
+                  0.036, c - n * 0.032, n, (0, 0, 1), m["black"], coll, bevel=0.004), "mask")
+        add(panel(P + f"eye.{sfx}", outline(ellipse(EYE_RX, EYE_RY, 30), jit=0.0005), 0.006,
+                  c + n * 0.003, n, (0, 0, 1), m["eye"], coll, bevel=0.002), f"eye_{sfx}")
+        fwd = Vector((0, -1, 0))
+        fwd = (fwd - n * fwd.dot(n)).normalized()
+        pc = c + n * 0.009 + fwd * 0.0075 - y * 0.002
+        pupil = geo.lathe(P + f"pupil.{sfx}", [(0.0, 0.0145), (0.003, 0.014), (0.006, 0.01),
+                                               (0.0075, 0.0)], 24, mat=m["pupil"], coll=coll,
+                          cap_bottom=True, cap_top=False)
+        pupil.scale = (1.0, 1.2, 1.0)
+        pupil.rotation_mode = "QUATERNION"
+        pupil.rotation_quaternion = Matrix((x, y, n)).transposed().to_quaternion()
+        pupil.location = pc
+        bpy.context.view_layer.update()
+        pupil.data.transform(pupil.matrix_basis)
+        pupil.matrix_basis = Matrix.Identity(4)
+        add(pupil, f"pupil_{sfx}")
+        cc = pc + n * 0.0075 + y * 0.006 - fwd * 0.004
+        add(panel(P + f"catchlight.{sfx}", ellipse(0.0035, 0.0035, 12), 0.0015, cc, n,
+                  (0, 0, 1), m["catch"], coll, bevel=0.0), f"pupil_{sfx}")
+        # Lid: black oval squashed into a lash line along the top of the eye at rest.
+        lid = panel(P + f"lid.{sfx}", outline(ellipse(EYE_RX * 1.12, EYE_RY * 1.1, 30),
+                                               jit=0.0003),
+                    0.003, c + n * 0.018, n, (0, 0, 1), m["black"], coll, bevel=0.0)
+        top = c + y * EYE_RY * 1.1
+        for v in lid.data.vertices:
+            v.co.y = EYE_RY * 1.1 - (EYE_RY * 1.1 - v.co.y) * 0.12
+        add(lid, f"lid_{sfx}")
+    # Nose (black felt, layered) and mouth line.
+    nose = [(-0.262, 1.128), (-0.29, 1.124), (-0.304, 1.104), (-0.297, 1.08), (-0.272, 1.074),
+            (-0.256, 1.096)]
+    add(side(P + "nose", outline(nose, "ssssss"), -0.022, 0.022, m["black"], coll, bevel=0.006),
+        "nose")
+    add(front(P + "nose_front", outline(ellipse(0.024, 0.019, 24, 0.0, 1.103)), -0.293, 0.01,
+              m["black"], coll, bevel=0.004), "nose")
     for sfx, s in (("L", 1), ("R", -1)):
-        p, n = head_pt(24 * s, 35, off=0.004)
-        brow = geo.blob(P + f"brow.{sfx}", (0.036, 0.009, 0.012), mat=m["white"], coll=coll,
-                        segs=20, rings=10,
-                        deform=lambda v: Vector((v.x, v.y + 0.35 * v.x * v.x, v.z - 0.45 * v.x * v.x)))
-        _place(brow, p, _frame(n, roll=math.radians(-14 * s)))
-        rig.group_all(brow, "brows")
-        parts.append(brow)
+        sl = [(-0.268, 1.045), (-0.24, 1.03), (-0.205, 1.026), (-0.175, 1.034), (-0.158, 1.05)]
+        x0 = 0.05 if s > 0 else -0.055
+        add(side(P + f"smile.{sfx}", outline(strip(sl, 0.006)), x0, x0 + 0.005, m["black"],
+                 coll, bevel=0.0015), "mouth")
+    mouth = [(-0.03, 1.052), (-0.015, 1.043), (0.0, 1.046), (0.015, 1.043), (0.03, 1.052)]
+    add(front(P + "mouth_front", outline(strip(mouth, 0.006)), -0.277, 0.006, m["black"], coll,
+              bevel=0.0015), "mouth")
+    add(front(P + "philtrum", outline(strip([(0.0, 1.083), (0.0, 1.046)], 0.005)), -0.279,
+              0.005, m["black"], coll, bevel=0.0015), "mouth")
 
-    # Muzzle: light-grey felt snout, tapering to the nose.
-    def mdef(v):
-        v = Vector(v)
-        f = max(0.0, -v.y)
-        v.x *= 1.0 - 0.28 * f
-        v.z *= 1.0 - 0.18 * f
-        v.z += 0.12 * f * f
-        return v
-    muz = geo.blob(P + "muzzle", (0.088, 0.1, 0.07), (0, -0.152, 0.945), mat=m["muzzle"],
-                   coll=coll, segs=28, rings=16, deform=mdef)
-    _wobble(muz, 0.002, 41.0)
-    rig.group_all(muz, "muzzle")
-    parts.append(muz)
-    # White patch under the mask across the top of the snout (raccoon blaze)
-    blaze = geo.blob(P + "blaze", (0.03, 0.02, 0.05), mat=m["white"], coll=coll, segs=16, rings=10)
-    bp_, bn = head_pt(0, 18, off=0.004)
-    _place(blaze, bp_, _frame(bn))
-    rig.group_all(blaze, "blaze")
-    parts.append(blaze)
-
-    nose = geo.blob(P + "nose", (0.03, 0.022, 0.021), (0, -0.252, 0.977), mat=m["nose"],
-                    coll=coll, segs=20, rings=12,
-                    deform=lambda v: Vector((v.x * (1 - 0.3 * max(0.0, -v.z)), v.y, v.z)))
-    rig.group_all(nose, "nose")
-    parts.append(nose)
-
-    mouth_c = Vector((0.0, -0.236, 0.918))
-    mouth = geo.blob(P + "mouth", (0.028, 0.008, 0.0055), mouth_c, mat=m["black"], coll=coll,
-                     segs=20, rings=8, subsurf=1)
-    for v in mouth.data.vertices:
-        x = v.co.x
-        v.co.z += 9.0 * x * x
-        v.co.y += 7.0 * x * x
-    rig.group_all(mouth, "mouth")
-    parts.append(mouth)
-    phil = geo.capsule(P + "philtrum", (0, -0.249, 0.958), (0, -0.2415, 0.921), 0.0025, 0.0025,
-                       mat=m["black"], coll=coll, segs=8, subsurf=0)
-    rig.group_all(phil, "philtrum")
-    parts.append(phil)
-
+    # Bake every part into world space so the face mesh has an identity transform.
+    bpy.context.view_layer.update()
+    for o in parts:
+        for md in list(o.modifiers):
+            geo._apply_modifier(o, md)
+        o.data.transform(o.matrix_world)
+        o.matrix_world = Matrix.Identity(4)
     face = geo.join(parts, P + "face")
     face.data.name = P + "face"
     rig.attach(face, arm, "head")
 
-    # ---- shape keys (face mesh is in world/rest space)
-    def bend_mouth(k, widen):
-        def fn(co):
-            r = co - mouth_c
-            return mouth_c + Vector((r.x * widen, r.y + 4 * k * r.x * r.x, r.z + k * 1.0 * r.x * r.x * 9))
-        return fn
-
-    rig.shape_key(face, "smile", [
-        ("mouth", bend_mouth(1.6, 1.15)),
-        ("muzzle", lambda co: co + Vector((0, 0, 0.004 * max(0.0, 1 - abs(co.x) / 0.09)
-                                             * (1.0 if co.z < 0.95 else 0.0)))),
-        ("brows", rig.rotate_about(HEAD_C, (1, 0, 0), math.radians(-2.5))),
-    ])
+    # ---- shape keys (face mesh verts are in rest-pose world space)
+    def smile_front(co):
+        if abs(co.x) < 0.04 and co.y < -0.27 and co.z < 1.06:  # front mouth corners curl up
+            return co + Vector((0, 0, 9.0 * co.x * co.x))
+        if abs(co.x) > 0.04:  # side smile lines: lift the back ends
+            t = max(0.0, min(1.0, (co.y + 0.25) / 0.1))
+            return co + Vector((0, 0.004 * t, 0.014 * t * t))
+        return co
+    rig.shape_key(face, "smile", [("mouth", smile_front),
+                                  ("brows", lambda co: co + Vector((0, 0, 0.003)))])
 
     def open_mouth(co):
-        r = co - mouth_c
-        rz = r.z - 9.0 * r.x * r.x
-        return mouth_c + Vector((r.x * 0.62, r.y - 0.003 * (1 - abs(r.x) / 0.03), rz * 4.2 - 0.008))
-
-    whoa = [("mouth", open_mouth), ("brows", rig.rotate_about(HEAD_C, (1, 0, 0), math.radians(-8)))]
-    for sfx, (c, yaw) in eye_data.items():
-        whoa.append((f"pupil_{sfx}", rig.scale_about(c + Vector((0, -EYE_R, 0)), 0.82)))
-        ax = Matrix.Rotation(yaw, 3, "Z") @ Vector((1, 0, 0))
-        whoa.append((f"lid_{sfx}", rig.rotate_about(c, ax, math.radians(-14))))
+        if abs(co.x) < 0.04 and co.y < -0.27 and co.z < 1.06:  # front mouth -> "O"
+            cm = Vector((0.0, co.y, 1.046))
+            r = co - cm
+            return cm + Vector((r.x * 0.55, 0, r.z * 4.5 - 0.004))
+        t = max(0.0, min(1.0, (co.y + 0.27) / 0.11))
+        return co + Vector((0, 0, -0.008 * (1 - t)))
+    whoa = [("mouth", open_mouth), ("brows", lambda co: co + Vector((0, 0, 0.014)))]
+    for sfx, s in (("L", 1), ("R", -1)):
+        c, n, y, x = _eye_frame(s)
+        whoa.append((f"pupil_{sfx}", rig.scale_about(c + n * 0.01, 0.78)))
+        whoa.append((f"eye_{sfx}", rig.scale_about(c, (1.06, 1.06, 1.06))))
+        top = c + y * EYE_RY * 1.1
+        whoa.append((f"lid_{sfx}", lambda co, top=top, y=y: co + y * 0.004))
     rig.shape_key(face, "whoa", whoa)
 
     blink = []
-    for sfx, (c, yaw) in eye_data.items():
-        ax = Matrix.Rotation(yaw, 3, "Z") @ Vector((1, 0, 0))
-        blink.append((f"lid_{sfx}", rig.rotate_about(c, ax, math.radians(105))))
-    rig.shape_key(face, "blink", blink)
+    for sfx, s in (("L", 1), ("R", -1)):
+        c, n, y, x = _eye_frame(s)
+        top = c + y * EYE_RY * 1.1
 
+        def close(co, top=top, y=y):
+            d = (co - top).dot(y)  # <= 0, compressed by 0.12 at rest
+            return co - y * d + y * (d / 0.12) * 1.02
+        blink.append((f"lid_{sfx}", close))
+    rig.shape_key(face, "blink", blink)
     rig.shape_key(face, "brows_up", [
-        ("brows", rig.rotate_about(HEAD_C, (1, 0, 0), math.radians(-9))),
-    ])
+        ("brows", lambda co: co + Vector((0, 0, 0.016)))])
+    face["shape_keys"] = ",".join(SHAPE_KEYS)
     return face
 
 
 # ----------------------------------------------------------------- build
 
 def build(coll):
+    RNG.seed(1307)
     m = _mats()
     root = geo.empty(P + "root", (0, 0, 0), coll, 0.4, "CIRCLE")
     arm = _build_rig(coll, root)
@@ -767,7 +931,7 @@ def build(coll):
         rig.attach(obj, arm, bone)
         return obj
 
-    _body(coll, m, att)
+    _torso(coll, m, att)
     _headphones(coll, m, att)
     _arms(coll, m, att)
     _legs(coll, m, att)
@@ -780,7 +944,6 @@ def build(coll):
     arm["shape_keys"] = ",".join(SHAPE_KEYS)
     arm["face_mesh"] = P + "face"
     arm["ik_controls"] = "IK_hand.L,IK_hand.R,IK_foot.L,IK_foot.R"
-    # Anything not bone-bound hangs off the root.
     for o in coll.objects:
         if o.parent is None and o is not root:
             geo.parent(o, root)
@@ -791,23 +954,17 @@ def pose_test(root):
     """Thumbs-up-ish arm raise, head turn, tail swish and a smile (for rig checks)."""
     arm = next(o for o in root.children_recursive if o.type == "ARMATURE")
     pb = arm.pose.bones
-    # Right hand up to a thumbs-up by the cheek, left hand reaching the cage push bar height.
-    ik = pb["IK_hand.R"]
-    ik.location = Vector((0.0, 0.0, 0.0))
     rest = arm.data.bones["IK_hand.R"].matrix_local
-    target = Vector((-0.28, -0.12, 0.95))
-    ik.matrix = Matrix.Translation(target) @ (Matrix.Rotation(math.radians(-80), 4, "X")
-                                               @ Matrix.Rotation(math.radians(90), 4, "Y"))
-    pb["IK_hand.L"].location = (0.0, 0.0, 0.0)
-    pb["IK_hand.L"].matrix = Matrix.Translation(Vector((0.17, -0.3, 0.98))) \
+    pb["IK_hand.R"].matrix = Matrix.Translation(Vector((-0.24, -0.16, 0.98))) \
+        @ Matrix.Rotation(math.radians(70), 4, "X") @ rest.to_3x3().to_4x4()
+    pb["IK_hand.L"].matrix = Matrix.Translation(Vector((0.23, -0.3, 0.95))) \
         @ arm.data.bones["IK_hand.L"].matrix_local.to_3x3().to_4x4()
     pb["head"].rotation_mode = "XYZ"
     pb["head"].rotation_euler = (math.radians(6), 0, math.radians(-22))
     for i in range(1, 6):
         b = pb[f"tail.{i:02d}"]
         b.rotation_mode = "XYZ"
-        b.rotation_euler = (0, math.radians(10 * i / 2), math.radians(9))
-    pb["IK_foot.L"].location = (0, 0.0, 0.0)
+        b.rotation_euler = (0, 0, math.radians(9))
     face = bpy.data.objects[P + "face"]
     face.data.shape_keys.key_blocks["smile"].value = 1.0
     face.data.shape_keys.key_blocks["brows_up"].value = 0.6

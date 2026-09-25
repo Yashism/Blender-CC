@@ -1,87 +1,94 @@
-"""MITTENS: orange tabby forklift operator (drives FL-02). Seated felt stop-motion puppet.
+"""MITTENS: orange tabby forklift operator (drives FL-02). Seated LAYERED FELT CUT-OUT puppet.
+
+Construction (matches assets/refs/mittens_side_sitting_ref.webp): every piece is a thick flat
+felt panel (geo.extrude_poly, 1.5-5 cm, soft bevels) cut from a hand-drawn silhouette with a
+slightly jittered edge; fur edges (cheek ruff, chest bib) are pinked / tufted. Volume comes
+from STACKING panels: the torso is 5 side-profile slabs (contour stack across X), the head is
+5 front-profile slabs (contour stack along Y) with cream muzzle layers and a pink nose on top,
+the hard hat is a contour stack of side slabs + a brim panel + a raised ridge. Darker stripes
+('tabby_stripe') and cream patches are thin appliqué layers glued on top. Big felt joint discs
+with brass split pins at shoulders and haunches; pins also at elbows, knees, neck, tail base and
+ear roots.
 
 Conventions (docs/PIPELINE.md): real metres, faces -Y, +X is her LEFT, everything parented
 under the root empty `Mittens_root`, names prefixed `Mittens_`.
 
 PLACEMENT / ROOT OFFSET (read this, assembly step)
     Mittens is built SEATED. The root origin is the seat-contact point under her hips
-    (root-local z = 0 is the seat top). Seat top to hard-hat top = 0.92 m (ear tips poke a
-    little higher through the hat's ear holes).
-    For the turntable, build() leaves the root at world (0, 0, TT_ROOT_Z = 0.45) so the
-    turntable-only seat mock (seat top 0.45 above the floor, with a floor-level foot plate)
+    (root-local z = 0 is the seat top). Seat top to hard-hat top = 0.92 m.
+    For the TURNTABLE, build() leaves the root at world (0, 0, TT_ROOT_Z = 0.45) so the
+    turntable-only mock (seat block + backrest, floor foot plate, steering wheel on a post)
     stands on the studio floor.
-    In FL-02: set Mittens_root.location = FL02_SEAT_POINT = (0, 0.25, 1.00) and hide every
-    object with the custom property tt_only=True (`Mittens_TT_seat`, `Mittens_TT_wheel`).
-    The root carries these as custom properties too (tt_root_z, fl02_seat_point).
+    In FL-02: set Mittens_root.location = FL02_SEAT_POINT = (0, 0.25, 1.00) and hide/delete
+    every object with the custom property tt_only=True (`Mittens_TT_seat`, `Mittens_TT_floor`,
+    `Mittens_TT_wheel`). The root carries tt_root_z / fl02_seat_point as custom props too.
 
 HANDS / WHEEL (root-local)
-    Wheel centre (0, -0.55, 0.38), radius 0.19, tilted 35 deg from horizontal toward her
-    (wheel normal (0, sin35, cos35)). Paws grip the rim 15 deg above "9 and 3"
-    (about (+-0.18, -0.59, 0.41)); the wrists (IK_hand.* heads) sit at about
-    (+-0.18, -0.535, 0.41), i.e. the brief's hand point (+-0.15, -0.53, 0.40).
-    Move IK_hand.L/.R to re-grip a different wheel; hands copy the IK bone rotation.
-
+    Wheel centre (0, -0.55, 0.38), radius 0.19, tilted 35 deg from horizontal toward her.
+    Paws grip the rim 15 deg above "9 and 3" (~(+-0.18, -0.59, 0.41)); wrists (IK_hand.*)
+    sit at ~(+-0.18, -0.535, 0.41) = the brief's hand point (+-0.15, -0.53, 0.40).
 FEET
-    FL-02 cab floor is world z 0.55, i.e. 0.45 below the seat top. Feet rest flat on it at
-    about (+-0.12, -0.44, -0.43) root-local (paw soles at -0.43..-0.45). IK_foot.L/.R move
-    them.
-
+    Cab floor is root-local z -0.45. Paws rest flat on it around (+-0.12, -0.40, -0.42).
 SCREEN GLANCE
-    The in-cab screen is to her right-front, low on the dash, at about (-0.38, -0.9, 0.2)
-    root-local, so the glance is down and to her right (-X). See pose_test().
+    In-cab screen: her right-front, low: ~(-0.34, -0.95, 0.10) root-local. See pose_test().
 
-RIG `Mittens_rig` (puppet style: rigid felt pieces bone-parented, brass pins at pivots)
+RIG `Mittens_rig` (puppet: rigid felt pieces bone-parented)
     root, hips, spine.01-03, neck, head, ear.L/R, eye.L/R,
     upper_arm/forearm/hand .L/.R  + IK_hand.L/R, pole_hand.L/R   (IK chain 2 on forearm)
     thigh/shin/foot .L/.R         + IK_foot.L/R, pole_foot.L/R   (IK chain 2 on shin)
     tail.01-tail.05
 FACE `Mittens_face` (one joined mesh bound to head) with shape keys:
     smile, mouth_open, mouth_o, blink, wink (her left eye), surprised_brows
-    Eyeballs, pupils and catchlights stay separate, bound to eye.L / eye.R.
+    Irises, pupils and catchlights are separate objects bound to eye.L / eye.R.
 """
 import math
 
 import bmesh
 import bpy
-from mathutils import Matrix, Vector, noise
+from mathutils import Matrix, Vector, Quaternion, noise
 
 from lib import geo, mats as M, rig
 
 TT_ROOT_Z = 0.45
 FL02_SEAT_POINT = (0.0, 0.25, 1.00)
 
-TURNTABLE = dict(height=1.4, radius=5.0, lens=50, target_z=0.74, cam_elev=0.2, fstop=8.0,
-                 key=900)
+# Whole mock stands 0..1.37 m on the floor; ~70% of frame height.
+TURNTABLE = dict(height=1.4, radius=4.7, lens=50, target_z=0.70, cam_elev=0.2, fstop=8.0,
+                 key=480)
 
 SHAPE_KEYS = ["smile", "mouth_open", "mouth_o", "blink", "wink", "surprised_brows"]
 
 # ------------------------------------------------------------------ layout (root-local)
-PELVIS_C, PELVIS_R = Vector((0, 0.03, 0.105)), (0.152, 0.14, 0.108)
-TORSO_C, TORSO_R = Vector((0, 0.03, 0.31)), (0.135, 0.116, 0.19)
-HEAD_C, HEAD_R = Vector((0, -0.02, 0.655)), (0.176, 0.156, 0.146)
-EYE_R = 0.044
-EYE_X, EYE_Z = 0.071, 0.655
-HAT_BASE_Z = 0.742
-HAT_TILT = -0.13            # radians about X; negative lifts the front brim
+HEAD_C = Vector((0.0, -0.005, 0.672))     # centre of the head contour stack
+FACE_Y = -0.085                           # front face of the front head slab
+EYE_X, EYE_Z = 0.064, 0.69
+EYE_W, EYE_H, EYE_TILT = 0.068, 0.05, math.radians(9)
+HAT_C = Vector((0.0, 0.03, 0.772))
+HEAD_SCALE = 1.12                         # whole head group scaled about HEAD_PIVOT (hat top)
+HEAD_PIVOT = Vector((0.0, 0.0, 0.92))
+HAT_TILT = -0.12                          # about X; negative lifts the front brim
 
 WHEEL_C = Vector((0, -0.55, 0.38))
 WHEEL_RAD = 0.19
 WHEEL_TILT = math.radians(35)
-GRIP_ANGLE = math.radians(15)   # above "9 and 3", toward 12 o'clock
+GRIP_ANGLE = math.radians(15)            # above "9 and 3", toward 12 o'clock
 
-SHOULDER = Vector((0.14, -0.02, 0.425))
-UPPER_ARM_LEN, FOREARM_LEN = 0.28, 0.27
-HIP = Vector((0.085, -0.03, 0.075))
-KNEE = Vector((0.10, -0.29, 0.062))
-ANKLE = Vector((0.115, -0.375, -0.352))
-TOE = Vector((0.12, -0.49, -0.392))
-SCREEN = Vector((-0.38, -0.9, 0.2))    # in-cab screen, her right-front, low on the dash
-TAIL_PTS = [Vector(p) for p in [(0.03, 0.12, 0.075), (0.12, 0.158, 0.05), (0.215, 0.145, 0.035),
-                                 (0.295, 0.085, 0.0), (0.325, 0.01, -0.095),
-                                 (0.305, -0.075, -0.055)]]
+SHOULDER = Vector((0.15, -0.02, 0.445))
+UPPER_ARM_LEN, FOREARM_LEN = 0.29, 0.275
+HIP = Vector((0.11, 0.02, 0.10))
+KNEE = Vector((0.12, -0.27, 0.085))
+ANKLE = Vector((0.125, -0.355, -0.36))
+TOE = Vector((0.125, -0.49, -0.42))
+SCREEN = Vector((-0.34, -0.95, 0.10))
+TAIL_PTS = [Vector(p) for p in [(-0.03, 0.15, 0.06), (-0.15, 0.19, 0.06), (-0.27, 0.14, 0.07),
+                                 (-0.335, 0.04, 0.14), (-0.345, 0.0, 0.29),
+                                 (-0.305, 0.04, 0.44)]]
+
+X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
+FWD = Vector((0, -1, 0))
 
 
-# ------------------------------------------------------------------ small helpers
+# ------------------------------------------------------------------ materials
 
 def _mats():
     f = 150.0
@@ -91,14 +98,14 @@ def _mats():
         cream=M.felt("Mittens_felt_cream", "cream", fiber=f),
         pink=M.felt("Mittens_felt_pink", "pink_nose", fiber=f),
         hat=M.felt("Mittens_felt_hardhat", "hardhat", fiber=f, sheen=0.5),
+        brown=M.felt("Mittens_felt_brown", "fl_dark", fiber=f),
+        white=M.felt("Mittens_felt_white", "line_white", fiber=f),
         eye=M.glossy_eye("Mittens_eye_green", "cat_eye"),
-        pupil=M.glossy_eye("Mittens_eye_pupil", "#141214"),
+        pupil=M.glossy_eye("Mittens_eye_pupil", "mask"),
         glint=M.emissive("Mittens_eye_catchlight", "#FFFFFF", strength=3.0),
-        mouth=M.felt("Mittens_felt_mouth", "#3A1A18", fiber=f),
-        mouth_in=M.felt("Mittens_felt_mouth_inside", "#5E1F25", fiber=f),
-        tongue=M.felt("Mittens_felt_tongue", "tongue", fiber=f),
+        mouth_in=M.felt("Mittens_felt_mouth_inside", "tongue", fiber=f),
         whisker=M.plastic("Mittens_whisker_nylon", "line_white", rough=0.35),
-        belt=M.felt("Mittens_belt_webbing", "#34363B", fiber=320, sheen=0.35, mottle=0.04),
+        belt=M.felt("Mittens_belt_webbing", "fl_dark", fiber=320, sheen=0.35, mottle=0.04),
         buckle=M.plastic("Mittens_buckle_steel", "reflective", rough=0.28, metallic=1.0),
         button=M.plastic("Mittens_buckle_button", "alert_red", rough=0.35),
         seat=M.felt("Mittens_TT_seat_felt", "fl_dark", fiber=90),
@@ -106,6 +113,226 @@ def _mats():
         edge=M.card_edge(),
         wheel=M.plastic("Mittens_TT_wheel_black", "tyre", rough=0.45),
     )
+
+
+# ------------------------------------------------------------------ 2D outline helpers
+
+def V2(p):
+    return Vector((p[0], p[1]))
+
+
+def _area(pts):
+    return 0.5 * sum(pts[i - 1][0] * pts[i][1] - pts[i][0] * pts[i - 1][1]
+                     for i in range(len(pts)))
+
+
+def ccw(pts):
+    pts = [V2(p) for p in pts]
+    return pts if _area(pts) > 0 else pts[::-1]
+
+
+def normals2d(pts):
+    """Outward vertex normals of a CCW closed outline."""
+    n = len(pts)
+    out = []
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e1, e2 = (b - a), (c - b)
+        n1 = Vector((e1.y, -e1.x))
+        n2 = Vector((e2.y, -e2.x))
+        if n1.length:
+            n1.normalize()
+        if n2.length:
+            n2.normalize()
+        nm = n1 + n2
+        out.append(nm.normalized() if nm.length > 1e-6 else n1)
+    return out
+
+
+def offset(pts, d):
+    """Grow (d>0) or shrink (d<0) a closed outline along its vertex normals."""
+    pts = ccw(pts)
+    return [p + nm * d for p, nm in zip(pts, normals2d(pts))]
+
+
+def resample(pts, step, closed=True):
+    pts = [V2(p) for p in pts]
+    if closed:
+        pts = pts + [pts[0]]
+    out = [pts[0]]
+    carry = 0.0
+    for a, b in zip(pts, pts[1:]):
+        seg = (b - a).length
+        if seg < 1e-9:
+            continue
+        t = step - carry
+        while t < seg:
+            out.append(a.lerp(b, t / seg))
+            t += step
+        carry = seg - (t - step)
+    if closed:
+        if (out[-1] - out[0]).length < step * 0.4:
+            out.pop()
+    else:
+        out.append(pts[-1])
+    return out
+
+
+def fuzz(pts, amp=0.0015, freq=60.0, seed=0.0):
+    """Hand-cut irregularity: low-frequency noise along the outline normals."""
+    pts = ccw(pts)
+    ns = normals2d(pts)
+    return [p + nm * amp * noise.noise(Vector((p.x * freq, p.y * freq, seed * 1.37)))
+            for p, nm in zip(pts, ns)]
+
+
+def pinked(pts, amp, mask=None):
+    """Zig-zag (pinking-shear) edge where mask(p) > 0."""
+    pts = ccw(pts)
+    ns = normals2d(pts)
+    out = []
+    for i, (p, nm) in enumerate(zip(pts, ns)):
+        w = mask(p) if mask else 1.0
+        out.append(p + nm * amp * w * (1.0 if i % 2 else -0.6))
+    return out
+
+
+def catmull(pts, n=8, closed=False):
+    pts = [Vector(p) for p in pts]
+    if closed:
+        ext = [pts[-1]] + pts + [pts[0], pts[1]]
+        rng = range(1, len(pts) + 1)
+    else:
+        if len(pts) < 3:
+            return [pts[0].lerp(pts[-1], i / n) for i in range(n + 1)]
+        ext = [pts[0] * 2 - pts[1]] + pts + [pts[-1] * 2 - pts[-2]]
+        rng = range(1, len(ext) - 2)
+    out = []
+    for i in rng:
+        p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
+        for k in range(n):
+            t = k / n
+            t2, t3 = t * t, t * t * t
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+                              (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
+    if not closed:
+        out.append(pts[-1])
+    return out
+
+
+def ellipse2d(cx, cy, rx, ry, n=40, rot=0.0):
+    c, s = math.cos(rot), math.sin(rot)
+    pts = []
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        x, y = math.cos(a) * rx, math.sin(a) * ry
+        pts.append(Vector((cx + x * c - y * s, cy + x * s + y * c)))
+    return pts
+
+
+def limb2d(L, r0, r1, n=10):
+    """Tapered rounded strip from (0,0) to (L,0)."""
+    pts = []
+    ang = math.asin(max(-1.0, min(1.0, (r0 - r1) / L))) if L > 0 else 0.0
+    for i in range(n + 1):   # end cap at L
+        a = -math.pi / 2 + ang + (math.pi - 2 * ang) * i / n
+        pts.append(Vector((L + math.cos(a) * r1, math.sin(a) * r1)))
+    for i in range(n + 1):   # start cap at 0
+        a = math.pi / 2 - ang + (math.pi + 2 * ang) * i / n
+        pts.append(Vector((math.cos(a) * r0, math.sin(a) * r0)))
+    return pts
+
+
+def stroke(p0, p1, w, bend=0.0, n=10):
+    """Tapered brush-stroke stripe: blunt round start at p0, sharp tip at p1."""
+    p0, p1 = V2(p0), V2(p1)
+    d = p1 - p0
+    L = d.length
+    nrm = Vector((-d.y, d.x)) / L
+    spine = [p0 + d * (i / n) + nrm * bend * L * 4 * (i / n) * (1 - i / n) for i in range(n + 1)]
+    left, right = [], []
+    for i, p in enumerate(spine):
+        t = i / n
+        tg = (spine[min(i + 1, n)] - spine[max(i - 1, 0)]).normalized()
+        nn = Vector((-tg.y, tg.x))
+        wt = w * 0.5 * (1 - t) ** 0.85 * (0.55 + 0.45 * min(1.0, t / 0.2) ** 0.5)
+        left.append(p + nn * wt)
+        right.append(p - nn * wt)
+    cap = []
+    tg = (spine[1] - spine[0]).normalized()
+    nn = Vector((-tg.y, tg.x))
+    r0 = w * 0.5 * 0.55
+    for k in range(1, 6):
+        a = math.pi * k / 6
+        cap.append(p0 - tg * math.sin(a) * r0 * 0.9 - nn * math.cos(a) * r0)
+    pts = left[:-1] + [spine[-1]] + right[-2::-1] + cap
+    return pts
+
+
+# ------------------------------------------------------------------ 3D panel helpers
+
+def panel(name, pts, depth, origin, u, v, mat, coll, bevel=0.005, center=True, out=None,
+          segs=2, edge_mat=None):
+    """Extrude a 2D outline (in the u/v plane) into a felt panel.
+
+    center=True: slab centred on the plane through `origin`; else it starts at origin and
+    grows along `out` (the thickness direction). The outline is mirrored when needed so the
+    extrusion always goes along `out`.
+    """
+    u, v = Vector(u).normalized(), Vector(v).normalized()
+    pts = [V2(p) for p in pts]
+    w = u.cross(v)
+    if out is not None and w.dot(Vector(out)) < 0:
+        u = -u
+        pts = [Vector((-p.x, p.y)) for p in pts]
+        w = -w
+    obj = geo.extrude_poly(name, [tuple(p) for p in pts], depth, mat=mat, coll=coll,
+                           edge_mat=edge_mat, bevel=0)
+    o = Vector(origin) - (w * depth / 2 if center else Vector())
+    m = Matrix((u, v, w)).transposed().to_4x4()
+    m.translation = o
+    obj.matrix_world = m
+    if bevel:
+        obj.data.shade_smooth()
+        md = geo.add_bevel(obj, min(bevel, depth * 0.42), segs, harden=True)
+        md.angle_limit = math.radians(40)
+    return obj
+
+
+def side(name, pts, depth, x, mat, coll, s=1, **kw):
+    """Side-profile panel: pts are (forward, z); thickness across X at x."""
+    return panel(name, pts, depth, (x, 0, 0), FWD, Z, mat, coll, out=(s, 0, 0), **kw)
+
+
+def front(name, pts, depth, y, mat, coll, facing=-1, **kw):
+    """Front-profile panel: pts are (x, z); thickness along Y at y (grows toward facing*Y)."""
+    return panel(name, pts, depth, (0, y, 0), X, Z, mat, coll, out=(0, facing, 0), **kw)
+
+
+class Frame:
+    """Local plane frame for limbs: origin a, u along the limb, w = outward face normal."""
+
+    def __init__(self, a, b, w_hint, up_hint=Z):
+        self.a = Vector(a)
+        self.u = (Vector(b) - self.a).normalized()
+        self.L = (Vector(b) - self.a).length
+        w = Vector(w_hint)
+        self.w = (w - self.u * w.dot(self.u)).normalized()
+        self.v = self.w.cross(self.u)
+        # across-sign so +across points roughly toward up_hint
+        self.sg = 1.0 if self.v.dot(Vector(up_hint)) >= 0 else -1.0
+
+    def p(self, along, across):
+        return self.a + self.u * along + self.v * across * self.sg
+
+    def pts(self, pts2d):
+        return [Vector((q[0], q[1] * self.sg)) for q in pts2d]
+
+
+def fpanel(name, fr, pts2d, depth, mat, coll, lift=0.0, center=True, face=1, **kw):
+    """Panel in a limb frame; lift moves it along the face normal; face=-1 grows inward."""
+    return panel(name, fr.pts(pts2d), depth, fr.a + fr.w * lift, fr.u, fr.v, mat, coll,
+                 center=center, out=fr.w * face, **kw)
 
 
 def _mesh(name, verts, faces, mat, coll, smooth=True, subsurf=0):
@@ -124,35 +351,7 @@ def _mesh(name, verts, faces, mat, coll, smooth=True, subsurf=0):
     return obj
 
 
-def lumpy(obj, amt=0.003, freq=9.0, seed=0.0):
-    """Handmade irregularity: push verts along their normals by low-frequency noise."""
-    me = obj.data
-    off = Vector((seed * 3.1, seed * 1.7, seed * 2.3))
-    for v in me.vertices:
-        d = noise.noise(v.co * freq + off)
-        v.co += v.normal * amt * d
-    me.update()
-    return obj
-
-
-def catmull(pts, n=8):
-    pts = [Vector(p) for p in pts]
-    if len(pts) < 3:
-        return [pts[0].lerp(pts[-1], i / n) for i in range(n + 1)]
-    ext = [pts[0] * 2 - pts[1]] + pts + [pts[-1] * 2 - pts[-2]]
-    out = []
-    for i in range(1, len(ext) - 2):
-        p0, p1, p2, p3 = ext[i - 1], ext[i], ext[i + 1], ext[i + 2]
-        for k in range(n):
-            t = k / n
-            t2, t3 = t * t, t * t * t
-            out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-                              (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
-    out.append(pts[-1])
-    return out
-
-
-def mesh_tube(name, pts, radii, mat, coll, segs=8, smooth_n=6, flat=1.0, subsurf=1):
+def mesh_tube(name, pts, radii, mat, coll, segs=8, smooth_n=6, flat=1.0, subsurf=0):
     """Round (or flattened) mesh tube through points; radii: float or list per control point."""
     path = catmull(pts, smooth_n) if len(pts) > 2 else catmull(pts, smooth_n * 2)
     if not hasattr(radii, "__len__"):
@@ -163,8 +362,7 @@ def mesh_tube(name, pts, radii, mat, coll, segs=8, smooth_n=6, flat=1.0, subsurf
         k = min(int(t), len(radii) - 2)
         rs.append(radii[k] + (radii[k + 1] - radii[k]) * (t - k))
     verts, faces = [], []
-    T0 = (path[1] - path[0]).normalized()
-    N = T0.orthogonal().normalized()
+    N = (path[1] - path[0]).normalized().orthogonal().normalized()
     rings = []
     for i, p in enumerate(path):
         T = (path[min(i + 1, len(path) - 1)] - path[max(i - 1, 0)]).normalized()
@@ -179,136 +377,36 @@ def mesh_tube(name, pts, radii, mat, coll, segs=8, smooth_n=6, flat=1.0, subsurf
     for a, b in zip(rings, rings[1:]):
         for s in range(segs):
             faces.append((a[s], a[(s + 1) % segs], b[(s + 1) % segs], b[s]))
-    for ring, p, d in ((rings[0], path[0], -(path[1] - path[0]).normalized()),
-                       (rings[-1], path[-1], (path[-1] - path[-2]).normalized())):
+    for ring, p, d, r in ((rings[0], path[0], -(path[1] - path[0]).normalized(), rs[0]),
+                          (rings[-1], path[-1], (path[-1] - path[-2]).normalized(), rs[-1])):
         c = len(verts)
-        verts.append(p + d * rs[0 if ring is rings[0] else -1] * 0.6)
+        verts.append(p + d * r * 0.6)
         for s in range(segs):
             faces.append((ring[s], ring[(s + 1) % segs], c))
     return _mesh(name, verts, faces, mat, coll, subsurf=subsurf)
 
 
-def strip_from_grid(name, grid, thick, sink, mat, coll, closed=False, subsurf=1):
-    """Thin felt appliqué from a grid of (point, normal): rows along, columns across."""
-    rows, cols = len(grid), len(grid[0])
+def ribbon(name, pts, width, thick, nfn, mat, coll, n=8):
+    """Flat webbing strap along pts; nfn(p) gives the strap's outward face normal hint."""
+    path = catmull(pts, n)
     verts, faces = [], []
-    top = [[None] * cols for _ in range(rows)]
-    bot = [[None] * cols for _ in range(rows)]
-    for i in range(rows):
-        for j in range(cols):
-            p, n = grid[i][j]
-            top[i][j] = len(verts)
-            verts.append(p + n * thick)
-            bot[i][j] = len(verts)
-            verts.append(p - n * sink)
-    rr = range(rows) if closed else range(rows - 1)
-    for i in rr:
-        i2 = (i + 1) % rows
-        for j in range(cols - 1):
-            faces.append((top[i][j], top[i2][j], top[i2][j + 1], top[i][j + 1]))
-            faces.append((bot[i][j + 1], bot[i2][j + 1], bot[i2][j], bot[i][j]))
-        faces.append((top[i][0], bot[i][0], bot[i2][0], top[i2][0]))
-        faces.append((top[i2][-1], bot[i2][-1], bot[i][-1], top[i][-1]))
-    if not closed:
-        for i in (0, rows - 1):
-            for j in range(cols - 1):
-                faces.append((top[i][j], top[i][j + 1], bot[i][j + 1], bot[i][j]))
-    return _mesh(name, verts, faces, mat, coll, subsurf=subsurf)
-
-
-def ell_surface(center, radii, deform=None):
-    c, r = Vector(center), radii
-
-    def S(az, el):
-        d = Vector((math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)))
-        if deform:
-            d = deform(d.copy())
-        return c + Vector((d.x * r[0], d.y * r[1], d.z * r[2]))
-
-    def N(az, el):
-        e = 1e-3
-        du = S(az + e, el) - S(az - e, el)
-        dv = S(az, el + e) - S(az, el - e)
-        n = du.cross(dv).normalized()
-        return n if n.dot(S(az, el) - c) > 0 else -n
-    return S, N
-
-
-def surface_strip(name, surf, path, width, mat, coll, thick=0.0035, sink=0.003, n=24, cols=3,
-                  taper=0.25):
-    """Tapered felt stripe on a (deformed) ellipsoid. path: [(az, el), ...], width in radians."""
-    S, Nf = surf
-    pp = catmull([Vector((a, e, 0)) for a, e in path], max(2, n // max(1, len(path) - 1)))
-    grid = []
-    for i, q in enumerate(pp):
-        az, el = q.x, q.y
-        qa, qb = pp[max(i - 1, 0)], pp[min(i + 1, len(pp) - 1)]
-        ta, te = (qb.x - qa.x) * math.cos(el), (qb.y - qa.y)
-        ln = math.hypot(ta, te) or 1.0
-        px, py = -te / ln, ta / ln
-        s = i / (len(pp) - 1)
-        w = width * (taper + (1 - taper) * math.sin(math.pi * s) ** 0.7)
-        row = []
-        for j in range(cols):
-            t = (j / (cols - 1)) * 2 - 1
-            a2 = az + px * w * 0.5 * t / max(math.cos(el), 0.2)
-            e2 = el + py * w * 0.5 * t
-            row.append((S(a2, e2), Nf(a2, e2)))
-        grid.append(row)
-    return strip_from_grid(name, grid, thick, sink, mat, coll)
-
-
-def limb_band(name, p1, p2, r1, r2, t, width, ref, mat, coll, span=math.radians(200),
-              tilt=0.0, thick=0.0035, sink=0.003, n=18):
-    """Felt stripe wrapped part-way (or fully, span=2pi) around a capsule limb."""
-    p1, p2 = Vector(p1), Vector(p2)
-    a = (p2 - p1)
-    L = a.length
-    a.normalize()
-    u = (Vector(ref) - a * a.dot(Vector(ref))).normalized()
-    v = a.cross(u)
-    c = p1 + a * L * t
-    r = r1 + (r2 - r1) * t
-    closed = span >= 2 * math.pi - 1e-3
-    grid = []
-    cnt = n if closed else n + 1
-    for i in range(cnt):
-        phi = (2 * math.pi * i / n) if closed else (-span / 2 + span * i / n)
-        tap = 1.0 if closed else (0.3 + 0.7 * math.sin(math.pi * i / n) ** 0.6)
-        radial = u * math.cos(phi) + v * math.sin(phi)
-        row = []
-        for j in range(3):
-            s = (j - 1) * width * 0.5 * tap
-            row.append((c + a * (s + tilt * math.sin(phi)) + radial * r, radial))
-        grid.append(row)
-    return strip_from_grid(name, grid, thick, sink, mat, coll, closed=closed)
-
-
-def sphere_patch(name, center, radius, az0, el0, half_w, half_h, mat, coll, thick=0.0015,
-                 sink=0.0015, n=8):
-    """Elliptical patch hugging a sphere (pupils, catchlights)."""
-    S, Nf = ell_surface(center, (radius, radius, radius))
-    grid = []
-    for i in range(n + 1):
-        y = i / n * 2 - 1
-        row = []
-        for j in range(n + 1):
-            x = j / n * 2 - 1
-            xs, ys = x * math.sqrt(1 - y * y / 2), y * math.sqrt(1 - x * x / 2)
-            az, el = az0 + xs * half_w, el0 + ys * half_h
-            row.append((S(az, el), Nf(az, el)))
-        grid.append(row)
-    return strip_from_grid(name, grid, thick, sink, mat, coll, subsurf=1)
-
-
-def solve_elbow(a, b, l1, l2, hint):
-    d = b - a
-    D = d.length
-    ax = d / D
-    x = (l1 * l1 - l2 * l2 + D * D) / (2 * D)
-    h = math.sqrt(max(l1 * l1 - x * x, 0.0))
-    bend = (hint - ax * hint.dot(ax)).normalized()
-    return a + ax * x + bend * h
+    L = len(path)
+    for i, p in enumerate(path):
+        T = (path[min(i + 1, L - 1)] - path[max(i - 1, 0)]).normalized()
+        h = Vector(nfn(p))
+        N = (h - T * h.dot(T)).normalized()
+        A = N.cross(T)
+        for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            verts.append(p + A * a * width / 2 + N * b * thick / 2)
+    for i in range(L - 1):
+        for k in range(4):
+            k2 = (k + 1) % 4
+            faces.append((i * 4 + k, i * 4 + k2, (i + 1) * 4 + k2, (i + 1) * 4 + k))
+    faces.append((3, 2, 1, 0))
+    faces.append(tuple((L - 1) * 4 + k for k in range(4)))
+    obj = _mesh(name, verts, faces, mat, coll, smooth=False)
+    geo.add_bevel(obj, 0.0015, 1)
+    return obj
 
 
 def torus(name, center, normal, R, r, mat, coll, segs=48, rsegs=12):
@@ -329,16 +427,14 @@ def torus(name, center, normal, R, r, mat, coll, segs=48, rsegs=12):
     return _mesh(name, verts, faces, mat, coll)
 
 
-def wobble(seed, amt=0.03):
-    def f(v):
-        k = 1 + amt * math.sin(3.1 * v.x + seed) * math.sin(2.3 * v.y + 2 * seed) \
-            + amt * 0.6 * math.sin(2.7 * v.z + 3 * seed)
-        return v * k
-    return f
-
-
-def _mirror(v):
-    return Vector((-v.x, v.y, v.z))
+def solve_elbow(a, b, l1, l2, hint):
+    d = b - a
+    D = d.length
+    ax = d / D
+    x = (l1 * l1 - l2 * l2 + D * D) / (2 * D)
+    h = math.sqrt(max(l1 * l1 - x * x, 0.0))
+    bend = (hint - ax * hint.dot(ax)).normalized()
+    return a + ax * x + bend * h
 
 
 def wheel_frame():
@@ -347,38 +443,97 @@ def wheel_frame():
     return WHEEL_C.copy(), n, up
 
 
-def grip_point(side):
+def grip_point(side_):
     c, n, up = wheel_frame()
-    return c + (Vector((side, 0, 0)) * math.cos(GRIP_ANGLE) + up * math.sin(GRIP_ANGLE)) * WHEEL_RAD
+    return c + (Vector((side_, 0, 0)) * math.cos(GRIP_ANGLE) + up * math.sin(GRIP_ANGLE)) * WHEEL_RAD
 
 
-def wrist_point(side):
-    g = grip_point(side)
+def wrist_point(side_):
+    g = grip_point(side_)
     sh = SHOULDER.copy()
-    sh.x *= side
+    sh.x *= side_
     return g + (sh - g).normalized() * 0.055
 
 
-# ------------------------------------------------------------------ deforms
-
-def head_deform(v):
-    # full cheeks (wider low), slightly flatter face, soft irregularity
-    if v.z < 0.2:
-        v.x *= 1 + 0.13 * min(1.0, (0.2 - v.z)) ** 1.2
-    if v.y < 0:
-        v.y *= 0.93
-    if v.z < -0.5:
-        v.z = -0.5 + (v.z + 0.5) * 0.8
-    return wobble(0.7, 0.018)(v)
+def pin(name, loc, normal, r, coll):
+    return geo.split_pin(name, loc, normal, r, coll)
 
 
-def torso_deform(v):
-    # pear: fuller belly, narrower shoulders
-    v.x *= 1.0 - 0.13 * v.z
-    v.y *= 1.0 - 0.1 * v.z
-    if v.y < 0 and v.z < 0.3:
-        v.y *= 1.08
-    return wobble(1.9, 0.02)(v)
+# ------------------------------------------------------------------ silhouettes
+
+def head_outline(scale=1.0, ruff=1.0, n=260):
+    """Front silhouette (x, z) of the head around HEAD_C: round skull, jowly cheeks with a
+    tufted fur ruff low on the sides, soft chin."""
+    pts = []
+    tufts = 7.0
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        c, s = math.cos(a), math.sin(a)
+        if s >= 0:
+            p = 2.5
+            x = 0.152 * math.copysign(abs(c) ** (2 / p), c)
+            z = 0.152 * s ** (2 / p)
+        else:
+            p = 2.7
+            x = 0.156 * math.copysign(abs(c) ** (2 / p), c)
+            z = -0.122 * abs(s) ** (2 / p)
+        r = Vector((x, z))
+        # fur ruff: tufts leaning down/outward on the lower cheeks
+        ac = abs(c)
+        w = max(0.0, min(1.0, (ac - 0.28) / 0.35)) * max(0.0, min(1.0, (0.28 - s) / 0.3))
+        if w > 0 and ruff:
+            ph = (math.atan2(s, ac) + 0.3) * tufts / math.pi * 2.0
+            saw = ph - math.floor(ph)
+            saw = saw ** 1.6
+            r = r + r.normalized() * 0.024 * w * saw * ruff
+        pts.append(r * scale)
+    return fuzz(pts, 0.0012, 45, seed=scale * 10)
+
+
+TORSO_PROF = [(-0.12, 0.0), (0.07, 0.0), (0.118, 0.035), (0.125, 0.12), (0.124, 0.26),
+              (0.115, 0.38), (0.095, 0.47), (0.065, 0.55), (0.03, 0.60), (-0.05, 0.61),
+              (-0.085, 0.54), (-0.115, 0.43), (-0.145, 0.30), (-0.163, 0.17), (-0.16, 0.06)]
+
+
+def torso_outline(inset=0.0):
+    pts = catmull(TORSO_PROF, 6, closed=True)
+    pts = [V2(p) for p in pts]
+    if inset:
+        pts = offset(pts, -inset)
+    return fuzz(pts, 0.0015, 40, seed=inset * 100)
+
+
+def _back_fwd(z):
+    """Forward coordinate of the torso's back edge at height z (core slab)."""
+    back = sorted([p for p in catmull(TORSO_PROF, 6, closed=True) if p.x < -0.04],
+                  key=lambda p: p.y)
+    for a, b in zip(back, back[1:]):
+        if a.y <= z <= b.y:
+            t = (z - a.y) / max(b.y - a.y, 1e-9)
+            return a.x + (b.x - a.x) * t
+    return back[0].x
+
+
+def ear_outline(scale=1.0):
+    base = [(-0.05, 0.0), (-0.035, 0.05), (-0.015, 0.10), (0.004, 0.132), (0.018, 0.10),
+            (0.036, 0.05), (0.05, 0.0), (0.0, -0.012)]
+    pts = catmull([(x * scale, (z - 0.05) * scale + 0.05) for x, z in base], 5, closed=True)
+    return fuzz(pts, 0.001, 60, seed=scale)
+
+
+def almond(w, h, tilt=0.0, n=24, top_pow=0.65, bot_pow=0.9):
+    """Cat-eye almond outline centred at 0, outer corner raised by tilt (for x>0)."""
+    pts = []
+    for i in range(n + 1):
+        x = -w / 2 + w * i / n
+        t = 1 - (2 * x / w) ** 2
+        pts.append(Vector((x, -h / 2 * max(t, 0) ** bot_pow)))
+    for i in range(n - 1, 0, -1):
+        x = -w / 2 + w * i / n
+        t = 1 - (2 * x / w) ** 2
+        pts.append(Vector((x, h / 2 * max(t, 0) ** top_pow)))
+    c, s = math.cos(tilt), math.sin(tilt)
+    return [Vector((p.x * c - p.y * s, p.x * s + p.y * c)) for p in pts]
 
 
 # ------------------------------------------------------------------ build
@@ -386,378 +541,419 @@ def torso_deform(v):
 def build(coll):
     m = _mats()
     root = geo.empty("Mittens_root", (0, 0, 0), coll, 0.3, "ARROWS")
-    P = {}   # piece name -> bone
+    P = {}           # object name -> bone
+    face_parts = []  # (obj, group)
 
     def put(obj, bone):
         P[obj.name] = bone
         return obj
 
-    # ---------------- body
-    put(lumpy(geo.blob("Mittens_pelvis", PELVIS_R, PELVIS_C, mat=m["tabby"], coll=coll,
-                       deform=wobble(0.3, 0.02)), 0.003), "hips")
-    torso_S = ell_surface(TORSO_C, TORSO_R, torso_deform)
-    put(lumpy(geo.blob("Mittens_torso", TORSO_R, TORSO_C, mat=m["tabby"], coll=coll,
-                       deform=torso_deform), 0.003, seed=1), "spine.02")
-    put(geo.blob("Mittens_chest_bib", (0.082, 0.04, 0.125), (0, -0.064, 0.345), mat=m["cream"],
-                 coll=coll, deform=lambda v: Vector((v.x * (1 - 0.35 * max(0, -v.z)) ** 1,
-                                                     v.y, v.z))), "spine.03")
-    put(geo.blob("Mittens_neck", (0.085, 0.08, 0.06), (0, -0.01, 0.5), mat=m["tabby"],
-                 coll=coll), "neck")
-    # back stripes: chevrons dipping at the spine
-    for k, (e0, w) in enumerate([(0.62, 0.22), (0.25, 0.25), (-0.12, 0.25), (-0.48, 0.2)]):
-        path = [(math.radians(a), e0 - 0.16 * math.sin(math.radians(a)) + 0.03 * (k % 2))
-                for a in (12, 50, 90, 130, 168)]
-        put(surface_strip(f"Mittens_stripe_back_{k + 1}", torso_S, path, w, m["stripe"], coll),
-            "spine.02")
-    # side stripes on the belly flanks (short)
-    for side, tag in ((1, "L"), (-1, "R")):
-        for k, e0 in enumerate([0.1, -0.25]):
-            path = [(math.radians(-22 + d), e0 + 0.05 * (d / 30)) for d in (-18, 0, 18)]
-            if side < 0:
-                path = [(math.pi - a, e) for a, e in path]
-            put(surface_strip(f"Mittens_stripe_flank_{tag}{k + 1}", torso_S, path, 0.2,
-                              m["stripe"], coll), "spine.02")
+    # ================================================================ torso (contour stack)
+    layers = [(0.0, 0.11, 0.0, "core")]          # (x centre, depth, inset)
+    for s in (1, -1):
+        layers.append((s * 0.0725, 0.035, 0.012, "mid"))
+        layers.append((s * 0.1025, 0.025, 0.032, "out"))
+    for k, (x, d, ins, tag) in enumerate(layers):
+        put(side(f"Mittens_torso_{tag}_{k}", torso_outline(ins), d, x, m["tabby"], coll,
+                 bevel=0.008), "spine.02")
+    for s, tag in ((1, "L"), (-1, "R")):
+        xo = s * 0.115
+        # cream chest edge (seen from the side, like the ref), pinked inner edge
+        crest = [(0.086, 0.06), (0.09, 0.2), (0.084, 0.33), (0.068, 0.42), (0.043, 0.49),
+                 (0.02, 0.46), (0.04, 0.38), (0.052, 0.3), (0.055, 0.2), (0.05, 0.09)]
+        crest = catmull(crest, 4, closed=True)
+        crest = pinked(resample(crest, 0.007), 0.0035, mask=lambda p: 1.0 if p.x < 0.085 else 0.0)
+        put(side(f"Mittens_chest_side_{tag}", crest, 0.005, xo, m["cream"], coll, s=s,
+                 center=False, bevel=0.0015), "spine.02")
+        # side stripes: brush strokes sweeping from the back edge forward-down
+        for i, (p0, p1, w, b) in enumerate([
+                ((-0.064, 0.475), (0.0, 0.43), 0.034, 0.05),
+                ((-0.088, 0.38), (-0.005, 0.32), 0.04, 0.06),
+                ((-0.112, 0.27), (-0.02, 0.215), 0.04, 0.05),
+                ((-0.125, 0.16), (-0.045, 0.12), 0.034, 0.04)]):
+            put(side(f"Mittens_stripe_side_{tag}{i}", fuzz(stroke(p0, p1, w, b * s * 0 + b)),
+                     0.005, xo, m["stripe"], coll, s=s, center=False, bevel=0.0015), "spine.02")
+    # chest bib (front), pinked edges
+    bib = catmull([(-0.072, 0.49), (-0.07, 0.40), (-0.055, 0.28), (-0.035, 0.17), (0.0, 0.13),
+                   (0.035, 0.17), (0.055, 0.28), (0.07, 0.40), (0.072, 0.49), (0.0, 0.51)],
+                  5, closed=True)
+    bib = pinked(resample(bib, 0.008), 0.004, mask=lambda p: 1.0 if p.y < 0.475 else 0.0)
+    bib = [Vector((p.x, p.y - 0.2)) for p in fuzz(bib)]
+    bv = Vector((0, math.sin(math.radians(6)), math.cos(math.radians(6))))
+    put(panel("Mittens_chest_bib", bib, 0.008, (0, -0.1245, 0.2), X, bv, m["cream"], coll,
+              center=False, out=FWD, bevel=0.002), "spine.02")
+    # back stripes: across the back slab edge, as short strokes on a panel facing +Y
+    for i, (z, w) in enumerate([(0.44, 0.1), (0.33, 0.12), (0.22, 0.13)]):
+        fwd_back = _back_fwd(z) - 0.001
+        pts = stroke((-w * 0.5, z), (w * 0.55, z - 0.015), 0.032, 0.08)
+        o = put(front(f"Mittens_stripe_back_{i}", fuzz(pts), 0.005, -fwd_back, m["stripe"], coll,
+                      facing=1, center=False, bevel=0.0015), "spine.02")
+    # neck plug under the head + neck pin (visible from the back)
+    put(side("Mittens_neck", fuzz(catmull([(-0.06, 0.52), (0.05, 0.52), (0.055, 0.6), (-0.06, 0.6)],
+                                            4, closed=True)), 0.14, 0.0, m["tabby"], coll,
+             bevel=0.01), "neck")
+    put(pin("Mittens_pin_neck", (0, 0.078, 0.575), (0, 1, 0.2), 0.013, coll), "neck")
 
-    # ---------------- head
-    head_S = ell_surface(HEAD_C, HEAD_R, head_deform)
-    put(lumpy(geo.blob("Mittens_head", HEAD_R, HEAD_C, mat=m["tabby"], coll=coll, segs=32,
-                       rings=18, deform=head_deform), 0.0025, seed=2), "head")
-    # forehead 'M' (three tapered strokes running up under the hat brim)
-    fa = math.radians(-90)
-    put(surface_strip("Mittens_stripe_M_mid", head_S, [(fa, 0.33), (fa, 0.5), (fa, 0.68)],
-                      0.1, m["stripe"], coll, n=12), "head")
-    for side, tag in ((1, "L"), (-1, "R")):
-        a1, a2 = fa + side * math.radians(10), fa + side * math.radians(22)
-        put(surface_strip(f"Mittens_stripe_M_{tag}", head_S,
-                          [(a1, 0.35), (a1 + side * 0.08, 0.52), (a2, 0.7)], 0.09,
-                          m["stripe"], coll, n=12), "head")
-    # cheek stripes, two per side sweeping back from the whisker pads
-    for side, tag in ((1, "L"), (-1, "R")):
-        for k, (e0, a0) in enumerate([(0.05, -38), (-0.2, -40)]):
-            pts = [(math.radians(a0 + d), e0 + 0.06 * (d / 30)) for d in (0, 14, 30)]
-            if side < 0:
-                pts = [(math.pi - a, e) for a, e in pts]
-            put(surface_strip(f"Mittens_stripe_cheek_{tag}{k + 1}", head_S, pts, 0.1,
-                              m["stripe"], coll, n=12), "head")
+    # ================================================================ head (contour stack along Y)
+    hc = HEAD_C
+    slabs = [(-0.085, -0.05, 0.94), (-0.05, -0.015, 1.0), (-0.015, 0.02, 0.975),
+             (0.02, 0.055, 0.88), (0.055, 0.083, 0.7)]
+    for k, (y0, y1, sc) in enumerate(slabs):
+        pts = [Vector((p.x, p.y + hc.z)) for p in head_outline(sc, ruff=1.0 if k < 4 else 0.6)]
+        put(front(f"Mittens_head_slab_{k}", pts, y1 - y0, y1, m["tabby"], coll, center=False,
+                  bevel=0.008), "head")
+    # side cheek plates: give the head a real side profile (ruff tufts at the back/bottom)
+    for s, tag in ((1, "L"), (-1, "R")):
+        prof = []
+        for i in range(120):
+            t = 2 * math.pi * i / 120
+            fw, z = 0.084 * math.cos(t), (0.13 if math.sin(t) > 0 else 0.118) * math.sin(t)
+            r = Vector((fw, z))
+            if z < 0.03 and fw < 0.03:
+                ph = (i / 120.0) * 22
+                r = r + r.normalized() * 0.02 * (ph - math.floor(ph)) ** 1.5
+            prof.append(r + Vector((0.0, hc.z - 0.005)))
+        cp = side(f"Mittens_head_cheek_{tag}", fuzz(prof, 0.0012), 0.03, s * 0.152, m["tabby"],
+                  coll, bevel=0.008)
+        put(cp, "head")
+        for i, (p0, p1, w) in enumerate((((-0.07, 0.72), (0.02, 0.705), 0.024),
+                                          ((-0.078, 0.665), (0.01, 0.66), 0.026),
+                                          ((-0.07, 0.61), (0.0, 0.62), 0.022))):
+            put(side(f"Mittens_stripe_cheek_{tag}{i}", fuzz(stroke(p0, p1, w, 0.05)), 0.004,
+                     s * 0.167, m["stripe"], coll, s=s, center=False, bevel=0.0012), "head")
 
-    # ---------------- face features -> joined face mesh
-    face_parts = []
+    # forehead + cheek stripes on the front slab
+    fs = FACE_Y
+    strokes = [((0.0, 0.79), (0.0, 0.745), 0.022, 0.0), ((-0.036, 0.785), (-0.03, 0.748), 0.017, 0.1),
+               ((0.036, 0.785), (0.03, 0.748), 0.017, -0.1)]
+    for s in (1, -1):
+        strokes += [((s * 0.142, 0.655), (s * 0.095, 0.648), 0.021, 0.08 * s),
+                    ((s * 0.147, 0.622), (s * 0.1, 0.612), 0.019, 0.08 * s)]
+    for i, (p0, p1, w, b) in enumerate(strokes):
+        o = front(f"Mittens_stripe_face_{i}", fuzz(stroke(p0, p1, w, b)), 0.004, fs, m["stripe"],
+                  coll, center=False, bevel=0.0012)
+        face_parts.append((o, "stripes"))
 
-    def fp(obj, grp):
-        rig.group_all(obj, grp)
-        face_parts.append(obj)
-        return obj
-
-    pad_z, pad_y = 0.593, -0.142
-    for side, tag in ((1, "L"), (-1, "R")):
-        fp(geo.blob(f"Mittens_muzzle_pad_{tag}", (0.047, 0.036, 0.037),
-                    (side * 0.036, pad_y, pad_z), rot=(0, 0, -side * 0.25), mat=m["cream"],
-                    coll=coll), f"pad_{tag}")
-    fp(geo.blob("Mittens_chin", (0.036, 0.028, 0.022), (0, -0.138, 0.556), mat=m["cream"],
-                coll=coll), "chin")
-    fp(geo.blob("Mittens_nose", (0.024, 0.016, 0.016), (0, -0.179, 0.622), rot=(0.35, 0, 0),
-                mat=m["pink"], coll=coll,
-                deform=lambda v: Vector((v.x * (0.62 + 0.45 * (v.z + 1) / 2), v.y, v.z))), "nose")
-    # mouth line: little 'w' under the nose
-    mz, my = 0.586, -0.1755
-    mouth_pts = [(-0.04, my + 0.014, mz + 0.006), (-0.022, my - 0.0015, mz - 0.004),
-                 (-0.006, my - 0.004, mz - 0.002), (0, my - 0.004, mz + 0.004),
-                 (0.006, my - 0.004, mz - 0.002), (0.022, my - 0.0015, mz - 0.004),
-                 (0.04, my + 0.014, mz + 0.006)]
-    fp(mesh_tube("Mittens_mouth_line", mouth_pts, 0.0032, m["mouth"], coll, segs=6), "mouth")
-    fp(mesh_tube("Mittens_philtrum", [(0, -0.178, 0.607), (0, -0.181, 0.595),
-                                      (0, my - 0.004, mz + 0.004)], 0.0026, m["mouth"], coll,
-                 segs=6), "philtrum")
-    # mouth interior + tongue: flattened out of sight at rest, opened by shape keys
-    fp(geo.blob("Mittens_mouth_inside", (0.03, 0.012, 0.022), (0, -0.162, mz - 0.006),
-                mat=m["mouth_in"], coll=coll), "mouth_in")
-    fp(geo.blob("Mittens_tongue", (0.02, 0.012, 0.01), (0, -0.166, mz - 0.018),
-                mat=m["tongue"], coll=coll), "tongue")
+    # ---------------- eyes: dark rim, white sclera (face), iris/pupil/glint (eye bones), lids
     eye_c = {}
-    for side, tag in ((1, "L"), (-1, "R")):
-        x = side * EYE_X
-        # sit the eyeball into the head surface
-        az = math.atan2(-0.9, x / HEAD_R[0] * 1.0)
-        ec = Vector((x, 0, EYE_Z))
-        # find head surface y at (x, z) by marching along -Y
-        y = 0.0
-        S, _ = head_S
-        best = None
-        for i in range(200):
-            aa = math.radians(-90 + side * i * 0.3)
-            pnt = S(aa, 0.0)
-            if best is None or abs(pnt.x - x) < abs(best.x - x):
-                best = pnt
-        ec.y = best.y + EYE_R * 0.52
-        eye_c[tag] = ec
-        # upper lid: front hemispherical felt shell tilted up-back (blink rotates it down)
-        bm = bmesh.new()
-        bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=14, radius=EYE_R * 1.1)
-        bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.y > 1e-4], context="VERTS")
-        rest = Matrix.Rotation(math.radians(-122), 4, "X")
-        slant = Matrix.Rotation(side * math.radians(-9), 4, "Y")
-        bmesh.ops.transform(bm, matrix=Matrix.Translation(ec) @ slant @ rest, verts=bm.verts)
-        lid = geo._finish(f"Mittens_lid_{tag}", bm, m["tabby"], coll)
-        sol = lid.modifiers.new("Solidify", "SOLIDIFY")
-        sol.thickness = 0.006
-        sol.offset = 1.0
-        geo.add_subsurf(lid, 1)
-        fp(lid, f"lid_{tag}")
-        # brow: short felt stroke above the eye
-        bp = []
-        for d in (-26, -12, 2):
-            a = math.radians(-90 + side * (13 + (d + 26) * 0.75))
-            e = 0.37 + 0.035 * math.sin(math.radians((d + 26) * 6.5))
-            bp.append(head_S[0](a, e) + head_S[1](a, e) * 0.004)
-        fp(mesh_tube(f"Mittens_brow_{tag}", bp, [0.005, 0.0065, 0.004], m["stripe"], coll,
-                     flat=0.55), f"brow_{tag}")
+    eye_objs = {}
+    lid_info = {}
+    for s, tag in ((1, "L"), (-1, "R")):
+        ex = s * EYE_X
+        tilt = s * EYE_TILT
+        rim = [Vector((ex + p.x, EYE_Z + p.y)) for p in almond(EYE_W + 0.012, EYE_H + 0.011, tilt)]
+        o = front(f"Mittens_eye_rim_{tag}", rim, 0.004, fs, m["brown"], coll, center=False,
+                  bevel=0.001)
+        face_parts.append((o, "eyes"))
+        scl = [Vector((ex + p.x, EYE_Z + p.y)) for p in almond(EYE_W, EYE_H, tilt)]
+        o = front(f"Mittens_eye_white_{tag}", scl, 0.004, fs - 0.004, m["white"], coll,
+                  center=False, bevel=0.001)
+        face_parts.append((o, "eyes"))
+        c = Vector((ex, -0.035, EYE_Z))
+        eye_c[tag] = c
+        iris = geo.blob(f"Mittens_iris_{tag}", (0.0235, 0.009, 0.0245), (ex + s * 0.002, -0.0925, EYE_Z),
+                        mat=m["eye"], coll=coll, segs=24, rings=12)
+        pup = geo.blob(f"Mittens_pupil_{tag}", (0.0115, 0.004, 0.0145),
+                       (ex + s * 0.002, -0.1005, EYE_Z - 0.001), mat=m["pupil"], coll=coll,
+                       segs=16, rings=8)
+        gl = geo.blob(f"Mittens_catchlight_{tag}", (0.0055, 0.002, 0.0055),
+                      (ex + s * 0.002 + 0.008, -0.1045, EYE_Z + 0.009), mat=m["glint"], coll=coll,
+                      segs=12, rings=6)
+        for ob in (iris, pup, gl):
+            put(ob, f"eye.{tag}")
+        eye_objs[tag] = (iris, pup, gl)
+        # upper lid: tabby crescent in front of the eye (blink/wink/squint keys)
+        lw, lh = EYE_W + 0.01, EYE_H + 0.012
+        top = [p for p in almond(lw, lh, 0.0, n=20)][21:]   # upper arc (right->left)
+        top = [Vector((-lw / 2, 0.0))] + top[::-1] + [Vector((lw / 2, 0.0))]
+        top = sorted(top, key=lambda p: p.x)
+        lid = [Vector((p.x, p.y)) for p in top]
+        lid_th = 0.011
+        low = [Vector((p.x, p.y - lid_th * max(0.0, 1 - (2 * p.x / lw) ** 2) ** 0.5 - 0.0015))
+               for p in top[::-1]]
+        lid_pts = lid + low[1:-1]
+        ct, st = math.cos(tilt), math.sin(tilt)
+        lid_pts = [Vector((ex + p.x * ct - p.y * st, EYE_Z + p.x * st + p.y * ct)) for p in lid_pts]
+        o = front(f"Mittens_lid_{tag}", lid_pts, 0.004, -0.1075, m["tabby"], coll, center=False,
+                  bevel=0.0)
+        face_parts.append((o, f"lid_{tag}"))
+        lid_info[tag] = (Vector((ex, EYE_Z)), tilt, lw, lh)
+        # brow: brown felt brush line above the eye
+        bp0 = (ex - s * 0.03, EYE_Z + 0.043)
+        bp1 = (ex + s * 0.03, EYE_Z + 0.052)
+        o = front(f"Mittens_brow_{tag}", fuzz(stroke(bp1, bp0, 0.011, -0.25 * s)), 0.004, fs,
+                  m["brown"], coll, center=False, bevel=0.001)
+        face_parts.append((o, f"brow_{tag}"))
 
-    face = geo.join(face_parts, "Mittens_face")
+    # ---------------- muzzle stack: cream base, cheek pads, chin, mouth, nose, whiskers
+    mb = catmull([(-0.078, 0.62), (-0.06, 0.66), (-0.028, 0.683), (0.0, 0.69), (0.028, 0.683),
+                  (0.06, 0.66), (0.078, 0.62), (0.06, 0.585), (0.025, 0.565), (-0.025, 0.565),
+                  (-0.06, 0.585)], 5, closed=True)
+    mb = pinked(resample(mb, 0.006), 0.0025, mask=lambda p: 1.0 if abs(p.x) > 0.05 else 0.0)
+    o = front("Mittens_muzzle_base", fuzz(mb), 0.016, fs, m["cream"], coll, center=False,
+              bevel=0.004)
+    face_parts.append((o, "muzzle"))
+    for s, tag in ((1, "L"), (-1, "R")):
+        pad = fuzz(ellipse2d(s * 0.029, 0.628, 0.035, 0.028, 32), 0.001, 80, seed=s)
+        o = front(f"Mittens_pad_{tag}", pad, 0.016, fs - 0.014, m["cream"], coll, center=False,
+                  bevel=0.005)
+        face_parts.append((o, f"pad_{tag}"))
+    o = front("Mittens_chin", fuzz(ellipse2d(0.0, 0.592, 0.026, 0.016, 28)), 0.014, fs - 0.012,
+              m["cream"], coll, center=False, bevel=0.004)
+    face_parts.append((o, "chin"))
+    o = front("Mittens_mouth_inside", ellipse2d(0.0, 0.601, 0.026, 0.01, 24), 0.004, fs - 0.012,
+              m["mouth_in"], coll, center=False, bevel=0.0)
+    face_parts.append((o, "mouth_in"))
+    my = fs - 0.0305
+    mouth_pts = [(-0.047, my, 0.612), (-0.03, my, 0.600), (-0.012, my, 0.602), (0.0, my, 0.609)]
+    o1 = mesh_tube("Mittens_mouth_R", mouth_pts, 0.0024, m["brown"], coll, segs=6)
+    o2 = mesh_tube("Mittens_mouth_L", [(-p[0], p[1], p[2]) for p in mouth_pts], 0.0024,
+                   m["brown"], coll, segs=6)
+    o3 = mesh_tube("Mittens_mouth_mid", [(0, my, 0.609), (0, my - 0.0005, 0.63),
+                                         (0, my - 0.001, 0.648)], 0.0022, m["brown"], coll,
+                   segs=6)
+    for o in (o1, o2, o3):
+        face_parts.append((o, "mouth"))
+    nose = catmull([(-0.025, 0.668), (0.0, 0.672), (0.025, 0.668), (0.006, 0.646), (0.0, 0.643),
+                    (-0.006, 0.646)], 5, closed=True)
+    o = front("Mittens_nose", nose, 0.014, fs - 0.026, m["pink"], coll, center=False,
+              bevel=0.005)
+    face_parts.append((o, "nose"))
+    for s, tag in ((1, "L"), (-1, "R")):
+        for i, (dz, dz2, fw) in enumerate(((0.012, 0.03, 0.0), (0.0, 0.004, 0.01), (-0.012, -0.028, 0.02))):
+            a = Vector((s * 0.05, fs - 0.03, 0.632 + dz))
+            b = Vector((s * 0.15, fs - 0.042 - fw, 0.638 + dz * 1.6 + dz2 * 0.4))
+            c = Vector((s * 0.27, fs - 0.055 - fw * 1.5, 0.632 + dz * 2 + dz2))
+            o = mesh_tube(f"Mittens_whisker_{tag}{i}", [a, b, c], [0.0018, 0.0014, 0.0008],
+                          m["whisker"], coll, segs=6)
+            face_parts.append((o, "whiskers"))
+
+    # join the face
+    for o, g in face_parts:
+        rig.group_all(o, g)
+    face = geo.join([o for o, g in face_parts], "Mittens_face")
     face.data.name = "Mittens_face"
-    face.data.transform(face.matrix_world)
-    face.matrix_world = Matrix.Identity(4)
-    face.rotation_mode = "XYZ"
-    _face_keys(face, eye_c)
+    _face_keys(face, lid_info)
+    face["shape_keys"] = SHAPE_KEYS
     put(face, "head")
 
-    # eyes: eyeball + pupil + catchlight, bound to eye bones
-    for side, tag in ((1, "L"), (-1, "R")):
-        ec = eye_c[tag]
-        put(geo.blob(f"Mittens_eyeball_{tag}", (EYE_R,) * 3, ec, mat=m["eye"], coll=coll,
-                     segs=32, rings=16), f"eye.{tag}")
-        pa = math.radians(-90 + side * 4)
-        put(sphere_patch(f"Mittens_pupil_{tag}", ec, EYE_R, pa, 0.0, 0.2, 0.52, m["pupil"],
-                         coll), f"eye.{tag}")
-        put(sphere_patch(f"Mittens_catchlight_{tag}", ec, EYE_R * 1.01, math.radians(-90 - 18),
-                         0.33, 0.12, 0.12, m["glint"], coll, n=4), f"eye.{tag}")
-        put(sphere_patch(f"Mittens_catchlight_small_{tag}", ec, EYE_R * 1.01,
-                         math.radians(-90 + 16), -0.25, 0.055, 0.055, m["glint"], coll, n=4),
-            f"eye.{tag}")
+    # ---------------- ears (perk on ear.L/R), pink inner felt, split pin at the root
+    ear_pts = {}
+    for s, tag in ((1, "L"), (-1, "R")):
+        base = Vector((s * 0.108, -0.086, 0.765))
+        q = (Quaternion(Z, s * math.radians(14)) @ Quaternion(Y, s * math.radians(20)) @
+             Quaternion(X, math.radians(-4)))
+        u, v, w = q @ X, q @ Z, q @ -Y
+        e = panel(f"Mittens_ear_{tag}", ear_outline(1.0), 0.022, base, u, v, m["tabby"], coll,
+                  center=True, out=w, bevel=0.006)
+        inner = [Vector((p.x * 0.62, p.y * 0.72 + 0.01)) for p in ear_outline(1.0)]
+        ei = panel(f"Mittens_ear_inner_{tag}", fuzz(inner, 0.001), 0.005, base + w * 0.011, u, v,
+                   m["pink"], coll, center=False, out=w, bevel=0.0015)
+        pn = pin(f"Mittens_pin_ear_{tag}", base + w * 0.012 - u * s * 0.033 + v * 0.012, w,
+                 0.009, coll)
+        for ob in (e, ei, pn):
+            put(ob, f"ear.{tag}")
+        ear_pts[tag] = (base, base + v * 0.13)
 
-    # whiskers (white nylon), three per side from the whisker pads
-    for side, tag in ((1, "L"), (-1, "R")):
-        for k, (dz, dy, droop) in enumerate([(0.022, 0.0, -0.004), (0.004, 0.012, -0.012),
-                                             (-0.014, 0.022, -0.022)]):
-            p0 = Vector((side * 0.06, pad_y - 0.012, pad_z + dz * 0.5))
-            p2 = Vector((side * 0.2, pad_y + 0.015 + dy, pad_z + dz * 2.2 + droop))
-            p1 = p0.lerp(p2, 0.5) + Vector((0, -0.01, 0.008))
-            put(mesh_tube(f"Mittens_whisker_{tag}{k + 1}", [p0, p1, p2], [0.0021, 0.0017,
-                                                                           0.0009],
-                          m["whisker"], coll, segs=6, subsurf=0), "head")
+    # ---------------- hard hat: contour-stacked dome, raised ridge, brim
+    hat_parts = []
+    a, b, c = 0.168, 0.158, 0.128
+    # dome: horizontal felt layers stacked like a terraced contour model
+    lay_t = 0.0205
+    for k in range(6):
+        zb = 0.011 + k * lay_t
+        sc = math.sqrt(max(0.05, 1 - ((zb + lay_t * 0.6) / (c + 0.008)) ** 2))
+        ring = fuzz(ellipse2d(0.0, 0.004, a * sc, b * sc, 56), 0.0012, 50, seed=k)
+        hat_parts.append(panel(f"Mittens_hat_dome_{k}", ring, lay_t + 0.004, (0, 0, zb), X, FWD,
+                               m["hat"], coll, center=False, out=Z, bevel=0.007))
+    ridge = [Vector((b * 0.97 * math.cos(t), (c + 0.02) * math.sin(t)))
+             for t in [math.pi * i / 24 for i in range(25)]]
+    hat_parts.append(side("Mittens_hat_ridge", ridge, 0.036, 0.0, m["hat"], coll, bevel=0.008))
+    brim = []
+    for i in range(64):
+        t = 2 * math.pi * i / 64
+        ry = 0.232 if math.sin(t) > 0 else 0.182      # longer peak at the front
+        brim.append(Vector((0.19 * math.cos(t), ry * math.sin(t))))
+    hat_parts.append(panel("Mittens_hat_brim", fuzz(brim, 0.0015), 0.016, (0, 0, 0.004), X, FWD,
+                           m["hat"], coll, center=True, bevel=0.006))
+    HM = Matrix.Translation(HAT_C) @ Matrix.Rotation(HAT_TILT, 4, "X")
+    for o in hat_parts:
+        o.matrix_world = HM @ o.matrix_world
+        put(o, "head")
 
-    # ---------------- hard hat (yellow felt), tilted back a touch
-    hat_m = Matrix.Translation((0, -0.012, HAT_BASE_Z)) @ Matrix.Rotation(HAT_TILT, 4, "X")
-    dome_prof = [(0.0, 0.168), (0.03, 0.166), (0.07, 0.152), (0.105, 0.125), (0.135, 0.085),
-                 (0.152, 0.042), (0.158, 0.0)]
-    dome = geo.lathe("Mittens_hat_dome", dome_prof, 40, mat=m["hat"], coll=coll,
-                     squash=(1.0, 1.1), subsurf=2)
-    dome.matrix_world = hat_m
-    put(dome, "head")
-    brim = geo.blob("Mittens_hat_brim", (0.205, 0.215, 0.011), mat=m["hat"], coll=coll,
-                    segs=40, rings=10,
-                    deform=lambda v: Vector((v.x, v.y - 0.16 * max(0.0, -v.y) ** 2, v.z)))
-    brim.matrix_world = hat_m @ Matrix.Translation((0, -0.018, 0.004))
-    put(brim, "head")
-    # ridge over the crown + two side ribs
-    def dome_r(z):
-        for (z0, r0), (z1, r1) in zip(dome_prof, dome_prof[1:]):
-            if z0 <= z <= z1:
-                return r0 + (r1 - r0) * (z - z0) / (z1 - z0)
-        return 0.0
+    # ---------------- scale the whole head group about the hat top (big cartoon head)
+    SM = (Matrix.Translation(HEAD_PIVOT) @ Matrix.Scale(HEAD_SCALE, 4) @
+          Matrix.Translation(-HEAD_PIVOT))
+    for name, bone in P.items():
+        if bone == "head" or bone.startswith(("eye.", "ear.")):
+            ob = bpy.data.objects[name]
+            ob.matrix_world = SM @ ob.matrix_world
+    for tag in eye_c:
+        eye_c[tag] = SM @ eye_c[tag]
+        ear_pts[tag] = tuple(SM @ p for p in ear_pts[tag])
 
-    for k, xo in enumerate((0.0, 0.06, -0.06)):
-        ztop = 0.155 if k == 0 else 0.13
-        zs = [0.02 + (ztop - 0.02) * i / 6 for i in range(7)]
-        prof_pts = []
-        for sgn, seq in ((-1, zs), (1, list(reversed(zs))[1:])):
-            for z in seq:
-                y = math.sqrt(max(dome_r(z) ** 2 - xo ** 2, 0.0)) * 1.1
-                if z >= ztop - 1e-6:
-                    y = 0.0
-                prof_pts.append(Vector((xo, sgn * y, z + 0.003)))
-        put(mesh_tube(f"Mittens_hat_ridge_{k + 1}", [hat_m @ p for p in prof_pts],
-                      0.011 if k == 0 else 0.007, m["hat"], coll, segs=8, flat=0.6), "head")
-
-    # ---------------- ears through felt grommets in the hat
-    for side, tag in ((1, "L"), (-1, "R")):
-        base = hat_m @ Vector((side * 0.098, 0.004, 0.095))
-        rot = Matrix.Rotation(side * -0.3, 4, "Z") @ Matrix.Rotation(side * 0.5, 4, "Y") \
-            @ Matrix.Rotation(-0.1, 4, "X")
-        ear = geo.lathe(f"Mittens_ear_{tag}", [(-0.02, 0.05), (0.0, 0.05), (0.035, 0.042),
-                                              (0.07, 0.024), (0.098, 0.006), (0.104, 0.0)],
-                        20, mat=m["tabby"], coll=coll, squash=(1.0, 0.42), subsurf=1)
-        ear.matrix_world = Matrix.Translation(base) @ rot
-        put(ear, f"ear.{tag}")
-        inner = geo.lathe(f"Mittens_ear_inner_{tag}", [(0.0, 0.034), (0.03, 0.028),
-                                                      (0.06, 0.015), (0.08, 0.0)],
-                          16, mat=m["pink"], coll=coll, squash=(1.0, 0.25), subsurf=1)
-        inner.matrix_world = Matrix.Translation(base) @ rot @ Matrix.Translation((0, -0.013, 0.004))
-        put(inner, f"ear.{tag}")
-        tuft = geo.blob(f"Mittens_ear_tuft_{tag}", (0.016, 0.008, 0.024), mat=m["cream"],
-                        coll=coll)
-        tuft.matrix_world = Matrix.Translation(base) @ rot @ Matrix.Translation((0, -0.017, 0.01))
-        put(tuft, f"ear.{tag}")
-        grom = geo.lathe(f"Mittens_hat_grommet_{tag}", [(-0.006, 0.05), (0.0, 0.058),
-                                                       (0.008, 0.056), (0.012, 0.047)],
-                         24, mat=m["hat"], coll=coll, squash=(1.0, 0.55), subsurf=1)
-        grom.matrix_world = Matrix.Translation(base) @ rot
-        put(grom, "head")
-        pin = geo.split_pin(f"Mittens_pin_ear_{tag}",
-                            (Matrix.Translation(base) @ rot) @ Vector((0, -0.021, 0.012)),
-                            (rot @ Vector((0, -1, 0.1))), r=0.0085, coll=coll)
-        put(pin, f"ear.{tag}")
-
-    # ---------------- arms
+    # ================================================================ arms
     arm_pts = {}
-    for side, tag in ((1, "L"), (-1, "R")):
-        sh = SHOULDER.copy()
-        sh.x *= side
-        wr = wrist_point(side)
-        el = solve_elbow(sh, wr, UPPER_ARM_LEN, FOREARM_LEN, Vector((side * 0.6, 0.0, -0.8)))
-        g = grip_point(side)
+    for s, tag in ((1, "L"), (-1, "R")):
+        sh = Vector((s * SHOULDER.x, SHOULDER.y, SHOULDER.z))
+        g = grip_point(s)
+        wr = wrist_point(s)
+        el = solve_elbow(sh, wr, UPPER_ARM_LEN, FOREARM_LEN, Vector((s * 0.35, 0.1, -1.0)))
         arm_pts[tag] = (sh, el, wr, g)
-        ua = put(lumpy(geo.capsule(f"Mittens_upper_arm_{tag}", sh, el, 0.052, 0.043,
-                                   mat=m["tabby"], coll=coll), 0.002, seed=3 + side),
-                 f"upper_arm.{tag}")
-        put(lumpy(geo.capsule(f"Mittens_forearm_{tag}", el, wr, 0.043, 0.037, mat=m["tabby"],
-                              coll=coll), 0.002, seed=5 + side), f"forearm.{tag}")
-        out = Vector((side, 0, 0.6))
-        for k, t in enumerate((0.42, 0.7)):
-            put(limb_band(f"Mittens_stripe_upper_arm_{tag}{k + 1}", sh, el, 0.052, 0.043, t,
-                          0.02, out, m["stripe"], coll, tilt=0.006 * side), f"upper_arm.{tag}")
-        for k, t in enumerate((0.3, 0.62)):
-            put(limb_band(f"Mittens_stripe_forearm_{tag}{k + 1}", el, wr, 0.043, 0.037, t,
-                          0.018, Vector((side * 0.5, 0, 1)), m["stripe"], coll,
-                          tilt=0.005), f"forearm.{tag}")
-        # paw (cream "mitten") wrapped over the rim, with three knuckle bumps
-        c, n, up = wheel_frame()
-        fwd = (g - wr).normalized()
-        q = fwd.to_track_quat("Y", "Z")
-        paw = geo.blob(f"Mittens_paw_{tag}", (0.046, 0.058, 0.04), g + n * 0.012 - fwd * 0.012,
-                       mat=m["cream"], coll=coll)
-        paw.rotation_mode = "QUATERNION"
-        paw.rotation_quaternion = q
-        put(lumpy(paw, 0.002, seed=7 + side), f"hand.{tag}")
-        rim_t = Vector((side, 0, 0)).cross(n).normalized()
-        tang = (up * math.cos(GRIP_ANGLE) - Vector((side, 0, 0)) * math.sin(GRIP_ANGLE))
-        for k in (-1, 0, 1):
-            kp = g + n * 0.03 + fwd * 0.022 + tang.normalized() * 0.022 * k
-            put(geo.blob(f"Mittens_paw_knuckle_{tag}{k + 2}", (0.017, 0.02, 0.016), kp,
-                         mat=m["cream"], coll=coll), f"hand.{tag}")
-        # fingers curling under the rim
-        put(geo.blob(f"Mittens_paw_fingers_{tag}", (0.04, 0.02, 0.018),
-                     g - n * 0.022 + fwd * 0.004, rot=q.to_euler(), mat=m["cream"],
-                     coll=coll), f"hand.{tag}")
-        # pins: shoulder + elbow (outside faces)
-        put(geo.split_pin(f"Mittens_pin_shoulder_{tag}", sh + Vector((side * 0.05, -0.004, 0.01)),
-                          (side, -0.1, 0.25), r=0.014, coll=coll), f"upper_arm.{tag}")
-        ax = (wr - sh).normalized()
-        outw = (Vector((side, 0, -0.5)) - ax * Vector((side, 0, -0.5)).dot(ax)).normalized()
-        put(geo.split_pin(f"Mittens_pin_elbow_{tag}", el + outw * 0.044, outw, r=0.012,
-                          coll=coll), f"forearm.{tag}")
+        wout = Vector((s, 0, 0))
+        fu = Frame(sh, el, wout, up_hint=Vector((0, 1, 0.3)))
+        up_arm = fpanel(f"Mittens_upper_arm_{tag}", fu, fuzz(limb2d(fu.L, 0.043, 0.035)), 0.034,
+                        m["tabby"], coll, bevel=0.007)
+        put(up_arm, f"upper_arm.{tag}")
+        for i, (al, w) in enumerate(((0.1, 0.028), (0.19, 0.025))):
+            st = stroke((al, 0.046), (al - 0.028, -0.012), w, 0.1)
+            put(fpanel(f"Mittens_stripe_uarm_{tag}{i}", fu, fuzz(st), 0.004, m["stripe"], coll,
+                       lift=0.017, center=False, bevel=0.001), f"upper_arm.{tag}")
+        # shoulder disc + pin
+        disc = fpanel(f"Mittens_shoulder_disc_{tag}", fu, fuzz(ellipse2d(0.0, 0.0, 0.068, 0.068, 48),
+                                                              0.0015), 0.02, m["tabby"], coll,
+                      lift=0.027, bevel=0.006)
+        put(disc, f"upper_arm.{tag}")
+        put(pin(f"Mittens_pin_shoulder_{tag}", fu.a + fu.w * 0.038, fu.w, 0.016, coll),
+            f"upper_arm.{tag}")
+        # forearm, layered outside the upper arm at the elbow
+        ff = Frame(el, wr, wout, up_hint=Vector((0, 1, 0.3)))
+        fa = fpanel(f"Mittens_forearm_{tag}", ff, fuzz(limb2d(ff.L, 0.036, 0.031)), 0.03,
+                    m["tabby"], coll, lift=0.022, bevel=0.007)
+        put(fa, f"forearm.{tag}")
+        for i, al in enumerate((0.08, 0.16)):
+            st = stroke((al, 0.038), (al - 0.02, -0.01), 0.024, 0.1)
+            put(fpanel(f"Mittens_stripe_farm_{tag}{i}", ff, fuzz(st), 0.004, m["stripe"], coll,
+                       lift=0.037, center=False, bevel=0.001), f"forearm.{tag}")
+        put(pin(f"Mittens_pin_elbow_{tag}", ff.a + ff.w * 0.038, ff.w, 0.012, coll),
+            f"forearm.{tag}")
+        # cream paw gripping the rim (straddles it), toe lines on the outer face
+        fh = Frame(wr, g, wout, up_hint=Vector((0, 1, 0.3)))
+        paw = limb2d(fh.L + 0.03, 0.036, 0.034)
+        paw = [Vector((q.x - 0.01, q.y)) for q in paw]
+        put(fpanel(f"Mittens_paw_{tag}", fh, fuzz(paw), 0.05, m["cream"], coll, lift=0.012,
+                   bevel=0.01), f"hand.{tag}")
+        for i, acr in enumerate((-0.012, 0.0, 0.012)):
+            ln = limb2d(0.022, 0.0022, 0.0015, 4)
+            ln = [Vector((fh.L + 0.012 + q.x, acr + q.y)) for q in ln]
+            put(fpanel(f"Mittens_paw_toe_{tag}{i}", fh, ln, 0.003, m["brown"], coll,
+                       lift=0.037, center=False, bevel=0.0), f"hand.{tag}")
 
-    # ---------------- legs
+    # ================================================================ legs
     leg_pts = {}
-    for side, tag in ((1, "L"), (-1, "R")):
-        hp, kn, an, to = (Vector((side * v.x, v.y, v.z)) for v in (HIP, KNEE, ANKLE, TOE))
+    for s, tag in ((1, "L"), (-1, "R")):
+        hp = Vector((s * HIP.x, HIP.y, HIP.z))
+        kn = Vector((s * KNEE.x, KNEE.y, KNEE.z))
+        an = Vector((s * ANKLE.x, ANKLE.y, ANKLE.z))
+        to = Vector((s * TOE.x, TOE.y, TOE.z))
         leg_pts[tag] = (hp, kn, an, to)
-        put(lumpy(geo.capsule(f"Mittens_thigh_{tag}", hp, kn, 0.074, 0.058, mat=m["tabby"],
-                              coll=coll), 0.0025, seed=11 + side), f"thigh.{tag}")
-        put(lumpy(geo.capsule(f"Mittens_shin_{tag}", kn, an, 0.052, 0.043, mat=m["tabby"],
-                              coll=coll), 0.002, seed=13 + side), f"shin.{tag}")
-        for k, t in enumerate((0.5, 0.78)):
-            put(limb_band(f"Mittens_stripe_thigh_{tag}{k + 1}", hp, kn, 0.074, 0.058, t, 0.022,
-                          Vector((side * 0.4, 0, 1)), m["stripe"], coll, tilt=-0.008),
-                f"thigh.{tag}")
-        for k, t in enumerate((0.35, 0.65)):
-            put(limb_band(f"Mittens_stripe_shin_{tag}{k + 1}", kn, an, 0.052, 0.043, t, 0.018,
-                          Vector((side * 0.3, -1, 0)), m["stripe"], coll, tilt=0.005),
-                f"shin.{tag}")
-        fd = (to - an).normalized()
-        foot = geo.blob(f"Mittens_foot_{tag}", (0.056, 0.078, 0.042), an.lerp(to, 0.55) +
-                        Vector((0, 0, -0.01)), mat=m["cream"], coll=coll)
-        foot.rotation_mode = "QUATERNION"
-        foot.rotation_quaternion = fd.to_track_quat("Y", "Z")
-        put(lumpy(foot, 0.002, seed=17 + side), f"foot.{tag}")
-        for k in (-1, 0, 1):
-            tp = to + Vector((k * 0.026, -0.012, -0.004 - abs(k) * 0.004))
-            put(geo.blob(f"Mittens_toe_{tag}{k + 2}", (0.018, 0.02, 0.017), tp, mat=m["cream"],
-                         coll=coll), f"foot.{tag}")
-        # pins: hip (outside of thigh root) and knee (outside)
-        put(geo.split_pin(f"Mittens_pin_hip_{tag}", hp + Vector((side * 0.073, -0.02, 0.012)),
-                          (side, -0.15, 0.2), r=0.015, coll=coll), f"thigh.{tag}")
-        put(geo.split_pin(f"Mittens_pin_knee_{tag}", kn + Vector((side * 0.054, -0.004, 0.01)),
-                          (side, -0.2, 0.25), r=0.013, coll=coll), f"shin.{tag}")
+        wout = Vector((s, 0, 0))
+        ft = Frame(hp, kn, wout)
+        th = fpanel(f"Mittens_thigh_{tag}", ft, fuzz(limb2d(ft.L, 0.075, 0.052)), 0.05,
+                    m["tabby"], coll, bevel=0.009)
+        put(th, f"thigh.{tag}")
+        # big haunch disc with its pin (on the thigh bone so it swings with the leg)
+        hd_c = Vector((s * 0.11, 0.035, 0.115))
+        hf = Frame(hd_c, hd_c + FWD, wout)
+        put(fpanel(f"Mittens_haunch_disc_{tag}", hf, fuzz(ellipse2d(0, 0, 0.113, 0.113, 64), 0.002),
+                   0.03, m["tabby"], coll, lift=0.04, bevel=0.008), f"thigh.{tag}")
+        for i, (p0, p1, w) in enumerate((((-0.02, 0.1), (0.035, 0.045), 0.03),
+                                          ((-0.07, 0.075), (-0.005, 0.02), 0.032),
+                                          ((-0.1, 0.03), (-0.03, -0.01), 0.028))):
+            put(fpanel(f"Mittens_stripe_haunch_{tag}{i}", hf, fuzz(stroke(p0, p1, w, 0.08)), 0.004,
+                       m["stripe"], coll, lift=0.055, center=False, bevel=0.001), f"thigh.{tag}")
+        put(pin(f"Mittens_pin_hip_{tag}", hd_c + hf.w * 0.056, hf.w, 0.017, coll), f"thigh.{tag}")
+        for i, (al, r) in enumerate(((0.19, 0.057), (0.25, 0.052))):
+            st = stroke((al, r), (al - 0.02, 0.0), 0.026, 0.1)
+            put(fpanel(f"Mittens_stripe_thigh_{tag}{i}", ft, fuzz(st), 0.004, m["stripe"], coll,
+                       lift=0.025, center=False, bevel=0.001), f"thigh.{tag}")
+        # shin (outer layer), knee pin
+        fs_ = Frame(kn, an, wout, up_hint=FWD)
+        sh_ = fpanel(f"Mittens_shin_{tag}", fs_, fuzz(limb2d(fs_.L, 0.045, 0.036)), 0.048,
+                     m["tabby"], coll, lift=0.03, bevel=0.007)
+        put(sh_, f"shin.{tag}")
+        for i, al in enumerate((0.1, 0.19, 0.28)):
+            st = stroke((al, -0.036), (al + 0.018, 0.012), 0.024, 0.1)
+            put(fpanel(f"Mittens_stripe_shin_{tag}{i}", fs_, fuzz(st), 0.004, m["stripe"], coll,
+                       lift=0.054, center=False, bevel=0.001), f"shin.{tag}")
+        put(pin(f"Mittens_pin_knee_{tag}", kn + fs_.w * 0.055, fs_.w, 0.013, coll), f"shin.{tag}")
+        # cream paw on the floor (side-profile loaf), toe lines
+        fz = -0.45
+        paw = catmull([(0.335, fz), (0.43, fz), (0.505, fz + 0.003), (0.52, fz + 0.03),
+                       (0.49, fz + 0.062), (0.41, fz + 0.075), (0.35, fz + 0.1), (0.325, fz + 0.06)],
+                      5, closed=True)
+        put(side(f"Mittens_foot_{tag}", fuzz(paw), 0.068, s * ANKLE.x, m["cream"], coll,
+                 bevel=0.012), f"foot.{tag}")
+        for i, fw in enumerate((0.455, 0.48)):
+            ln = limb2d(0.028, 0.0022, 0.0016, 4)
+            ln = [Vector((fw + q.y, fz + 0.006 + q.x)) for q in ln]
+            put(side(f"Mittens_foot_toe_{tag}{i}", ln, 0.003, s * (ANKLE.x + 0.034), m["brown"],
+                     coll, s=s, center=False, bevel=0.0), f"foot.{tag}")
 
-    # neck pin (front, under the chin) and tail-base pin
-    put(geo.split_pin("Mittens_pin_neck", (0, -0.088, 0.505), (0, -1, 0.15), r=0.012,
-                      coll=coll), "neck")
-
-    # ---------------- tail: five stuffed segments with dark rings
-    radii = [0.037, 0.034, 0.031, 0.028, 0.026, 0.023]
+    # ================================================================ tail (5 felt segments)
     for k in range(5):
-        a, b = TAIL_PTS[k], TAIL_PTS[k + 1]
-        put(lumpy(geo.capsule(f"Mittens_tail_{k + 1:02d}", a, b, radii[k], radii[k + 1],
-                              mat=m["tabby"], coll=coll), 0.0015, seed=21 + k),
-            f"tail.{k + 1:02d}")
-        put(limb_band(f"Mittens_stripe_tail_{k + 1:02d}", a, b, radii[k], radii[k + 1], 0.55,
-                      0.024, Vector((0, 0, 1)), m["stripe"], coll, span=2 * math.pi,
-                      tilt=0.004), f"tail.{k + 1:02d}")
-    put(geo.split_pin("Mittens_pin_tail", TAIL_PTS[0] + Vector((0.035, 0.035, 0.035)),
-                      (0.35, 0.6, 0.7), r=0.012, coll=coll), "tail.01")
+        a_, b_ = TAIL_PTS[k], TAIL_PTS[k + 1]
+        t = (b_ - a_).normalized()
+        hint = Vector((0, 0, 1)) if abs(t.z) < 0.35 else Vector((-1, 0.2, 0))
+        fr = Frame(a_, b_, hint)
+        r0 = 0.054 - 0.003 * k
+        r1 = 0.054 - 0.003 * (k + 1)
+        seg = fpanel(f"Mittens_tail_{k + 1}", fr, fuzz(limb2d(fr.L + 0.02, r0, r1), seed=k), 0.03,
+                     m["tabby"], coll, bevel=0.007)
+        put(seg, f"tail.{k + 1:02d}")
+        if k < 4:
+            for side_ in (1, -1):
+                st = stroke((fr.L * 0.45, r0 * 1.02), (fr.L * 0.5, -r0 * 0.4), 0.028, 0.0)
+                put(fpanel(f"Mittens_stripe_tail_{k}{'a' if side_ > 0 else 'b'}", fr, fuzz(st),
+                           0.004, m["stripe"], coll, lift=side_ * 0.015, center=False, bevel=0.001,
+                           face=side_), f"tail.{k + 1:02d}")
+        else:
+            # cream tail tip wrapping both faces, jagged boundary
+            tip = limb2d(fr.L * 0.6, r0 * 1.05, r1 * 1.05)
+            tip = [Vector((q.x + fr.L * 0.44, q.y)) for q in tip]
+            tip = pinked(resample(tip, 0.006), 0.003, mask=lambda p: 1.0 if p.x < fr.L * 0.5 else 0)
+            put(fpanel("Mittens_tail_tip", fr, fuzz(tip), 0.036, m["cream"], coll, bevel=0.008),
+                "tail.05")
+    tb = TAIL_PTS[0]
+    put(pin("Mittens_pin_tail", tb + Vector((0, 0.0, 0.017)), (0, 0, 1), 0.012, coll), "tail.01")
 
-    # ---------------- seat belt (lap belt, safety rule): webbing + buckle
-    bpts = [Vector(p) for p in [(0.255, 0.11, -0.01), (0.2, 0.0, 0.1), (0.13, -0.1, 0.152),
-                                (0.0, -0.132, 0.162), (-0.13, -0.1, 0.152), (-0.2, 0.0, 0.1),
-                                (-0.255, 0.11, -0.01)]]
-    path = catmull(bpts, 10)
-    grid = []
-    for i, p in enumerate(path):
-        T = (path[min(i + 1, len(path) - 1)] - path[max(i - 1, 0)]).normalized()
-        nrm = (p - Vector((0, 0.04, 0.03)))
-        nrm.z *= 0.6
-        nrm = (nrm - T * nrm.dot(T)).normalized()
-        acr = nrm.cross(T).normalized()
-        grid.append([(p + acr * 0.024 * t, nrm) for t in (-1, 0, 1)])
-    put(strip_from_grid("Mittens_seatbelt", grid, 0.004, 0.002, m["belt"], coll), "hips")
-    bc = Vector((0.0, -0.137, 0.163))
-    bn = Vector((0, -0.92, 0.38)).normalized()
-    bq = bn.to_track_quat("Z", "Y")
-    buckle = geo.box("Mittens_seatbelt_buckle", (0.072, 0.052, 0.012), mat=m["buckle"],
-                     coll=coll, bevel=0.004)
-    buckle.rotation_mode = "QUATERNION"
-    buckle.rotation_quaternion = bq
-    buckle.location = bc + bn * 0.006
+    # ================================================================ seatbelt (lap belt + buckle)
+    belt_pts = [(-0.255, 0.11, 0.005), (-0.19, 0.06, 0.10), (-0.16, -0.03, 0.19),
+                (-0.1, -0.115, 0.19), (0.0, -0.137, 0.185), (0.1, -0.115, 0.19),
+                (0.16, -0.03, 0.19), (0.19, 0.06, 0.10), (0.255, 0.11, 0.005)]
+    belt = ribbon("Mittens_seatbelt", belt_pts, 0.05, 0.007,
+                  lambda p: (p.x, p.y + 0.02, 0.15), m["belt"], coll)
+    put(belt, "hips")
+    bc = Vector((0.0, -0.142, 0.186))
+    buckle = geo.box("Mittens_seatbelt_buckle", (0.075, 0.014, 0.058), bc, mat=m["buckle"],
+                     coll=coll, bevel=0.005)
     put(buckle, "hips")
-    btn = geo.box("Mittens_seatbelt_button", (0.03, 0.02, 0.006), mat=m["button"], coll=coll,
-                  bevel=0.002)
-    btn.rotation_mode = "QUATERNION"
-    btn.rotation_quaternion = bq
-    btn.location = bc + bn * 0.013
+    btn = geo.box("Mittens_seatbelt_button", (0.032, 0.008, 0.022), bc + Vector((0, -0.009, 0)),
+                  mat=m["button"], coll=coll, bevel=0.003)
     put(btn, "hips")
-    for side, tag in ((1, "L"), (-1, "R")):
+    for s, tag in ((1, "L"), (-1, "R")):
         # metal belt-end tongues; they meet FL02_belt_anchor_* at root (+-0.26, 0.11, -0.02)
-        anc = geo.box(f"Mittens_seatbelt_end_{tag}", (0.018, 0.05, 0.035),
-                      (side * 0.255, 0.11, -0.012), mat=m["buckle"], coll=coll, bevel=0.004)
-        put(anc, "hips")
+        put(geo.box(f"Mittens_seatbelt_end_{tag}", (0.018, 0.05, 0.035),
+                    (s * 0.255, 0.11, -0.005), mat=m["buckle"], coll=coll, bevel=0.004), "hips")
 
-    # ---------------- rig
-    arm = _build_rig(coll, arm_pts, leg_pts, eye_c)
+    # ================================================================ rig
+    arm = _build_rig(coll, arm_pts, leg_pts, eye_c, ear_pts)
     geo.parent(arm, root)
+    _solve_poles(arm)          # IK must reproduce the rest pose BEFORE pieces are bound
     for name, bone in P.items():
         rig.attach(bpy.data.objects[name], arm, bone)
 
-    # ---------------- turntable-only driving mock (tt_only=True)
-    seat, wheel = _tt_mock(coll, m)
-    for o in (seat, wheel):
+    # ================================================================ turntable-only mock
+    for o in _tt_mock(coll, m):
         o["tt_only"] = True
         geo.parent(o, root)
 
     root["tt_root_z"] = TT_ROOT_Z
     root["fl02_seat_point"] = FL02_SEAT_POINT
-    root["note"] = ("Root = seat-contact point. Turntable: root z=0.45 so the TT seat mock "
-                    "stands on the floor. In FL-02 put root at fl02_seat_point and hide "
-                    "tt_only objects.")
+    root["shape_keys"] = SHAPE_KEYS
+    root["note"] = ("Root = seat-contact point (z=0 seat top). Turntable: root z=0.45 so the "
+                    "tt_only seat/floor/wheel mock stands on the floor. In FL-02 put root at "
+                    "fl02_seat_point (0, 0.25, 1.0) and hide/delete tt_only objects.")
     root.location = (0, 0, TT_ROOT_Z)
     bpy.context.view_layer.update()
     return root
@@ -765,60 +961,71 @@ def build(coll):
 
 # ------------------------------------------------------------------ face shape keys
 
-def _face_keys(face, eye_c):
-    from mathutils import Vector as V
-    rot, sc = rig.rotate_about, rig.scale_about
-    mz, my = 0.586, -0.1755
+def _face_keys(face, lid_info):
+    V = Vector
+
+    def lid_fn(tag, k, mode="close"):
+        c, tilt, lw, lh = lid_info[tag]
+        ct, st = math.cos(-tilt), math.sin(-tilt)
+
+        def f(co):
+            rx = (co.x - c.x) * ct - (co.z - c.y) * st
+            rz = (co.x - c.x) * st + (co.z - c.y) * ct
+            t = max(0.0, 1 - (2 * rx / lw) ** 2)
+            top = lh / 2 * t ** 0.65
+            if rz > top - 0.0012:
+                return co
+            if mode == "close":
+                tgt = -lh / 2 * 0.95 * t ** 0.9
+            else:  # widen: pull the lid edge up toward the top arc
+                tgt = top - 0.0015
+            rz2 = rz + (tgt - rz) * k
+            ct2, st2 = math.cos(tilt), math.sin(tilt)
+            return V((c.x + rx * ct2 - rz2 * st2, co.y, c.y + rx * st2 + rz2 * ct2))
+        return f
 
     def smile_mouth(co):
-        k = min(1.0, abs(co.x) / 0.04)
-        return co + V((co.x * 0.12, 0.004 * k, 0.012 * k * k))
-
-    def lid_rot(tag, ang):
-        return rot(eye_c[tag], (1, 0, 0), math.radians(ang))
+        k = min(1.0, abs(co.x) / 0.045)
+        return co + V((co.x * 0.1, 0.0, 0.011 * k * k))
 
     rig.shape_key(face, "smile", [
         ("mouth", smile_mouth),
-        ("pad_L", lambda co: co + V((0.003, -0.002, 0.006))),
-        ("pad_R", lambda co: co + V((-0.003, -0.002, 0.006))),
-        ("chin", lambda co: co + V((0, 0, 0.004))),
-        ("lid_L", lid_rot("L", 14)), ("lid_R", lid_rot("R", 14)),
+        ("pad_L", lambda co: co + V((0.002, 0, 0.005))),
+        ("pad_R", lambda co: co + V((-0.002, 0, 0.005))),
+        ("chin", lambda co: co + V((0, 0, 0.003))),
+        ("lid_L", lid_fn("L", 0.22)), ("lid_R", lid_fn("R", 0.22)),
     ])
     rig.shape_key(face, "mouth_open", [
-        ("chin", lambda co: co + V((0, 0.004, -0.026))),
-        ("mouth", lambda co: co + V((0, 0.002, -0.006 * (1 - min(1, abs(co.x) / 0.04))))),
-        ("mouth_in", lambda co: V((co.x * 1.05, co.y - 0.012,
-                                   mz - 0.018 + (co.z - (mz - 0.006)) * 1.25))),
-        ("tongue", lambda co: co + V((0, -0.012, -0.022))),
+        ("chin", lambda co: co + V((0, -0.002, -0.026))),
+        ("mouth", lambda co: co + V((0, 0, -0.004 * (1 - min(1, abs(co.x) / 0.045))))),
+        ("mouth_in", lambda co: V((co.x * 1.1, co.y, 0.601 - 0.013 + (co.z - 0.601) * 2.6))),
         ("pad_L", lambda co: co + V((0.002, 0, 0.003))),
         ("pad_R", lambda co: co + V((-0.002, 0, 0.003))),
     ])
     rig.shape_key(face, "mouth_o", [
-        ("chin", lambda co: co + V((0, 0.002, -0.018))),
-        ("mouth", lambda co: co + V((-co.x * 0.4, 0.004, -0.008 + 0.004 * abs(co.x) / 0.04))),
-        ("mouth_in", lambda co: V((co.x * 0.55, co.y - 0.014,
-                                   mz - 0.016 + (co.z - (mz - 0.006)) * 1.2))),
-        ("tongue", lambda co: co + V((0, -0.006, -0.016))),
-        ("pad_L", lambda co: co + V((-0.004, 0, 0))),
-        ("pad_R", lambda co: co + V((0.004, 0, 0))),
+        ("chin", lambda co: co + V((0, -0.002, -0.018))),
+        ("mouth", lambda co: co + V((-co.x * 0.35, 0, -0.004 + 0.004 * abs(co.x) / 0.045))),
+        ("mouth_in", lambda co: V((co.x * 0.6, co.y, 0.601 - 0.01 + (co.z - 0.601) * 2.4))),
+        ("pad_L", lambda co: co + V((-0.005, 0, 0))),
+        ("pad_R", lambda co: co + V((0.005, 0, 0))),
     ])
-    rig.shape_key(face, "blink", [("lid_L", lid_rot("L", 118)), ("lid_R", lid_rot("R", 118))])
+    rig.shape_key(face, "blink", [("lid_L", lid_fn("L", 1.0)), ("lid_R", lid_fn("R", 1.0))])
     rig.shape_key(face, "wink", [
-        ("lid_L", lid_rot("L", 118)),
-        ("pad_L", lambda co: co + V((0, 0, 0.006))),
-        ("mouth", lambda co: co + V((0, 0, 0.01 * max(0.0, co.x) / 0.04))),
-        ("brow_L", lambda co: co + V((0, 0, -0.006))),
+        ("lid_L", lid_fn("L", 1.0)),
+        ("pad_L", lambda co: co + V((0, 0, 0.005))),
+        ("mouth", lambda co: co + V((0, 0, 0.01 * max(0.0, co.x) / 0.045))),
+        ("brow_L", lambda co: co + V((0, 0, -0.005))),
     ])
     rig.shape_key(face, "surprised_brows", [
-        ("brow_L", lambda co: co + V((0.002, -0.002, 0.02))),
-        ("brow_R", lambda co: co + V((-0.002, -0.002, 0.02))),
-        ("lid_L", lid_rot("L", -16)), ("lid_R", lid_rot("R", -16)),
+        ("brow_L", lambda co: co + V((0, 0, 0.016))),
+        ("brow_R", lambda co: co + V((0, 0, 0.016))),
+        ("lid_L", lid_fn("L", 0.8, "widen")), ("lid_R", lid_fn("R", 0.8, "widen")),
     ])
 
 
 # ------------------------------------------------------------------ rig
 
-def _build_rig(coll, arm_pts, leg_pts, eye_c):
+def _build_rig(coll, arm_pts, leg_pts, eye_c, ear_pts):
     B = []
 
     def b(name, head, tail, parent=None, connect=False, deform=True, roll=0.0):
@@ -826,17 +1033,14 @@ def _build_rig(coll, arm_pts, leg_pts, eye_c):
                       connect=connect, deform=deform, roll=roll))
 
     b("root", (0, 0, 0), (0, 0.25, 0), deform=False)
-    b("hips", (0, 0.03, 0.06), (0, 0.03, 0.17), "root")
-    b("spine.01", (0, 0.03, 0.17), (0, 0.025, 0.27), "hips", True)
-    b("spine.02", (0, 0.025, 0.27), (0, 0.015, 0.37), "spine.01", True)
-    b("spine.03", (0, 0.015, 0.37), (0, 0.0, 0.47), "spine.02", True)
-    b("neck", (0, 0.0, 0.47), (0, -0.01, 0.54), "spine.03", True)
-    b("head", (0, -0.01, 0.54), (0, -0.01, 0.84), "neck", True)
+    b("hips", (0, 0.02, 0.04), (0, 0.02, 0.16), "root")
+    b("spine.01", (0, 0.02, 0.16), (0, 0.015, 0.27), "hips", True)
+    b("spine.02", (0, 0.015, 0.27), (0, 0.005, 0.38), "spine.01", True)
+    b("spine.03", (0, 0.005, 0.38), (0, 0.0, 0.50), "spine.02", True)
+    b("neck", (0, 0.0, 0.50), (0, 0.0, 0.565), "spine.03", True)
+    b("head", (0, 0.0, 0.565), (0, 0.0, 0.84), "neck", True)
     for tag in ("L", "R"):
-        side = 1 if tag == "L" else -1
-        ear = bpy.data.objects[f"Mittens_ear_{tag}"]
-        base = ear.matrix_world.translation
-        tip = ear.matrix_world @ Vector((0, 0, 0.104))
+        base, tip = ear_pts[tag]
         b(f"ear.{tag}", base, tip, "head")
         ec = eye_c[tag]
         b(f"eye.{tag}", ec, ec + Vector((0, -0.06, 0)), "head")
@@ -867,83 +1071,119 @@ def _build_rig(coll, arm_pts, leg_pts, eye_c):
     arm = rig.armature("Mittens_rig", B, coll)
     arm.data.name = "Mittens_rig"
     for tag in ("L", "R"):
-        rig.add_ik(arm, f"forearm.{tag}", f"IK_hand.{tag}", 2, f"pole_hand.{tag}",
-                   _POLE_ANGLE_ARM.get(tag, 0.0))
-        rig.add_ik(arm, f"shin.{tag}", f"IK_foot.{tag}", 2, f"pole_foot.{tag}",
-                   _POLE_ANGLE_LEG.get(tag, 0.0))
+        rig.add_ik(arm, f"forearm.{tag}", f"IK_hand.{tag}", 2, f"pole_hand.{tag}", 0.0)
+        rig.add_ik(arm, f"shin.{tag}", f"IK_foot.{tag}", 2, f"pole_foot.{tag}", 0.0)
         for bone, ctl in ((f"hand.{tag}", f"IK_hand.{tag}"), (f"foot.{tag}", f"IK_foot.{tag}")):
             c = arm.pose.bones[bone].constraints.new("COPY_ROTATION")
             c.target = arm
             c.subtarget = ctl
     arm["shape_keys"] = SHAPE_KEYS
     arm["face_object"] = "Mittens_face"
-    arm["notes"] = ("Puppet rig: pieces bone-parented. Hands/feet IK (IK_hand.*, IK_foot.*, "
-                    "pole_hand.*, pole_foot.*). Eyes turn on eye.L/R. Face keys on "
-                    "Mittens_face.")
+    arm["notes"] = ("Puppet rig: felt pieces bone-parented. Hands/feet IK (IK_hand.*, IK_foot.*, "
+                    "pole_hand.*, pole_foot.*). Eyes turn on eye.L/R, ears perk on ear.L/R. "
+                    "Face keys on Mittens_face.")
     return arm
 
 
-# Solved numerically so the IK leaves the rest pose untouched (< 1 mm drift).
-_POLE_ANGLE_ARM = {"L": math.radians(139), "R": math.radians(41)}
-_POLE_ANGLE_LEG = {"L": math.radians(7), "R": math.radians(173)}
+def _solve_poles(arm):
+    """Pick each IK pole angle so the rest pose is untouched (numerical search)."""
+    for tag in ("L", "R"):
+        for bone in (f"forearm.{tag}", f"shin.{tag}"):
+            pb = arm.pose.bones[bone]
+            c = next(cc for cc in pb.constraints if cc.type == "IK")
+            names = (pb.parent.name, bone)
+            rest = [arm.data.bones[n].matrix_local.copy() for n in names]
+
+            def err(ang):
+                c.pole_angle = ang
+                bpy.context.view_layer.update()
+                e = 0.0
+                for n, r in zip(names, rest):
+                    d = arm.pose.bones[n].matrix - r
+                    e += sum(abs(d[i][j]) for i in range(3) for j in range(4))
+                return e
+
+            best = min((err(math.radians(d)), math.radians(d)) for d in range(-180, 180, 6))[1]
+            step = math.radians(3)
+            for _ in range(8):
+                cands = [best - step, best, best + step]
+                best = min((err(a), a) for a in cands)[1]
+                step *= 0.5
+            c.pole_angle = best
+    bpy.context.view_layer.update()
 
 
 # ------------------------------------------------------------------ turntable mock
 
 def _tt_mock(coll, m):
-    parts = []
     # cushion/back match FL-02's seat (0.48 x 0.46 cushion, back 0.46 x 0.1 x 0.44 at -9 deg)
-    parts.append(geo.box("Mittens_TT_seat", (0.48, 0.46, 0.1), (0, 0.0, -0.05),
-                         mat=m["seat"], coll=coll, bevel=0.035, segs=4))
-    parts.append(geo.box("Mittens_TT_seat_back", (0.46, 0.1, 0.44), (0, 0.25, 0.22),
-                         rot=(math.radians(-9), 0, 0), mat=m["seat"], coll=coll, bevel=0.035,
-                         segs=4))
-    parts.append(geo.box("Mittens_TT_seat_base", (0.4, 0.4, TT_ROOT_Z - 0.1),
-                         (0, 0.02, -0.1 - (TT_ROOT_Z - 0.1) / 2), mat=m["card"],
-                         edge_mat=m["edge"], coll=coll, bevel=0.004))
-    parts.append(geo.box("Mittens_TT_foot_plate", (0.5, 0.3, 0.02), (0, -0.43, -TT_ROOT_Z + 0.01),
-                         mat=m["card"], edge_mat=m["edge"], coll=coll, bevel=0.003))
-    for o in parts[:2]:
-        lumpy(o, 0.003, 6, seed=31)
+    parts = [geo.box("Mittens_TT_seat", (0.48, 0.46, 0.1), (0, 0.0, -0.05), mat=m["seat"],
+                     coll=coll, bevel=0.035, segs=4),
+             geo.box("Mittens_TT_seat_back", (0.46, 0.1, 0.44), (0, 0.25, 0.22),
+                     rot=(math.radians(-9), 0, 0), mat=m["seat"], coll=coll, bevel=0.035, segs=4),
+             geo.box("Mittens_TT_seat_base", (0.4, 0.4, TT_ROOT_Z - 0.1),
+                     (0, 0.02, -0.1 - (TT_ROOT_Z - 0.1) / 2), mat=m["card"],
+                     edge_mat=m["edge"], coll=coll, bevel=0.004)]
     seat = geo.join(parts, "Mittens_TT_seat")
+    floor = geo.box("Mittens_TT_floor", (0.5, 0.34, 0.02), (0, -0.42, -TT_ROOT_Z + 0.01),
+                    mat=m["card"], edge_mat=m["edge"], coll=coll, bevel=0.003)
     c, n, up = wheel_frame()
     wp = [torus("Mittens_TT_wheel", c, n, WHEEL_RAD, 0.017, m["wheel"], coll)]
-    wp.append(geo.cylinder("Mittens_TT_wheel_hub", 0.04, 0.03, c - n * 0.01, mat=m["wheel"],
-                           coll=coll, bevel=0.006))
-    wp[-1].rotation_mode = "QUATERNION"
-    wp[-1].rotation_quaternion = n.to_track_quat("Z", "Y")
+    hub = geo.cylinder("Mittens_TT_wheel_hub", 0.04, 0.03, c - n * 0.01, mat=m["wheel"],
+                       coll=coll, bevel=0.006)
+    hub.rotation_mode = "QUATERNION"
+    hub.rotation_quaternion = n.to_track_quat("Z", "Y")
+    wp.append(hub)
     for d in (Vector((1, 0, 0)), Vector((-1, 0, 0)), -up):
         wp.append(mesh_tube("Mittens_TT_wheel_spoke", [c - n * 0.01, c + d * WHEEL_RAD],
-                            0.011, m["wheel"], coll, segs=8, flat=0.5, subsurf=0))
+                            0.011, m["wheel"], coll, segs=8, flat=0.5))
     col_end = c - n * 0.28
     wp.append(mesh_tube("Mittens_TT_wheel_column", [c - n * 0.01, col_end], 0.025,
-                        m["wheel"], coll, segs=12, subsurf=0))
-    floor = Vector((0, col_end.y, -TT_ROOT_Z))
-    wp.append(geo.cylinder("Mittens_TT_wheel_post", 0.035, col_end.z - floor.z,
-                           (0, col_end.y, (col_end.z + floor.z) / 2), mat=m["wheel"],
+                        m["wheel"], coll, segs=12))
+    floor_pt = Vector((0, col_end.y, -TT_ROOT_Z))
+    wp.append(geo.cylinder("Mittens_TT_wheel_post", 0.035, col_end.z - floor_pt.z,
+                           (0, col_end.y, (col_end.z + floor_pt.z) / 2), mat=m["wheel"],
                            coll=coll))
     wp.append(geo.box("Mittens_TT_wheel_foot", (0.26, 0.26, 0.02),
                       (0, col_end.y, -TT_ROOT_Z + 0.01), mat=m["card"], edge_mat=m["edge"],
                       coll=coll, bevel=0.003))
     wheel = geo.join(wp, "Mittens_TT_wheel")
-    return seat, wheel
+    return seat, floor, wheel
 
 
 # ------------------------------------------------------------------ pose test
 
+def _aim(arm, bone, target, amount=1.0, fwd=Vector((0, -1, 0))):
+    """Rotate `bone` (pose) so its rest forward axis points toward target (armature space)."""
+    bpy.context.view_layer.update()
+    pb = arm.pose.bones[bone]
+    rest = arm.data.bones[bone].matrix_local
+    posed = pb.matrix                     # armature space, current pose
+    head = posed.translation
+    cur_fwd = (posed.to_3x3() @ (rest.to_3x3().inverted() @ fwd)).normalized()
+    want = (Vector(target) - head).normalized()
+    q = cur_fwd.rotation_difference(want)
+    q = Quaternion().slerp(q, amount)
+    # express the armature-space delta in bone-local space
+    pr = posed.to_quaternion()
+    local = pr.inverted() @ q @ pr
+    pb.rotation_mode = "QUATERNION"
+    pb.rotation_quaternion = local @ pb.rotation_quaternion
+    bpy.context.view_layer.update()
+
+
 def pose_test(root):
-    """Glance at the in-cab screen (her right-front, -X/-Y), perk ears, smile."""
+    """Glance at the in-cab screen (her right-front, low): neck+head turn, eyes follow,
+    ears perk, smile."""
     arm = next(o for o in root.children_recursive if o.name == "Mittens_rig")
-    pb = arm.pose.bones
-    for name in ("head", "neck", "eye.L", "eye.R", "ear.L", "ear.R"):
-        pb[name].rotation_mode = "XYZ"
-    # screen at SCREEN (-0.38, -0.9, 0.2): about 25 deg to her right and 27 deg down
-    pb["neck"].rotation_euler = (-0.08, -0.12, 0)
-    pb["head"].rotation_euler = (-0.18, -0.3, 0.0)
+    _aim(arm, "neck", SCREEN, 0.25)
+    _aim(arm, "head", SCREEN, 0.5)
     for tag in ("L", "R"):
-        pb[f"eye.{tag}"].rotation_euler = (-0.25, 0, -0.3)
-    pb["ear.L"].rotation_euler = (0.25, 0, 0)
-    pb["ear.R"].rotation_euler = (0.25, 0, 0)
+        _aim(arm, f"eye.{tag}", SCREEN, 1.0)
+    for tag, s in (("L", 1), ("R", -1)):
+        pb = arm.pose.bones[f"ear.{tag}"]
+        pb.rotation_mode = "XYZ"
+        pb.rotation_euler = (math.radians(-12), 0, math.radians(-8 * s))
     face = bpy.data.objects["Mittens_face"]
     face.data.shape_keys.key_blocks["smile"].value = 1.0
     bpy.context.view_layer.update()
