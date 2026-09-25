@@ -643,7 +643,7 @@ def _tail(coll, m, att):
         last = i == n_rings - 1
         mat = m["black"] if i % 2 == 0 else m["grey"]
 
-        def ring(k, sts="fffffffs", fur=0.024):
+        def ring(k, sts="ppffpps", fur=0.028):
             ctrl = []
             for s_ in (sa, (sa + sb) / 2, min(sb, L)):
                 p, t = _tail_at(s_, pts, cum)
@@ -663,9 +663,9 @@ def _tail(coll, m, att):
         bone = f"tail.{min(5, 1 + int(5 * ((sa + sb) / 2) / L)):02d}"
         att(side(P + f"tail_ring.{i + 1:02d}", ring(1.0), -h, h, mat, coll, bevel=0.005), bone)
         ho = 0.1 - 0.005 * i
-        att(side(P + f"tail_ring.{i + 1:02d}.L", ring(0.78, "pppffpps", 0.017), h - 0.01, ho, mat, coll,
+        att(side(P + f"tail_ring.{i + 1:02d}.L", ring(0.78, "ppffpps", 0.02), h - 0.01, ho, mat, coll,
                  bevel=0.005), bone)
-        att(side(P + f"tail_ring.{i + 1:02d}.R", ring(0.78, "pppffpps", 0.017), -ho, -h + 0.01, mat, coll,
+        att(side(P + f"tail_ring.{i + 1:02d}.R", ring(0.78, "ppffpps", 0.02), -ho, -h + 0.01, mat, coll,
                  bevel=0.005), bone)
     p0 = tb[0]
     att(_pin("tail_base", Vector((0.103, TAIL_SPINE[0][0] + 0.05, TAIL_SPINE[0][1] - 0.01)),
@@ -721,6 +721,11 @@ def _head(coll, m, att):
         return outline(ruff, "sssffffff", fur=0.0325, fur_sp=0.0144, lean=0.35)
     for o in pair_side(P + "cheek_ruff", ruffp(), 0.126, 0.152, m["grey"], coll, 0.005, ruffp):
         att(o, "head")
+    # Back of the head: a fringed panel so the head reads round from behind.
+    bk, st = sym([(0.0, 1.17), (0.08, 1.15), (0.12, 1.08), (0.115, 1.0), (0.07, 0.96),
+                  (0.0, 0.95)], "ssfff")
+    att(panel(P + "head_back", outline(bk, st, fur=0.022, fur_sp=0.016), 0.025,
+              (0, 0.128, 0), (0, 1, 0), (0, 0, 1), m["grey"], coll, bevel=0.005), "head")
     # Front face plate (so the face reads from the front), fringed cheeks.
     fp, st = sym([(0.0, 1.235), (0.1, 1.215), (0.13, 1.15), (0.13, 1.08), (0.122, 1.02),
                   (0.085, 0.975), (0.035, 0.955), (0.0, 0.952)], "sssffffs")

@@ -53,7 +53,7 @@ TT_ROOT_Z = 0.45
 FL02_SEAT_POINT = (0.0, 0.25, 1.00)
 
 # Whole mock stands 0..1.37 m on the floor; ~70% of frame height.
-TURNTABLE = dict(height=1.4, radius=5.0, lens=50, target_z=0.70, cam_elev=0.2, fstop=8.0,
+TURNTABLE = dict(height=1.4, radius=5.5, lens=50, target_z=0.70, cam_elev=0.2, fstop=8.0,
                  key=480)
 
 SHAPE_KEYS = ["smile", "mouth_open", "mouth_o", "blink", "wink", "surprised_brows"]
@@ -803,11 +803,8 @@ def build(coll):
         prof.append((zt, a * rr))
     dome = geo.lathe("Mittens_hat_dome", prof, 64, loc=(0, 0.0, 0.006), mat=m["hat"], coll=coll,
                      cap_bottom=True, cap_top=False, subsurf=1, squash=(1.0, b / a))
-    dome.rotation_euler = (0, 0, math.pi / 2)  # lathe starts at +X; keep seams at the sides
-    dome.rotation_euler = (0, 0, 0)
     hat_parts.append(dome)
-    # front stitched seam strip (felt), like the ref's layered crown
-    band = [Vector((a * 1.01 * math.cos(math.pi * i / 32), 0.0)) for i in range(33)]
+    # rolled felt band around the crown foot
     hat_parts.append(mesh_tube("Mittens_hat_band", [Vector((a * 1.005 * math.cos(t), -b * 1.005 * math.sin(t), 0.018))
                                                      for t in [math.pi * i / 16 for i in range(17)]],
                                0.009, m["hat"], coll, segs=8, flat=1.6))
@@ -923,7 +920,7 @@ def build(coll):
                        lift=0.054, center=False, bevel=0.001), f"shin.{tag}")
         put(pin(f"Mittens_pin_knee_{tag}", kn + fs_.w * 0.055, fs_.w, 0.013, coll), f"shin.{tag}")
         # cream paw on the floor (side-profile loaf), toe lines
-        fz = -0.45
+        fz = -0.442   # sole on the 8 mm TT foot plate (cab floor is -0.45)
         paw = catmull([(0.335, fz), (0.43, fz), (0.505, fz + 0.003), (0.52, fz + 0.03),
                        (0.49, fz + 0.062), (0.41, fz + 0.075), (0.35, fz + 0.1), (0.325, fz + 0.06)],
                       5, closed=True)
@@ -1188,7 +1185,7 @@ def _tt_mock(coll, m):
                      (0, 0.02, -0.1 - (TT_ROOT_Z - 0.1) / 2), mat=m["card"],
                      edge_mat=m["edge"], coll=coll, bevel=0.004)]
     seat = geo.join(parts, "Mittens_TT_seat")
-    floor = geo.box("Mittens_TT_floor", (0.5, 0.34, 0.02), (0, -0.42, -TT_ROOT_Z + 0.01),
+    floor = geo.box("Mittens_TT_floor", (0.5, 0.34, 0.008), (0, -0.42, -TT_ROOT_Z + 0.004),
                     mat=m["card"], edge_mat=m["edge"], coll=coll, bevel=0.003)
     c, n, up = wheel_frame()
     wp = [torus("Mittens_TT_wheel", c, n, WHEEL_RAD, 0.017, m["wheel"], coll)]

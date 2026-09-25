@@ -66,8 +66,8 @@ LEGS = ("FL", "FR", "HL", "HR")
 
 # ------------------------------------------------------------------ landmarks (world, rest)
 # +X is Bolt's left. Right-side parts are mirrored copies of the left.
-LX0, LX1 = 0.137, 0.172          # upper leg panel x range (outside the body)
-LLX0, LLX1 = 0.112, 0.142        # lower leg panel x range (tucked under the upper panel)
+LX0, LX1 = 0.143, 0.18           # upper leg panel x range (outside the body)
+LLX0, LLX1 = 0.106, 0.148        # lower leg panel x range (tucked under the upper panel)
 P = dict(
     spine=[(0, 0.22, 0.36), (0, 0.12, 0.365), (0, 0.02, 0.37), (0, -0.07, 0.38),
            (0, -0.15, 0.40)],
@@ -78,11 +78,11 @@ P = dict(
     tail=[(0.0, 0.225, 0.43), (0.0, 0.268, 0.475), (0.0, 0.3, 0.528), (0.0, 0.316, 0.585),
           (0.0, 0.312, 0.64), (0.0, 0.292, 0.69)],
     # legs (left): upper joint (shoulder/hip), mid joint (elbow/knee), ankle, toe
-    FL=[(0.155, -0.12, 0.30), (0.155, -0.11, 0.168), (0.127, -0.118, 0.055), (0.127, -0.19, 0.02)],
-    HL=[(0.155, 0.175, 0.31), (0.155, 0.262, 0.185), (0.127, 0.262, 0.062), (0.127, 0.185, 0.02)],
+    FL=[(0.16, -0.12, 0.30), (0.16, -0.112, 0.17), (0.127, -0.118, 0.06), (0.127, -0.205, 0.02)],
+    HL=[(0.16, 0.18, 0.31), (0.16, 0.248, 0.19), (0.127, 0.252, 0.064), (0.127, 0.17, 0.02)],
     eye=(0.082, -0.321, 0.655),
     ear_root=(0.138, -0.118, 0.748),
-    hat=(0.0, -0.215, 0.712),
+    hat=(0.0, -0.215, 0.706),
 )
 EYE_R = 0.039      # sphere radius of the eye dome
 EYE_RB = 0.035      # visible radius of the dome
@@ -399,7 +399,7 @@ def _ear_pts(side):
     if side < 0:
         r.x = -r.x
     _, v, _ = _ear_frame(side)
-    return [r, r + v * 0.115, r + v * 0.24]
+    return [r, r + v * EAR_SPLIT, r + v * 0.315]
 
 
 def _bone_defs():
@@ -504,12 +504,26 @@ def build(coll):
 
 # ------------------------------------------------------------------ body
 
-BODY = [(-0.10, 0.472), (0.05, 0.458), (0.17, 0.452), (0.235, 0.435), (0.268, 0.395),
-        (0.275, 0.335), (0.258, 0.28), (0.215, 0.252), (0.12, 0.245), (0.0, 0.25),
-        (-0.10, 0.258), (-0.175, 0.272), (-0.228, 0.31), (-0.245, 0.38), (-0.232, 0.44),
-        (-0.19, 0.49), (-0.14, 0.495)]
-BODY_LAYERS = [(-0.045, 0.045, 0, 0), (0.045, 0.085, 0.01, 0.012), (0.085, 0.113, 0.026, 0.03),
-               (0.113, 0.135, 0.05, 0.056)]
+# compact rounded bean (side ref): arched back, round rump and chest, gently curved belly
+BODY = [(-0.12, 0.476), (0.0, 0.482), (0.12, 0.476), (0.205, 0.458), (0.258, 0.42),
+        (0.28, 0.358), (0.27, 0.298), (0.232, 0.26), (0.155, 0.243), (0.04, 0.243),
+        (-0.08, 0.25), (-0.168, 0.266), (-0.228, 0.303), (-0.252, 0.37), (-0.243, 0.43),
+        (-0.205, 0.478)]
+
+
+def _body_layers(half=0.14, edges=(0.04, 0.07, 0.093, 0.111, 0.125, 0.135, 0.14), n=2.4,
+                 hz=0.11, hy=0.07):
+    """Slab x-ranges + insets following a rounded (superelliptic) cross-section, so the
+    felt layers step in gently instead of in big terraces."""
+    out = [(-edges[0], edges[0], 0.0, 0.0)]
+    for x0, x1 in zip(edges, edges[1:]):
+        r = min(0.99, (x0 + x1) / 2 / (half + 0.005))
+        k = 1.0 - (1.0 - r ** n) ** (1.0 / n)
+        out.append((x0, x1, hy * k, hz * k))
+    return out
+
+
+BODY_LAYERS = _body_layers()
 
 
 def _build_body(coll, mt, bind):
@@ -541,12 +555,17 @@ def _build_body(coll, mt, bind):
     # white chest ruff: two front-facing fringed layers under the chin
     def rf(p, n):
         return 1.0 if n.y < -0.35 else 0.0
-    ruff = [(-0.09, 0.50), (0.09, 0.50), (0.11, 0.42), (0.10, 0.33), (0.06, 0.285),
-            (0.0, 0.27), (-0.06, 0.285), (-0.10, 0.33), (-0.11, 0.42)]
+    ruff = [(-0.07, 0.472), (0.0, 0.482), (0.07, 0.472), (0.105, 0.43), (0.10, 0.33),
+            (0.06, 0.285), (0.0, 0.27), (-0.06, 0.285), (-0.10, 0.33), (-0.105, 0.43)]
     r1 = _outline(ruff, step=0.011, fringe=rf, depth=0.016, seed=7)
     r2 = _outline(_inset(ruff, 0.025, 0.03), step=0.011, fringe=rf, depth=0.014, seed=8)
     bind([_front("Bolt_chest_ruff_1", r1, -0.228, -0.252, mt["white"], coll),
           _front("Bolt_chest_ruff_2", r2, -0.252, -0.268, mt["white"], coll)], "spine.04")
+    # white throat on the neck: bridges chin and ruff when the head turns
+    th = [(-0.066, 0.545), (0.066, 0.545), (0.078, 0.49), (0.052, 0.445), (0.0, 0.432),
+          (-0.052, 0.445), (-0.078, 0.49)]
+    bind(_front("Bolt_throat", _outline(th, step=0.01, fringe=rf, depth=0.014, seed=6),
+                -0.205, -0.24, mt["white"], coll), "neck.02")
     # white under-chest patches between the front legs (front ref)
     for s in (1, -1):
         pts = _outline([(0.02, 0.30), (0.10, 0.31), (0.11, 0.27), (0.06, 0.255), (0.02, 0.265)],
@@ -828,24 +847,26 @@ def _face_keys(face, eyes):
 
 # ------------------------------------------------------------------ ears
 
-EAR = [(0.03, -0.012), (0.056, 0.03), (0.068, 0.10), (0.066, 0.17), (0.042, 0.228),
-       (0.0, 0.25), (-0.04, 0.236), (-0.064, 0.18), (-0.066, 0.10), (-0.05, 0.02),
-       (-0.02, -0.014)]
+EAR = [(0.035, -0.012), (0.068, 0.035), (0.082, 0.125), (0.08, 0.215), (0.058, 0.29),
+       (0.0, 0.325), (-0.054, 0.308), (-0.08, 0.235), (-0.083, 0.13), (-0.062, 0.028),
+       (-0.022, -0.014)]
+EAR_SPLIT = 0.155   # hinge between ear.01 and ear.02 (along the ear)
 
 
 def _build_ears(coll, mt, bind):
     def tipf(p, n):
-        return 1.0 if p.y > 0.17 else 0.0
+        return 1.0 if p.y > 0.23 else 0.0
     out = _outline(EAR, it=2, step=0.007, fringe=tipf, depth=0.009, seed=40)
-    lin = _outline([(x - 0.009, y + 0.008) for x, y in _inset(EAR, -0.008, -0.005)], it=2,
+    lin = _outline([(x - 0.004, y + 0.006) for x, y in _inset(EAR, -0.009, -0.006)], it=2,
                    step=0.007, fringe=tipf, depth=0.009, seed=41)
     for s, sg in (("L", 1.0), ("R", -1.0)):
         r = _ear_pts(sg)[0]
         u, v, _n = _ear_frame(1.0)
         fr = _frame(u, v)  # left frame, then mirrored for R
         rl = Vector(P["ear_root"])
-        segs = (("01", _clip(out, 1, 0.125), _clip(lin, 1, 0.125), 0.0),
-                ("02", _clip(out, 1, 0.10, False), _clip(lin, 1, 0.10, False), 0.004))
+        hi, lo = EAR_SPLIT + 0.015, EAR_SPLIT - 0.015
+        segs = (("01", _clip(out, 1, hi), _clip(lin, 1, hi), 0.0),
+                ("02", _clip(out, 1, lo, False), _clip(lin, 1, lo, False), 0.004))
         for seg, po, pl, lift in segs:
             a = _slab(f"Bolt_ear_{seg}_{s}", po, 0.002 + lift, 0.016 + lift, fr, mt["black"],
                       coll, origin=rl)
@@ -855,7 +876,7 @@ def _build_ears(coll, mt, bind):
             ci = _slab(f"Bolt_ear_inner_{seg}_{s}", po, -0.013 + lift, -0.006 + lift, fr,
                        mt["black"], coll, origin=rl, bevel=0.002)
             pin = geo.split_pin(f"Bolt_pin_ear_{seg}_{s}",
-                                rl + v * (0.02 if seg == "01" else 0.112) + fr.col[2] * (0.017 + lift),
+                                rl + v * (0.02 if seg == "01" else EAR_SPLIT) + fr.col[2] * (0.017 + lift),
                                 fr.col[2], r=0.009, coll=coll)
             if sg < 0:
                 for o in (a, b, ci):
@@ -932,9 +953,9 @@ def _build_hardhat(coll, mt, bind):
 def _leg_upper_pts(leg):
     a, j, _, _ = _leg_pts(leg)
     if leg[0] == "F":
-        ctrl = _stadium((a.y, a.z), (j.y, j.z - 0.012), 0.058, 0.04, 8)
+        ctrl = _stadium((a.y, a.z + 0.005), (j.y, j.z - 0.014), 0.074, 0.062, 8)
     else:
-        ctrl = _stadium((a.y + 0.01, a.z), (j.y, j.z - 0.01), 0.082, 0.042, 8)
+        ctrl = _stadium((a.y + 0.005, a.z), (j.y, j.z - 0.012), 0.096, 0.066, 8)
 
     def fr(p, n):
         if n.y < -0.5:
@@ -947,19 +968,19 @@ def _leg_upper_pts(leg):
 
 def _paw(name, leg, mt, coll):
     _, _, k, toe = _leg_pts(leg)
-    heel, tip = k.y + 0.032, toe.y - 0.012
+    heel, tip = k.y + 0.042, toe.y - 0.012
     objs = []
-    n_toes = 3
-    xw = 0.058
-    x0 = 0.098
+    n_toes = 4          # four toe slabs side by side: the bevels read as toe grooves
+    xw = 0.084
+    x0 = 0.085
     for t in range(n_toes):
         tx0 = x0 + xw * t / n_toes
         tx1 = x0 + xw * (t + 1) / n_toes - 0.0015
-        back = 0.006 if t == 1 else 0.0
-        ctrl = [(heel, 0.0), (heel + 0.004, 0.045), (k.y + 0.004, 0.066),
-                (tip + 0.032, 0.052), (tip - 0.004 + back, 0.028), (tip + back, 0.004)]
+        back = 0.0 if t in (1, 2) else 0.01
+        ctrl = [(heel, 0.0), (heel + 0.004, 0.05), (k.y + 0.004, 0.078),
+                (tip + 0.038, 0.066), (tip - 0.004 + back, 0.034), (tip + back, 0.004)]
         pts = _outline(ctrl, it=2, step=0.005, seed=70 + t)
-        objs.append(_side(f"{name}_toe{t}", pts, tx0, tx1, mt["tan"], coll, bevel=0.0045))
+        objs.append(_side(f"{name}_toe{t}", pts, tx0, tx1, mt["tan"], coll, bevel=0.0055))
     return objs
 
 
@@ -967,7 +988,7 @@ def _build_legs(coll, mt, bind):
     for leg in ("FL", "HL"):
         a, j, k, toe = _leg_pts(leg)
         up = _side(f"Bolt_leg_upper_{leg}", _leg_upper_pts(leg), LX0, LX1, mt["black"], coll)
-        lo_ctrl = _stadium((j.y, j.z), (k.y, k.z - 0.01), 0.04, 0.034, 8)
+        lo_ctrl = _stadium((j.y, j.z), (k.y, k.z - 0.008), 0.054, 0.05, 8)
         lo = _side(f"Bolt_leg_lower_{leg}", _outline(lo_ctrl, it=1, step=0.007, seed=80),
                    LLX0, LLX1, mt["tan"], coll)
         paw = _paw(f"Bolt_paw_{leg}", leg, mt, coll)
@@ -1032,23 +1053,24 @@ def _layered_strap(name, pts, nrm, mt, coll, closed, wdirs=None, w=0.05):
 
 def _build_harness(coll, mt, bind):
     # girth just behind the front legs
-    gp, gn = _superellipse((0, -0.022, 0.356), (1, 0, 0), (0, 0, 1), 0.137, 0.108, 72, 3.2)
+    gp, gn = _superellipse((0, -0.01, 0.362), (1, 0, 0), (0, 0, 1), 0.143, 0.118, 72, 3.2)
     girth = _layered_strap("Bolt_harness_girth", gp, gn, mt, coll, True,
                            wdirs=[(0, 1, 0)] * len(gp))
     bind(girth, "spine.03")
     # neck strap: tilted loop from the chest front over the withers
     c = Vector((0, -0.163, 0.437))
     V = Vector((0, 0.185, 0.11)).normalized()
-    npnt, nnrm = _superellipse(c, (1, 0, 0), V, 0.147, 0.112, 72, 3.0)
+    npnt, nnrm = _superellipse(c, (1, 0, 0), V, 0.151, 0.114, 72, 3.0)
     W = Vector((1, 0, 0)).cross(V)
     neck = _layered_strap("Bolt_harness_neck", npnt, nnrm, mt, coll, True,
                           wdirs=[W] * len(npnt), w=0.046)
     # keeper loops (small black felt tabs) on the girth sides
-    kp = _outline([(-0.05, 0.34), (0.005, 0.34), (0.005, 0.395), (-0.05, 0.395)], it=1,
+    kp = _outline([(-0.038, 0.345), (0.018, 0.345), (0.018, 0.40), (-0.038, 0.40)], it=1,
                   step=0.005, seed=100)
-    keep = _side("Bolt_harness_keeper_L", kp, 0.142, 0.152, mt["harness"], coll)
+    keep = _side("Bolt_harness_keeper_L", kp, 0.148, 0.158, mt["harness"], coll)
     keepR = _mirror(keep, "Bolt_harness_keeper_R")
-    bind(neck + [keep, keepR], "spine.04")
+    bind([keep, keepR], "spine.03")   # keepers sit on the girth
+    bind(neck, "neck.01")             # collar / neck strap follows the neck
 
     # belly straps: chest plate down under the chest to the girth
     for s, sg in (("L", 1.0), ("R", -1.0)):
@@ -1100,10 +1122,10 @@ def pose_test(root):
     pb["head"].rotation_euler = (0, math.radians(-10), math.radians(8))
     pb["jaw"].rotation_euler = (math.radians(-12), 0, 0)
     pb["tongue.02"].rotation_euler = (math.radians(-15), 0, 0)
-    pb["ear.01.L"].rotation_euler = (0, 0, math.radians(-12))
-    pb["ear.02.L"].rotation_euler = (0, 0, math.radians(-15))
-    pb["ear.01.R"].rotation_euler = (0, 0, math.radians(10))
-    pb["ear.02.R"].rotation_euler = (0, 0, math.radians(18))
+    pb["ear.01.L"].rotation_euler = (math.radians(-12), 0, 0)
+    pb["ear.02.L"].rotation_euler = (math.radians(-18), 0, 0)
+    pb["ear.01.R"].rotation_euler = (math.radians(10), 0, 0)
+    pb["ear.02.R"].rotation_euler = (math.radians(16), 0, 0)
     pb["IK_FL"].location = (0, 0.03, 0.07)  # paw lifted (bone-local)
     pb["spine.01"].rotation_euler = (math.radians(4), 0, 0)
     face = bpy.data.objects["Bolt_face"]
