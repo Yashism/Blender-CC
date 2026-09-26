@@ -39,7 +39,17 @@ def logo(variant="white"):
     return Image.open(real if os.path.exists(real) else ph).convert("RGBA")
 
 
+_FEED_CACHE = {}
+
+
 def placeholder_feed():
+    """Cached copy of the placeholder forward view (drawing it is the slow part)."""
+    if "feed" not in _FEED_CACHE:
+        _FEED_CACHE["feed"] = _draw_placeholder_feed()
+    return _FEED_CACHE["feed"].copy()
+
+
+def _draw_placeholder_feed():
     """Flat illustration of the forward view down Aisle 4 toward Cross Aisle B."""
     im = Image.new("RGB", (W, H), (38, 44, 58))
     d = ImageDraw.Draw(im)
@@ -122,6 +132,26 @@ def check(d, cx, cy, s, color, width=18):
            width=width, joint="curve")
 
 
+def heart_layer(im, cx, cy, s, color, alpha=235):
+    """Composite a clean heart (drawn opaque on its own layer, 3x supersampled) onto `im`."""
+    if s < 2:
+        return im
+    ss = 3
+    size = int(s * 2.4)
+    lay = Image.new("L", (size * ss, size * ss), 0)
+    heart(ImageDraw.Draw(lay), size * ss / 2, size * ss / 2 - s * ss * 0.05, s * ss, 255)
+    lay = lay.resize((size, size), Image.LANCZOS)
+    lay = lay.point(lambda v: v * alpha // 255)
+    # soft glow behind it so it reads on the busy feed
+    glow = lay.filter(ImageFilter.GaussianBlur(max(2, s * 0.18))).point(lambda v: v * 0.55)
+    ox, oy = int(cx - size / 2), int(cy - size / 2)
+    rim = lay.filter(ImageFilter.MaxFilter(7))  # cream outline so it reads on the busy feed
+    im.paste(Image.new("RGB", (size, size), (255, 150, 110)), (ox, oy), glow)
+    im.paste(Image.new("RGB", (size, size), CREAM), (ox, oy), rim)
+    im.paste(Image.new("RGB", (size, size), color[:3]), (ox, oy), lay)
+    return im
+
+
 def heart(d, cx, cy, s, color):
     d.ellipse((cx - s, cy - s * 0.8, cx, cy + s * 0.2), fill=color)
     d.ellipse((cx, cy - s * 0.8, cx + s, cy + s * 0.2), fill=color)
@@ -135,6 +165,8 @@ def compose(state, feed=None, t=0.0, person_box=(300, 250, 470, 560)):
     t: seconds since the state began (drives boot fade, alert flash, heart pop).
     person_box: detection box in screen pixels (tracked from the camera-POV render later).
     """
+    if state == "off":
+        return Image.new("RGB", (W, H), (0, 0, 0))
     base = (feed or placeholder_feed()).convert("RGB").resize((W, H))
     if feed is None and state in ("alert",):
         placeholder_person(base, person_box)
@@ -157,8 +189,10 @@ def compose(state, feed=None, t=0.0, person_box=(300, 250, 470, 560)):
     d = ImageDraw.Draw(im, "RGBA")
     badge(d, im)
     if state == "idle":
-        d.text((W - 30, 53), "LIVE", font=font(32), fill=CREAM, anchor="rm")
-        d.ellipse((W - 150, 43, W - 130, 63), fill=ALERT)
+        rounded(d, (W - 168, 26, W - 22, 80), 14, fill=(12, 14, 18, 200))
+        d.text((W - 40, 53), "LIVE", font=font(32), fill=CREAM, anchor="rm")
+        if (int(t * 2) % 2) == 0:  # 1 Hz "recording" blink
+            d.ellipse((W - 148, 43, W - 128, 63), fill=ALERT)
     elif state == "alert":
         on = (int(t * 6) % 2) == 0  # 3 Hz flash
         status_dot(d, ALERT)
@@ -190,14 +224,23 @@ def compose(state, feed=None, t=0.0, person_box=(300, 250, 470, 560)):
                    (ax + 45, ay + 14), (ax + 5, ay + 14), (ax + 5, ay + 34)], fill=CREAM)
     elif state in ("clear", "heart"):
         status_dot(d, TEAL)
-        rounded(d, (W / 2 - 250, H - 150, W / 2 + 250, H - 48), 20, fill=TEAL + (240,))
-        d.text((W / 2 + 40, H - 99), "CLEAR", font=font(64, "ExtraBold"), fill=CREAM,
-               anchor="mm")
-        check(d, W / 2 - 150, H - 104, 34, CREAM, 14)
+        # banner pops in over 0.125 s when the state begins (not again for "heart")
+        k = 1.0 if state == "heart" else min(1.0, 0.7 + 0.3 * t / 0.125)
+        hw, hh, cy = 250 * k, 51 * k, H - 99
+        rounded(d, (W / 2 - hw, cy - hh, W / 2 + hw, cy + hh), int(20 * k), fill=TEAL + (240,))
+        if k >= 1.0:
+            d.text((W / 2 + 40, cy), "CLEAR", font=font(64, "ExtraBold"), fill=CREAM,
+                   anchor="mm")
+            check(d, W / 2 - 150, cy - 5, 34, CREAM, 14)
+            # thin teal frame so the clear state reads from across the cab
+            for i in range(8):
+                d.rectangle((i, i, W - 1 - i, H - 1 - i), outline=TEAL + (200,))
         if state == "heart":
+            # small heart pops up above the banner: overshoot then settle
             pop = min(1.0, t / 0.2)
-            s = 120 * (pop + 0.15 * math.sin(min(1.0, t / 0.5) * math.pi))
-            heart(d, W / 2, H * 0.42, max(1, s), ORANGE + (235,))
+            s = 62 * (pop + 0.18 * math.sin(min(1.0, t / 0.5) * math.pi))
+            heart_layer(im, W / 2, H - 99 - 51 - 86, s, ORANGE)
+            d = ImageDraw.Draw(im, "RGBA")
     return scanlines(im)
 
 
