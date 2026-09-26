@@ -256,17 +256,22 @@ def key_lens_and_screen():
     cam = bpy.data.objects.get("RAMSCam_root")
     E = T.E
     if cam:
-        def glow(fr):
+        # Client note: the lens stays dark glass; a small status LED on the side shows the state.
+        key_fn(cam, '["lens_glow"]', lambda fr: 0.0, [T.FRAME_START], interp="CONSTANT")
+
+        def led(fr):
             if fr < E["lens_on"]:
                 return 0.0
-            if fr < E["lens_on"] + 4:
-                return 0.45 * (fr - E["lens_on"]) / 4
-            if E["alert"] <= fr < E["fl_stopped"] + 18:
-                return 1.0 if (fr // 2) % 3 else 0.8          # bright, slight pulse on detection
-            if E["lens_blink"] <= fr < E["lens_blink"] + 3:
+            if E["lens_blink"] <= fr < E["lens_blink"] + 4:
                 return 0.0                                     # payoff blink
-            return 0.45
-        key_fn(cam, '["lens_glow"]', glow, TWOS, interp="CONSTANT")
+            return 1.0
+
+        def led_alert(fr):                                     # orange, flashing, on detection
+            if E["alert"] <= fr < E["fl_stopped"] + 24:
+                return 1.0 if (fr // 4) % 2 == 0 else 0.0
+            return 0.0
+        key_fn(cam, '["led"]', led, TWOS, interp="CONSTANT")
+        key_fn(cam, '["led_alert"]', led_alert, TWOS, interp="CONSTANT")
     scr = bpy.data.objects.get("CabScreen_root")
     lt = bpy.data.objects.get("CabScreen_light")
     if scr:
@@ -346,53 +351,74 @@ def build_cameras(coll, fl, cards):
     pk_head = lambda fr: Vector((pickles_x(fr), T.CAGE_Y, 1.05))
     bolt_head = lambda fr: Vector((bolt_x(fr) - 0.3, bolt_y(fr), 0.6))
     ramscam = (0.0, -0.97, 1.85)          # RAMS lens, FL-02 relative
-    screen = (-0.33, -0.76, 1.22)
-    over_shoulder = (-0.45, -0.05, 1.55)   # at her right shoulder, ~30 deg off the screen axis
+    glass = bpy.data.objects.get("CabScreen_glass")
+    bpy.context.scene.frame_set(1)
+    bpy.context.view_layer.update()
+    screen = tuple(fl.matrix_world.inverted() @ glass.matrix_world.translation) if glass \
+        else (-0.38, -0.8, 1.38)
+    over_shoulder = (-0.45, -0.05, 1.62)   # at her right shoulder, ~30 deg off the raised screen
     E = T.E
+    def span(shot, fa, fb):
+        """Frames [fa, fb) of a shot, as fractions of its length."""
+        st, en = S[shot][1], S[shot][2]
+        n = en - st + 1
+        return st + int(round(fa * n)), (st + int(round(fb * n)) - 1) if fb < 1 else en
+
     segs = [
-        # name, start, end, loc(fr), target(fr), lens (value or fn), fstop
-        ("s01a_lens", 1, 30, lambda fr: fl_rel(fr, (0.5, -1.75 + 0.004 * fr, 1.85)),
-         lambda fr: fl_rel(fr, ramscam), 85, 2.8),
-        ("s01b_screen_boot", 31, 72, lambda fr: fl_rel(fr, over_shoulder),
-         lambda fr: fl_rel(fr, screen), 55, 2.8),
-        ("s02_tracking", S["s02_tall_racks"][1], S["s02_tall_racks"][2],
-         lambda fr: fl_rel(fr, (-1.35, -2.3 - 0.004 * (fr - 73), 0.7)),
-         lambda fr: fl_rel(fr, (0.2, 0.3, 1.3)), 24, 2.8),
-        ("s03a_walkway", 169, 204, lambda fr: Vector((4.4, -0.7, 0.65)),
+        # s01: wide enough to see the camera is mounted on FL-02; the side LED lights up
+        ("s01a_camera_on_fl02", *span("s01_new_on_fl02", 0, 0.42),
+         lambda fr: fl_rel(fr, (1.2 - 0.006 * fr, -3.7 + 0.022 * fr, 2.55 - 0.004 * fr)),  # stays in the lane
+         lambda fr: fl_rel(fr, (0.05, -0.97, 1.8)), 35, 4.0),
+        ("s01b_screen_boot", *span("s01_new_on_fl02", 0.42, 1), lambda fr: fl_rel(fr, over_shoulder),
+         lambda fr: fl_rel(fr, screen), 45, 2.8),
+        # s02: GTA-style chase camera, behind and above FL-02 looking down the aisle
+        ("s02_chase", *span("s02_tall_racks", 0, 1),
+         lambda fr: fl_rel(fr, (0.35 + 0.15 * math.sin(fr / 30.0), 4.3, 2.9)),
+         lambda fr: fl_rel(fr, (0.0, -3.2, 1.2)), 28, 5.6),
+        ("s03a_walkway", *span("s03_cant_see", 0, 0.5), lambda fr: Vector((4.4, -0.7, 0.65)),
          lambda fr: Vector((cage_x(fr) + 0.5, 0.45, 0.9)), 32, 2.8),
-        ("s03b_drone", 205, S["s03_cant_see"][2], lambda fr: Vector((0.9, 2.2, 15.5 - 0.02 * (fr - 205))),
+        ("s03b_drone", *span("s03_cant_see", 0.5, 1),
+         lambda fr: Vector((0.9, 2.2, 15.5 - 0.012 * (fr - S["s03_cant_see"][1]))),
          lambda fr: Vector((0.9, 2.2, 0.0)), 30, 5.6),
-        ("s04_orbit", S["s04_sightlines"][1], S["s04_sightlines"][2], orbit_loc,
+        ("s04_orbit", *span("s04_sightlines", 0, 1), orbit_loc,
          lambda fr: Vector((0.9, 2.0, 0.3)), 28, 2.8),
-        ("s05a_screen_pushin", 337, 372, lambda fr: fl_rel(fr, over_shoulder),
-         lambda fr: fl_rel(fr, screen), lambda fr: 50 + 25 * min(1.0, max(0, fr - 337) / 10), 2.8),
-        ("s05b_mittens", 373, 402, lambda fr: fl_rel(fr, (-0.45, -0.55, 1.62)),
-         lambda fr: fl_rel(fr, (0.0, 0.22, 1.72)), 40, 2.0),
-        ("s05c_stop_wide", 403, S["s05_alert"][2], lambda fr: Vector((-1.2, -0.4, 0.5)),
+        # s05: screen alert, Mittens reacts (medium, not a close-up), tyres stop, wide
+        ("s05a_screen_pushin", *span("s05_alert", 0, 0.2), lambda fr: fl_rel(fr, over_shoulder),
+         lambda fr: fl_rel(fr, screen),
+         lambda fr: 45 + 20 * min(1.0, max(0, fr - S["s05_alert"][1]) / 10), 2.8),
+        ("s05b_mittens_reacts", *span("s05_alert", 0.2, 0.36),
+         lambda fr: fl_rel(fr, (-1.35, -1.7, 1.75)), lambda fr: fl_rel(fr, (0.0, 0.1, 1.55)),
+         32, 4.0),
+        ("s05c_tyres_stop", *span("s05_alert", 0.36, 0.76), lambda fr: Vector((1.45, 1.75, 0.22)),
+         lambda fr: fl_rel(fr, (0.45, -0.9, 0.3)), 30, 4.0),
+        ("s05d_stop_wide", *span("s05_alert", 0.76, 1), lambda fr: Vector((-1.2, -0.4, 0.5)),
          lambda fr: fl_rel(fr, (0.0, -1.3, 1.1)), 28, 4.0),
-        ("s06a_paw_up", 433, 480, lambda fr: Vector((0.6, -1.2, 0.35)),
-         lambda fr: Vector((bolt_x(fr), bolt_y(fr) + 0.2, 0.45)), 35, 2.8),
-        ("s06b_their_view", 481, 504, lambda fr: Vector((1.95, 0.85, 1.15)),   # leaning out at the corner
+        # s06: stop paw, their view, then a longer, wider three-way eye contact
+        ("s06a_paw_up", *span("s06_everyone_stops", 0, 0.33), lambda fr: Vector((0.6, -1.2, 0.45)),
+         lambda fr: Vector((bolt_x(fr) + 0.3, bolt_y(fr) + 0.35, 0.55)), 30, 2.8),
+        ("s06b_their_view", *span("s06_everyone_stops", 0.33, 0.6), lambda fr: Vector((1.95, 0.85, 1.15)),
          lambda fr: fl_rel(fr, (0.0, -0.6, 1.4)), 30, 4.0),
-        ("s06c_eye_mittens", 505, 512, lambda fr: fl_rel(fr, (1.05, -0.9, 1.6)),
-         lambda fr: fl_rel(fr, (0.0, 0.25, 1.75)), 70, 2.0),
-        ("s06d_eye_pickles", 513, 520, lambda fr: pk_head(fr) + Vector((-0.9, 1.0, -0.15)),  # stays south of the NE rack (y < 1.75)
-         pk_head, 50, 2.0),
-        ("s06e_eye_bolt", 521, S["s06_everyone_stops"][2],
-         lambda fr: bolt_head(fr) + Vector((-0.7, 0.9, 0.1)), bolt_head, 70, 2.0),
-        ("s07a_wave_through", 529, 552, lambda fr: fl_rel(fr, (1.4, -2.4, 1.3)),
-         lambda fr: fl_rel(fr, (0.0, 0.1, 1.6)), 45, 2.8),
-        ("s07b_crossing", 553, 600, lambda fr: Vector((-0.4, -5.0, 1.25)),
+        ("s06c_eye_mittens", *span("s06_everyone_stops", 0.6, 0.73),
+         lambda fr: fl_rel(fr, (1.3, -1.35, 1.75)), lambda fr: fl_rel(fr, (0.0, 0.2, 1.62)), 35, 2.8),
+        ("s06d_eye_pickles", *span("s06_everyone_stops", 0.73, 0.87),
+         lambda fr: pk_head(fr) + Vector((-1.4, 1.1, 0.0)), pk_head, 35, 2.8),
+        ("s06e_eye_bolt", *span("s06_everyone_stops", 0.87, 1),
+         lambda fr: bolt_head(fr) + Vector((-1.2, 1.1, 0.25)), bolt_head, 35, 2.8),
+        # s07: wave-through from her side, the crossing, CLEAR on the screen, roll on
+        ("s07a_wave_through", *span("s07_then_go", 0, 0.27), lambda fr: fl_rel(fr, (1.25, -0.9, 1.7)),
+         lambda fr: fl_rel(fr, (0.05, 0.05, 1.62)), 28, 2.8),
+        ("s07b_crossing", *span("s07_then_go", 0.27, 0.8), lambda fr: Vector((-0.4, -5.0, 1.25)),
          lambda fr: Vector((0.3, 0.6, 0.7)), 30, 4.0),
-        ("s07c_clear", 601, 612, lambda fr: fl_rel(fr, over_shoulder),
-         lambda fr: fl_rel(fr, screen), 70, 2.8),
-        ("s07d_roll_on", 613, S["s07_then_go"][2], lambda fr: Vector((-1.0, -1.9, 0.6)),
+        ("s07c_clear", *span("s07_then_go", 0.8, 0.92), lambda fr: fl_rel(fr, over_shoulder),
+         lambda fr: fl_rel(fr, screen), 55, 2.8),
+        ("s07d_roll_on", *span("s07_then_go", 0.92, 1), lambda fr: Vector((-1.0, -1.9, 0.6)),
          lambda fr: fl_rel(fr, (0.0, -1.0, 1.0)), 28, 4.0),
-        ("s08a_lens_blink", 625, 640, lambda fr: fl_rel(fr, (0.45, -1.85, 1.85)),
-         lambda fr: fl_rel(fr, ramscam), 85, 2.8),
-        ("s08b_screen_heart", 641, 656, lambda fr: fl_rel(fr, over_shoulder),
-         lambda fr: fl_rel(fr, screen), 60, 2.8),
-        ("s08c_good_team", 657, S["s08_good_team"][2], lambda fr: Vector((-3.2, -1.55, 1.0)),
+        # s08: the side LED blinks, heart on the screen, then the payoff wide with the HUD
+        ("s08a_led_blink", *span("s08_good_team", 0, 0.16), lambda fr: fl_rel(fr, (0.32, -0.5, 1.98)),
+         lambda fr: fl_rel(fr, (0.08, -0.99, 1.97)), 50, 2.8),   # from behind-left, inside the guard: the LED side
+        ("s08b_screen_heart", *span("s08_good_team", 0.16, 0.34), lambda fr: fl_rel(fr, over_shoulder),
+         lambda fr: fl_rel(fr, screen), 50, 2.8),
+        ("s08c_good_team", *span("s08_good_team", 0.34, 1), lambda fr: Vector((-3.2, -1.55, 1.0)),
          lambda fr: Vector((-2.0, 1.6, 1.1)), 24, 4.0),
     ]
     for name, a, b, loc, tgt, lens, fstop in segs:

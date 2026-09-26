@@ -1,6 +1,6 @@
 """Ep. 5: in-cab RAMS AI screen texture as an image sequence (system python + Pillow).
 
-One 1280x720 PNG per episode frame, 1..864:  assets/ui/seq/ui_0001.png ... ui_0864.png
+One 1280x720 PNG per episode frame, 1..timeline.FRAME_END:  assets/ui/seq/ui_0001.png ...
 State per frame comes from timeline.screen_state_at(frame); pixels from make_screen_ui.compose.
 
 Camera-POV feed: if renders/stage3/pov/pov_XXXX.png exists for a frame it replaces the placeholder
@@ -14,8 +14,8 @@ written once and the repeats are hardlinked (copied if hardlinks fail).
     python3 scripts/ep05/screen_seq.py                 # whole episode
     python3 scripts/ep05/screen_seq.py --frames 300-400 --pov renders/stage3/pov
 
-Blender: load ui_0001.png as an image SEQUENCE, frame_start 1, offset 0, duration 864, auto refresh
-(lib.mats.screen(name, ".../assets/ui/seq/ui_0001.png", sequence_frames=864) does exactly this).
+Blender: load ui_0001.png as an image SEQUENCE, frame_start 1, offset 0, duration timeline.FRAME_END, auto refresh
+(lib.mats.screen(name, ".../assets/ui/seq/ui_0001.png", sequence_frames=timeline.FRAME_END) does exactly this).
 """
 import argparse
 import json

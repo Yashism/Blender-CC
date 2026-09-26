@@ -358,8 +358,9 @@ def build(coll):
     cam.rotation_euler = (math.radians(12), 0, 0)
 
     # ---- in-cab screen on a RAM arm, right side of the dash, in Mittens' eye line ----
-    scr = cab_screen.build(coll, "idle", arm_len=0.16, tilt_deg=22)
-    scr_base = Vector((-0.34, -0.7, 1.045))
+    # raised on a taller RAM arm so the control levers never cover it (client note)
+    scr = cab_screen.build(coll, "idle", arm_len=0.30, tilt_deg=18)
+    scr_base = Vector((-0.40, -0.76, 1.045))
     eye = Vector((0.0, 0.2, 1.75))
     d = eye - scr_base
     scr.location = scr_base

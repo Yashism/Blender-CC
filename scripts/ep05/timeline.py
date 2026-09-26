@@ -1,18 +1,42 @@
-"""Ep. 5 "Blind Corner": the master timeline. 864 frames at 24 fps (36 s). Frame 1 = 0.0 s.
+"""Ep. 5 "Blind Corner": the master timeline. 1440 frames at 24 fps (60 s). Frame 1 = 0.0 s.
 
 Single source of truth for shot ranges, captions, story events and root motion. Everything else
 (animation, cameras, screen UI, captions/HUD, sound) reads from here, so retiming happens once.
 World action is continuous from shot 2 to shot 8; cameras cut around it.
+
+Retime (client note, Stage 3 review: "increase the duration of all clips, 1 min is fine"):
+story beats below are still written in the original 36 s "story seconds"; f() remaps them
+piecewise onto the new shot lengths in SHOT_SECONDS, so every beat keeps its place in its shot.
 """
 from builders import layout_ep05 as L
 
 FPS = 24
-FRAME_START, FRAME_END = 1, 864
+
+# Original shot boundaries (story seconds) and the new shot lengths (seconds). Sum = 60.
+_OLD_BOUNDS = [0.0, 3.0, 7.0, 10.0, 14.0, 18.0, 22.0, 26.0, 29.5, 33.0, 36.0]
+SHOT_SECONDS = [5.0, 6.5, 5.5, 6.5, 7.5, 9.0, 7.0, 5.0, 4.5, 3.5]
+_NEW_BOUNDS = [0.0]
+for _d in SHOT_SECONDS:
+    _NEW_BOUNDS.append(_NEW_BOUNDS[-1] + _d)
+DURATION = _NEW_BOUNDS[-1]
 
 
-def f(seconds):
-    """Frame number at time `seconds` (frame 1 is t=0)."""
-    return int(round(seconds * FPS)) + 1
+def remap(story_s):
+    """Story seconds (original 36 s cut) -> episode seconds (60 s cut)."""
+    for i in range(len(_OLD_BOUNDS) - 1):
+        a, b = _OLD_BOUNDS[i], _OLD_BOUNDS[i + 1]
+        if story_s <= b or i == len(_OLD_BOUNDS) - 2:
+            t = (story_s - a) / (b - a)
+            return _NEW_BOUNDS[i] + t * (_NEW_BOUNDS[i + 1] - _NEW_BOUNDS[i])
+    return DURATION
+
+
+def f(story_seconds):
+    """Frame number for a beat written in story seconds (frame 1 is t=0)."""
+    return int(round(remap(story_seconds) * FPS)) + 1
+
+
+FRAME_START, FRAME_END = 1, int(round(DURATION * FPS))
 
 
 # ------------------------------------------------------------------ shots (inclusive frames)
@@ -37,12 +61,12 @@ RULE_CARD = {
               "walkers: stop at the line, look both ways."],
     "footer": "bolt's night shift, ep. 5",
 }
-BRAND_CARD = {"tag": "BOLT, HEAD OF SAFETY", "line": "(the camera saw them first.)"}
+BRAND_CARD = {"tag": "BOLT, HEAD OF SAFETY", "line": None}   # line removed (client note)
 
 # ------------------------------------------------------------------ story events (frames)
 E = {
     # shot 1
-    "lens_on": f(0.5), "screen_boot": f(0.9), "screen_live": f(2.3),
+    "lens_on": f(0.6), "screen_boot": f(1.3), "screen_live": f(2.4),   # lens_on = side LED on
     # shot 5
     "alert": f(14.0),                      # PERSON box snaps on, border flashes
     "beeps": [f(14.15), f(14.45), f(14.75)],   # three sharp in-cab beeps
@@ -50,14 +74,14 @@ E = {
     "brake_squeak": f(15.9), "fl_stopped": f(16.2), "lens_bright": f(14.0),
     # shot 6
     "bolt_at_line": f(18.3), "paw_up": f(18.5), "pickles_stops": f(18.8),
-    "lean_look": f(19.4), "eye_contact": f(21.0),
+    "lean_look": f(19.4), "eye_contact": f(20.4),   # longer eye-contact beat (client note)
     # shot 7
     "double_beep": [f(22.2), f(22.45)], "mittens_wave": f(22.5),
-    "cross_start": f(22.35), "hat_tip": f(23.2), "clear": f(25.9), "clear_chime": f(25.9),
-    "fl_roll_on": f(25.95),                # only once Pickles and the cage are out of the lane
+    "cross_start": f(22.35), "hat_tip": f(23.2), "clear": f(25.4), "clear_chime": f(25.4),
+    "fl_roll_on": f(25.5),                # only once Pickles and the cage are out of the lane
     # shot 8
-    "lens_blink": f(26.1), "heart": f(26.3), "good_stop_hud": f(26.8), "good_team_hud": f(27.4),
-    "wave_trade": f(27.2), "tail_wag": f(27.2), "thumbs_up": f(27.6),
+    "lens_blink": f(26.1), "heart": f(26.3), "good_stop_hud": f(26.8), "good_team_hud": f(27.2),
+    "wave_trade": f(26.9), "tail_wag": f(26.9), "thumbs_up": f(27.0),
     # cards
     "rule_card_in": f(29.5), "brand_card_in": f(33.0),
 }
@@ -92,7 +116,7 @@ CAGE_FRONT_X = [
     (f(14.0), L.CAGE_FRONT_X),              # shot 4/5 anchor (hidden from the driver)
     (E["pickles_stops"], L.PED_STOP_X + 0.3),   # stops just before the walkers' stop line
     (E["cross_start"], L.PED_STOP_X + 0.3),
-    (f(25.9), -2.8),                        # Pickles (0.3 + 0.735 m behind) now clear of the lane
+    (f(25.4), -2.8),                        # Pickles (0.3 + 0.735 m behind) now clear of the lane
     (f(29.5), -4.6),
 ]
 BOLT_X = [                                  # Bolt's root x; y follows BOLT_Y
@@ -101,7 +125,7 @@ BOLT_X = [                                  # Bolt's root x; y follows BOLT_Y
     (f(14.0), L.BOLT_SHOT4[0]),
     (E["bolt_at_line"], L.PED_STOP_X + 0.42),   # nose on the stop line, paw up
     (E["cross_start"], L.PED_STOP_X + 0.42),
-    (f(25.9), -2.9),                        # keeps pace with Pickles across the zebra
+    (f(25.4), -2.9),                        # keeps pace with Pickles across the zebra
     (f(29.5), -3.3),
 ]
 BOLT_Y = [(FRAME_START, L.BOLT_SHOT4[1]), (f(15.0), L.BOLT_SHOT4[1]),

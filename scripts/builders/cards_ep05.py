@@ -607,7 +607,8 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
     rc.scale = (2.1, 2.1, 2.1)
     rc.location = (0.0, PY - 0.01, gz)
     rc.rotation_euler = (math.radians(8), 0, 0)
-    rc["lens_glow"] = 1.0
+    rc["lens_glow"] = 0.0          # lens stays dark glass (client note); the side LED shows "on"
+    rc["led"] = 1.0
 
     # ---- in-cab screen (own instance) on its RAM arm, on a yellow felt dash block -------------
     dash_x, dash_top = 0.34, 0.46
@@ -674,10 +675,12 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
               coll, m["orange"], rib, y=-0.0045, dash=0.016, gap=0.009, w=0.0035)
     _stitches("CRD_brand_ribbon_st_b", (-rw / 2 + 0.03, 0.022), (rw / 2 - 0.03, 0.022), coll,
               m["orange"], rib, y=-0.0045, dash=0.016, gap=0.009, w=0.0035)
-    _text("CRD_brand_tag", BC["tag"], 0.078, (0, -0.0065, rh * 0.63), coll, m["ink_cream"],
-          "CENTER", 0.0025, rib)
-    _text("CRD_brand_line", BC["line"], 0.056, (0, -0.0055, rh * 0.29), coll, m["ink_or"],
-          "CENTER", 0.0015, rib)
+    # the small line was removed on client review; the tag then sits centred on the ribbon
+    _text("CRD_brand_tag", BC["tag"], 0.078, (0, -0.0065, rh * (0.63 if BC["line"] else 0.5)),
+          coll, m["ink_cream"], "CENTER", 0.0025, rib)
+    if BC["line"]:
+        _text("CRD_brand_line", BC["line"], 0.056, (0, -0.0055, rh * 0.29), coll, m["ink_or"],
+              "CENTER", 0.0015, rib)
 
     # ---- Bolt (own instance), SITTING beside the camera -------------------------------------
     sub_bolt = geo.collection("CRD10_BOLT", coll)
@@ -717,11 +720,11 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
     for fc in rig._fcurves(bo.animation_data.action):
         for kp in fc.keyframe_points:
             kp.interpolation = "CONSTANT"
-    # the RAMS lens "winks" once (on twos) as Bolt tilts his head
-    for fr, g in ((fin, 1.0), (t_in + 4, 0.55), (t_in + 6, 1.0)):
-        rc["lens_glow"] = g
-        rc.keyframe_insert('["lens_glow"]', frame=fr)
-    rc["lens_glow"] = 1.0
+    # the RAMS status LED "winks" once (on twos) as Bolt tilts his head
+    for fr, g in ((fin, 1.0), (t_in + 4, 0.0), (t_in + 6, 1.0)):
+        rc["led"] = g
+        rc.keyframe_insert('["led"]', frame=fr)
+    rc["led"] = 1.0
     _step(rc, S10[1] % 2)
 
     # ---- lights -----------------------------------------------------------------------------

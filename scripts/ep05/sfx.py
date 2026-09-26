@@ -6,7 +6,7 @@ task; everything here is synthesised placeholder audio locked to scripts/ep05/ti
     python3 scripts/ep05/sfx.py                     # -> renders/stage3/temp_audio.wav
     python3 scripts/ep05/sfx.py --out x.wav --stems # also write music/sfx stems next to it
 
-48 kHz, stereo, 16-bit, exactly 36.0 s.
+48 kHz, stereo, 16-bit, exactly timeline.DURATION seconds (60 s).
 
 TEMP music: light ukulele-ish groove (plucked-string additive synth, island strum), C Am F G at
 100 bpm; thins to a low pulse as the two sides converge (shots 3-4); drops out for one beat on the
@@ -29,7 +29,8 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 from ep05 import timeline as T  # noqa: E402
 
 SR = 48000
-DUR = 36.0
+DUR = T.DURATION
+R = T.remap  # story seconds (original 36 s cut) -> episode seconds
 N = int(SR * DUR)
 BPM = 100.0
 BEAT = 60.0 / BPM
@@ -198,7 +199,7 @@ STRUM = [(0, True), (1, True), (1.5, False), (2.5, False), (3, True), (3.5, Fals
 
 def music():
     bus = buf()
-    for t0, t1, chord, dens in SECTIONS:
+    for t0, t1, chord, dens in [(R(a), R(b), c, d) for a, b, c, d in SECTIONS]:
         b = int(np.ceil(t0 / BEAT - 1e-6))  # beat grid is global (bar-aligned from 0 s)
         while b * BEAT < t1 - 1e-6:
             bar_beat = b % 4
@@ -219,15 +220,15 @@ def music():
     b = int(np.ceil(8.4 / BEAT))
     while b * BEAT < 22.0:
         tb = b * BEAT
-        g = float(np.interp(tb, [8.4, 10.0, 14.0, 18.0, 21.4, 22.0], [0.3, 0.8, 1.0, 0.8, 0.6, 0.0]))
+        g = float(np.interp(tb, [R(x) for x in (8.4, 10.0, 14.0, 18.0, 21.4, 22.0)], [0.3, 0.8, 1.0, 0.8, 0.6, 0.0]))
         pulse(bus, tb, g, 55.0)
         if tb < 14.0:
             pulse(bus, tb + BEAT * 0.4, g * 0.45, 55.0)  # heartbeat double
         b += 1
     # warm resolution pad on "good team", soft end under the cards
-    pad(bus, [48, 55, 64, 67], 26.0, 3.8, 0.9)
-    pad(bus, [53, 57, 60, 65], 29.6, 3.6, 0.5)
-    pad(bus, [48, 55, 60, 64], 33.2, 2.8, 0.55)
+    pad(bus, [48, 55, 64, 67], R(26.0), R(29.8) - R(26.0), 0.9)
+    pad(bus, [53, 57, 60, 65], R(29.6), R(33.2) - R(29.6), 0.5)
+    pad(bus, [48, 55, 60, 64], R(33.2), R(36.0) - R(33.2), 0.55)
     bus = reverb(bus, 1.2, 0.2)
     # one beat of silence on the alert (music only), then back to the pulse
     t = np.arange(N) / SR
@@ -253,8 +254,8 @@ def forklift(bus):
     spn = np.clip(sp / 1.2, 0, 1)
     spn = fft_filter(spn, hi=3)
     on = curve([(0, 0.35), (ft(T.SHOT["s02_tall_racks"][1]) - 0.2, 0.35),
-                (ft(T.SHOT["s02_tall_racks"][1]), 1.0), (7.0, 1.0), (7.3, 0.55),
-                (29.3, 0.55), (30.2, 0.0), (DUR, 0)], t)
+                (ft(T.SHOT["s02_tall_racks"][1]), 1.0), (R(7.0), 1.0), (R(7.3), 0.55),
+                (R(29.3), 0.55), (R(30.2), 0.0), (DUR, 0)], t)
     # electric motor: whine pitch follows speed, plus mains-ish hum
     f = 160 + 700 * spn
     ph = 2 * np.pi * np.cumsum(f) / SR
@@ -264,7 +265,7 @@ def forklift(bus):
     sig = (whine * (0.15 + 0.85 * spn) * 0.35 + hum * 0.12 + rumble * (0.2 + spn)) * on
     add(bus, sig, 0.0, 0.3, 0.05)
     # hydraulic whine bursts: mast settle on pull-away, and the roll-on
-    for t0, dur in ((3.15, 1.1), (ft(T.E["fl_roll_on"]) + 0.1, 0.8)):
+    for t0, dur in ((R(3.15), 1.1), (ft(T.E["fl_roll_on"]) + 0.1, 0.8)):
         tb = tt(dur)
         fr = 780 + 260 * np.sin(np.pi * tb / dur) + 8 * np.sin(2 * np.pi * 6 * tb)
         ph = 2 * np.pi * np.cumsum(fr) / SR

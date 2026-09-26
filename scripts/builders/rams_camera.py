@@ -115,6 +115,26 @@ def _ribs(name, side, depth, height, center_z, x, mat, coll, pitch=0.0085, width
     return rib
 
 
+def _drive2(owner, prop, root, expr, index=-1):
+    """Driver reading root["led"] as `on` and root["led_alert"] as `al`."""
+    fc = owner.driver_add(prop, index) if index >= 0 else owner.driver_add(prop)
+    drv = fc.driver
+    drv.type = "SCRIPTED"
+    for name, path in (("on", '["led"]'), ("al", '["led_alert"]')):
+        v = drv.variables.new()
+        v.name = name
+        v.type = "SINGLE_PROP"
+        v.targets[0].id_type = "OBJECT"
+        v.targets[0].id = root
+        v.targets[0].data_path = path
+    drv.expression = expr
+    return fc
+
+
+LED_GREEN = (0.08, 1.0, 0.22)
+LED_ORANGE = (1.0, 0.30, 0.02)
+
+
 def _drive(target_socket_owner, prop, root, expr):
     fc = target_socket_owner.driver_add(prop)
     drv = fc.driver
@@ -132,6 +152,11 @@ def _drive(target_socket_owner, prop, root, expr):
 def build(coll, glow=0.6, with_bracket=True):
     root = geo.empty("RAMSCam_root", (0, 0, 0), coll, 0.1, "ARROWS")
     root["lens_glow"] = glow
+    # Status LED on the side (client note: the lens no longer glows; a small LED shows "on").
+    root["led"] = 1.0 if glow > 0 else 0.0
+    root["led_alert"] = 0.0
+    for k in ("led", "led_alert"):
+        root.id_properties_ui(k).update(min=0.0, max=1.0)
     root.id_properties_ui("lens_glow").update(min=0.0, max=1.0, description="lens glow 0..1")
     parts = []
     body_mat = _ribbed_body_mat()
@@ -247,6 +272,31 @@ def build(coll, glow=0.6, with_bracket=True):
                                                              z0 + H * 0.42), mat=black, coll=coll,
                   bevel=0.0008)
     parts += [usbc, usbc_hole, xt, btn, *pins]
+
+    # Status LED: a small domed lens in a black bezel near the front-top corner of the +X side.
+    # Green = on, orange = detection (root["led_alert"]). Emission + a tiny point light.
+    led_z = z0 + H * 0.86
+    led_y = -D / 2 + 0.014
+    bez = geo.cylinder("RAMSCam_led_bezel", 0.0052, 0.0022, (sxp + 0.0006, led_y, led_z),
+                       (0, math.radians(90), 0), mat=black, coll=coll, segs=20)
+    led_m = M.emissive("rams_cam_led", "#20FF40", strength=0.0, base="#0A1A0C")
+    lb = led_m.node_tree.nodes["Principled BSDF"]
+    lb.inputs["Roughness"].default_value = 0.15
+    lb.inputs["Coat Weight"].default_value = 1.0
+    for i, (g, o) in enumerate(zip(LED_GREEN, LED_ORANGE)):
+        _drive2(lb.inputs["Emission Color"], "default_value", root, f"{g}*(1-al)+{o}*al", i)
+    _drive2(lb.inputs["Emission Strength"], "default_value", root, "on*24")
+    led = geo.blob("RAMSCam_led", (0.0017, 0.0036, 0.0036), (sxp + 0.0022, led_y, led_z),
+                   mat=led_m, coll=coll, subsurf=1)
+    lld = bpy.data.lights.new("RAMSCam_led_light", "POINT")
+    lld.shadow_soft_size = 0.002
+    for i, (g, o) in enumerate(zip(LED_GREEN, LED_ORANGE)):
+        _drive2(lld, "color", root, f"{g}*(1-al)+{o}*al", i)
+    _drive2(lld, "energy", root, "on*0.25")
+    llo = bpy.data.objects.new("RAMSCam_led_light", lld)
+    llo.location = (sxp + 0.008, led_y, led_z)
+    geo._link(llo, coll)
+    parts += [bez, led, llo]
 
     # Mounting bracket: plate on top, two cheeks, mount plate at the root.
     if with_bracket:
