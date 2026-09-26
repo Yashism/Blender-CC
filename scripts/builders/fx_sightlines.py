@@ -24,14 +24,17 @@ BLUE = (0.0, 0.42, 1.0)
 ORANGE = (1.0, 0.16, 0.0)
 
 
-def cone_material(name, rgb, strength=0.05, rim=1.4, alpha=0.2, footprint=0.3):
-    """Additive translucent glow, brighter towards the silhouette edges."""
+def cone_material(name, rgb, strength=0.035, rim=1.4, alpha=0.2, footprint=0.12):
+    """Translucent coloured gel with a faint glow, brighter towards the edges and on the floor footprint."""
     mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree
     nt.nodes.clear()
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    # Coloured-gel tint: the cone filters what's behind it (no brightening, so AgX keeps the hue),
+    # plus a faint additive glow so it still reads over dark floor.
+    tr.inputs["Color"].default_value = (*[0.45 + 0.55 * c for c in rgb], 1)
     em = nt.nodes.new("ShaderNodeEmission")
     em.inputs["Color"].default_value = (*rgb, 1)
     lw = nt.nodes.new("ShaderNodeLayerWeight")
@@ -183,11 +186,18 @@ def build(coll, fl_y=L.FL_ALERT_Y, fl_x=0.0):
     drv = build_cone("FX_Cone_Driver", eye, (0, -1), cone_material("fx_cone_blue", BLUE), coll,
                      half_h_deg=40, half_v_deg=14, length=11.0, tilt_down_deg=7)
     cam = build_cone("FX_Cone_Camera", lens, (0, -1), cone_material("fx_cone_orange", ORANGE,
-                                                                     strength=0.06), coll,
+                                                                     strength=0.04), coll,
                      half_h_deg=58, half_v_deg=20, length=12.0, tilt_down_deg=12)
-    # Orange shows only what the camera sees BEYOND the driver: subtract the blue cone.
-    # (Both meshes have their origin at their own apex; the boolean works in world space.)
-    _apply_boolean(cam, drv)
+    # Orange shows only what the camera sees BEYOND the driver, in plan view: subtract the blue
+    # cone's footprint extended vertically (a copy of it stretched in z about its apex), so no
+    # orange slab is left above or below the blue one.
+    plan = bpy.data.objects.new("FX_cutter_driver_plan", drv.data.copy())
+    geo._link(plan, coll)
+    plan.location = drv.location
+    plan.scale = (1.0, 1.0, 60.0)
+    bpy.context.view_layer.update()
+    _apply_boolean(cam, plan)
+    bpy.data.objects.remove(plan, do_unlink=True)
     for o in (drv, cam):
         geo.parent(o, root)
     root["driver_eye"] = tuple(eye)

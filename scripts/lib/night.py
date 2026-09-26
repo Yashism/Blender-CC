@@ -61,7 +61,7 @@ def rig(layout, coll_lights, coll_fx=None, haze_density=0.004):
     # Warm practical pools under the three dome lamps.
     for i, (x, y) in enumerate(layout.LAMPS):
         z = layout.LAMP_Z - 0.25
-        L[f"lamp_{i}"] = _spot(f"LGT_Lamp_{i}_3200K", (x, y, z), 1100, 3200, 95, 0.55, 0.12,
+        L[f"lamp_{i}"] = _spot(f"LGT_Lamp_{i}_3200K", (x, y, z), 750, 3200, 95, 0.55, 0.12,
                                coll_lights)
         # a little bounce glow around the bulb so the dome reads lit
         ld = bpy.data.lights.new(f"LGT_Lamp_{i}_glow", "POINT")
