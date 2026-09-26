@@ -2,12 +2,12 @@
 
 A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS project in a handmade felt-and-cardboard stop-motion look. Every model, rig and render comes from Python in `scripts/`, so the whole episode can be rebuilt from a fresh checkout.
 
-## Status: Stage 1 delivered, awaiting approval
+## Status: Stage 1 approved, Stage 2 in progress
 
 | Stage | What | Status |
 | --- | --- | --- |
-| 1 | Character, forklift and camera models + turntables | **for review** |
-| 2 | Set, lighting look-dev, hero still of the sightline-cone shot | waits on Stage 1 sign-off |
+| 1 | Character, forklift and camera models + turntables | **approved** |
+| 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **in progress** |
 | 3 | Blocking playblast of the full episode | |
 | 4 | Final animation, render, audio, deliverables | |
 
@@ -30,7 +30,7 @@ Turntables are 24 frames per spin, stepped at 12 fps ("on twos", like the show) 
 
 ## Open items for the client
 
-1. **RAMS Digital logo files** (black and white versions, transparent PNG or SVG) are needed. Until they arrive, the camera faceplate, Bolt's chest plate and the screen boot state show a marked "logo file pending" placeholder, because the logo is never retyped. Drop the files in as `assets/logo/rams_logo_black.png` and `assets/logo/rams_logo_white.png`, rebuild, and they appear everywhere.
+1. **RAMS Digital logo:** received (white version). `assets/logo/rams_logo_white.png` is the supplied file. `rams_logo_black.png` is derived from it by recolouring only the white lettering to near-black; the orange bracket and every shape are untouched. Replace it with an official black file if one exists.
 2. **Front or 3/4 references for Mittens and Pickles** would help. Their refs are side views only, so their front views are our interpretation.
 3. **Camera count.** The forklift reference shows several cameras on the guard. Per the brief, FL-02 carries one, on the front crossbar. Confirm.
 4. **Yellow hard hats** read slightly less lemony than the refs under the brief's AgX colour setting. They can be pushed if needed.

@@ -144,7 +144,7 @@ def _chest_plate(body, arm, coll):
     card = M.card("Bolt_chestplate_card", "bolt_black", rough=0.8)
     plate = geo.box("Bolt_chestplate", (w, t, h), (0, y, zc), mat=card, coll=coll, bevel=0.0012,
                     segs=2, edge_mat=M.card_edge())
-    logo = geo.plane("Bolt_chestplate_logo", w * 0.84, w * 0.42, (0, y - t / 2 - 0.0004, zc),
+    logo = geo.plane("Bolt_chestplate_logo", w * 0.84, w * 0.84 / M.logo_aspect("white"), (0, y - t / 2 - 0.0004, zc),
                      mat=M.logo_decal("Bolt_chestplate_logo", "white", bg="bolt_black"), coll=coll)
     for o in (plate, logo):
         rig.attach(o, arm, "spine.04")

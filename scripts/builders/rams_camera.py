@@ -161,9 +161,9 @@ def build(coll, glow=0.6, with_bracket=True):
     parts.append(fp)
     face_y = fy - 0.0027
 
-    # Logo decal: upper-middle of the plate, aspect 2:1 like the supplied logo image.
+    # Logo decal: upper-middle of the plate, proportions read from the supplied logo file.
     lw = W * 0.62
-    logo = geo.plane("RAMSCam_logo", lw, lw / 2, (0, face_y - 0.0004, z0 + H * 0.64),
+    logo = geo.plane("RAMSCam_logo", lw, lw / M.logo_aspect("black"), (0, face_y - 0.0004, z0 + H * 0.64),
                      mat=M.logo_decal("rams_cam_logo_decal", "black", bg="#ECECEA"), coll=coll)
     parts.append(logo)
 

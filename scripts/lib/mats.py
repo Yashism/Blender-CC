@@ -245,6 +245,8 @@ def image_decal(name, image_path, fallback="card_white", rough=0.6, emission=0.0
         mix.location = (-250, 0)
         mix.inputs[6].default_value = rgb(fallback)
         _link(nt, tex.outputs["Alpha"], mix.inputs["Factor"])
+        # Transparent outside the artwork: the decal prints onto whatever surface is behind it.
+        _link(nt, tex.outputs["Alpha"], bsdf.inputs["Alpha"])
         _link(nt, tex.outputs["Color"], mix.inputs[7])
         _link(nt, mix.outputs[2], bsdf.inputs["Base Color"])
         if emission > 0:
@@ -299,3 +301,12 @@ def logo_path(variant="black"):
 def logo_decal(name, variant="black", bg="card_white", rough=0.55):
     """Logo printed on a card/plastic face; map with the object's UVs (0..1 = logo image)."""
     return image_decal(name, logo_path(variant), fallback=bg, rough=rough)
+
+
+def logo_aspect(variant="black"):
+    """Width / height of the logo image in use (read from the PNG header)."""
+    import struct
+    with open(logo_path(variant), "rb") as f:
+        head = f.read(24)
+    w, h = struct.unpack(">II", head[16:24])
+    return w / h
