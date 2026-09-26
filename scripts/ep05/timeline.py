@@ -78,7 +78,7 @@ FL_Y = [                                    # FL-02 root y (drives south, -Y)
     (FRAME_START, L.FL_START_Y),            # shot 1: idling at the start of Aisle 4
     (f(3.0), L.FL_START_Y),                 # pulls away at the start of shot 2
     (f(7.0), 8.6),
-    (f(10.0), 6.3),
+    (f(10.0), L.FL_ALERT_Y + 0.4),          # shot 4 (sightline reveal): time slows, a slow creep
     (f(14.0), L.FL_ALERT_Y),                # alert fires here
     (E["brake_start"], L.FL_ALERT_Y - 0.28),
     (E["fl_stopped"], L.FL_STOP_ROOT_Y),    # smooth brake: fork tips ~10 cm short of the line
