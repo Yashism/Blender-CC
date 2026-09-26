@@ -48,4 +48,4 @@ Asset names for the turntable renderer are `bolt`, `mittens`, `pickles`, `roll_c
 
 ## Render note
 
-This work runs in a CPU-only cloud container (4 cores, no GPU). Stage 1 to 3 look-dev and playblasts are fine here. The final 864-frame 1080p Cycles pass is best run on a GPU machine using the same scripts.
+Look-dev and playblasts (Stages 1–3) run in a CPU-only cloud container. The final render runs on the client laptop with Cycles on the Arc 140T GPU (about 46 s per 1080p frame; see `docs/RENDER_ON_YOUR_PC.md`).

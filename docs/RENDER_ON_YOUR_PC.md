@@ -42,3 +42,25 @@ At the end it prints a small table.
 - **`cycles_gpu` says "skipped (no GPU backend)":** update the Intel driver (step 2) and run again. The other two modes still give useful numbers.
 - **One mode crashes:** re-run just the others, for example `... -P scripts\benchmark.py -- --modes eevee,cycles_cpu`.
 - **It's taking forever:** each mode is a single frame, and the CPU mode is the slowest. Ten minutes or so for that one mode is normal.
+
+## Benchmark results (client laptop, 2026-09-25)
+
+Zenbook 14, Intel Core Ultra 7 255H, Arc 140T graphics, Blender 4.5.14 LTS (portable build at `C:\blender-4.5`). One 1080p frame, 128 Cycles samples:
+
+| Mode | Per frame | 864 frames |
+| --- | --- | --- |
+| Cycles GPU (oneAPI, Arc 140T) | **45.7 s** | ~11 h |
+| EEVEE Next | 58.8 s | ~14 h |
+| Cycles CPU (16 threads) | 157.4 s | ~38 h |
+
+The first GPU run takes much longer (290 s) because it compiles the GPU kernels once. That compile is cached afterwards.
+
+**Decision: the final render uses Cycles on the Arc GPU (oneAPI).**
+
+To bring the render within a night, the final render script will:
+- keep the scene loaded between frames (persistent data)
+- use about 64–96 samples with denoising (felt is forgiving)
+- render the simple rule and brand cards cheaply
+- be resumable: it skips frames that already exist, so it can be stopped and continued the next night
+
+The target is roughly 6–8 hours for the whole episode. The real set will be heavier than the benchmark stand-in, so this gets re-measured at Stage 3.
