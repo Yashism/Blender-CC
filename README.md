@@ -2,14 +2,44 @@
 
 A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS project in a handmade felt-and-cardboard stop-motion look. Every model, rig and render comes from Python in `scripts/`, so the whole episode can be rebuilt from a fresh checkout.
 
-## Status: Stage 1 approved, Stage 2 delivered for review
+## Status: Stages 1 and 2 approved, Stage 3 blocking playblast delivered for review
 
 | Stage | What | Status |
 | --- | --- | --- |
 | 1 | Character, forklift and camera models + turntables | **approved** |
-| 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **for review** |
-| 3 | Blocking playblast of the full episode | |
+| 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **approved** |
+| 3 | Blocking playblast of the full episode | **for review** |
 | 4 | Final animation, render, audio, deliverables | |
+
+### Stage 3 deliverables (`renders/stage3/post/`)
+
+- `ep05_16x9.mp4`: blocking playblast, 36 s, captions, shot 8 HUD, TEMP audio
+- `ep05_9x16.mp4`: the vertical Reels cut, with captions and HUD re-laid for 9:16
+- `renders/ep05_captions.srt`: the caption file
+
+**What a blocking playblast is:** low resolution (640x360), low samples and noise, every second frame rendered and held. It's for judging timing, staging, camera and performance, not the final look.
+
+How it's built:
+- `scripts/ep05/timeline.py` is the master timing: shots, captions, story events and root motion. It is safety-checked on every frame: nobody is in the lane while FL-02 moves, and "CLEAR" only shows once the pair is out.
+- `scripts/ep05/build_episode.py` builds the scene, all animation and the 23 shot cameras (cut with timeline markers).
+- `scripts/ep05/perf.py` holds the character performance (on twos).
+- `scripts/builders/cards_ep05.py` holds the rule and brand cards.
+- `scripts/ep05/screen_seq.py` generates the in-cab UI sequence, `scripts/ep05/post.py` does captions, HUD, the 9:16 cut and the SRT, and `scripts/ep05/sfx.py` makes the TEMP audio.
+
+Rebuild:
+
+```
+python3 scripts/ep05/screen_seq.py && python3 scripts/ep05/sfx.py
+blender -b --factory-startup -P scripts/ep05/build_episode.py -- --save blender/ep05_blind_corner.blend --playblast renders/stage3/frames --res 640x360 --samples 8 --step 2
+python3 scripts/ep05/post.py --src 'renders/stage3/frames/f_%04d.png' --step 2 --out-dir renders/stage3/post --audio renders/stage3/temp_audio.wav
+```
+
+Known items for Stage 4:
+- The in-cab screen shows a placeholder illustrated feed; the final uses a real render from the RAMS camera's point of view.
+- Bolt's hat tip is a head bow, because his hat is sculpted onto his head.
+- The audio is temporary.
+- Final lighting polish, including the skylight hot spot seen from high angles.
+- Full-rate 24 fps render at 1080p on the client laptop (Cycles on the Arc GPU).
 
 ### Stage 2 deliverables (`renders/stage2/`)
 
