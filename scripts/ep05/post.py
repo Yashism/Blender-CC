@@ -47,7 +47,7 @@ ORANGE_DK = (196, 58, 8)
 TEAL = (31, 181, 165)
 CREAM = (250, 243, 226)
 NOLIGA = ["-liga", "-clig"]  # keep "fl-02" as two letters
-BANNED = ("—", "–")  # em / en dash: series rule
+BANNED = ("\u2014", "\u2013")  # em / en dash: series rule
 
 DROP_FRAMES = 5
 SRT = os.path.join(ROOT, "renders", "ep05_captions.srt")
@@ -157,6 +157,13 @@ def make_strip(text, font_px, max_w, seed):
     ss = 2  # supersample the torn silhouette
     fnt = font(font_px)
     lines = wrap_caption(text, fnt, max_w - 1.5 * font_px)
+    if len(lines) > 1 and len(text.split(". ")) == 1:
+        # no sentence break to wrap at: shrink up to 15% to keep one line (avoids orphans)
+        for k in (0.93, 0.86):
+            f2 = font(font_px * k)
+            if f2.getlength(text, features=NOLIGA) <= max_w - 1.5 * font_px * k:
+                fnt, lines = f2, [text]
+                break
     rng = random.Random(seed)
     pad_x, pad_y, line_h = 0.72 * font_px, 0.34 * font_px, 1.06 * font_px
     tw = max(fnt.getlength(l, features=NOLIGA) for l in lines)
@@ -237,7 +244,7 @@ def make_strip(text, font_px, max_w, seed):
 
 
 # ------------------------------------------------------------------------------------ HUD tags
-def make_tag(label, full, font_px, typing=False, cursor=False, bar=None, pct=None, seed=0):
+def make_tag(label, full, font_px, cursor=False, bar=None, pct=None, seed=0):
     """Orange paper tag with a punched eyelet. Box is sized for `full` so typing never resizes it.
     bar: 0..1 progress (draws a bar under the label). pct: string drawn right-aligned."""
     check_text(full)
@@ -268,7 +275,7 @@ def make_tag(label, full, font_px, typing=False, cursor=False, bar=None, pct=Non
     d.text((tx, ty), label, font=fnt, fill=CREAM, anchor="lm")
     if cursor:
         cx = tx + fnt.getlength(label) + font_px * 0.08
-        d.rectangle((cx, ty - font_px * 0.36, cx + font_px * 0.12, ty + font_px * 0.36), fill=CREAM)
+        d.rectangle((cx, ty + font_px * 0.26, cx + font_px * 0.5, ty + font_px * 0.36), fill=CREAM)
     if pct is not None:
         d.text((m + w - pad * 0.8, ty), pct, font=fnt, fill=CREAM, anchor="rm")
     if bar is not None:
@@ -380,7 +387,7 @@ def draw_hud(canvas, frame, mode):
         full = "GOOD STOP"
         n = min(len(full), max(0, (df - 1) // 2 + 1)) if df >= 1 else 0
         typing = n < len(full)
-        cur = typing or (df // 6) % 2 == 0 and df < 40
+        cur = typing and (df // 3) % 2 == 0  # underscore cursor blinks while typing only
         tag = make_tag(full[:n], full, px, cursor=cur, seed=11)
         paste_center(canvas, tag, lay["cx"], lay["stop_y"], pop_scale(df), -2.5)
     # GOOD TEAM 100%: pops, types (1 letter/frame), bar fills with a counting %, teal check
@@ -392,7 +399,7 @@ def draw_hud(canvas, frame, mode):
         b0 = len(label) + 2          # bar starts once the label is typed
         b = ease_out((df - b0) / 16.0) if df >= b0 else 0.0
         pct = f"{int(round(b * 100))}%" if df >= b0 else None
-        tag = make_tag(label[:n], label + " 100%", px, cursor=n < len(label),
+        tag = make_tag(label[:n], label + " 100%", px, cursor=n < len(label) and (df // 3) % 2 == 0,
                        bar=b, pct=pct, seed=23)
         cx, cy = lay["cx"], lay["team_y"]
         paste_center(canvas, tag, cx, cy, pop_scale(df), 2.0)
