@@ -2,14 +2,26 @@
 
 A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS project in a handmade felt-and-cardboard stop-motion look. Every model, rig and render comes from Python in `scripts/`, so the whole episode can be rebuilt from a fresh checkout.
 
-## Status: Stage 1 approved, Stage 2 in progress
+## Status: Stage 1 approved, Stage 2 delivered for review
 
 | Stage | What | Status |
 | --- | --- | --- |
 | 1 | Character, forklift and camera models + turntables | **approved** |
-| 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **in progress** |
+| 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **for review** |
 | 3 | Blocking playblast of the full episode | |
 | 4 | Final animation, render, audio, deliverables | |
+
+### Stage 2 deliverables (`renders/stage2/`)
+
+| Still | What |
+| --- | --- |
+| `hero.png` (+ `hero_safe.png`) | shot 4 sightline reveal, 1920x1080: the blue cone (what Mittens sees) stops at the rack ends; the orange wedge (what only the RAMS camera sees) reaches the roll cage, Pickles and Bolt's hard hat |
+| `lookdev.png` (+ `_safe`) | shot 2 look-dev: low tracking angle beside FL-02, night-shift lighting |
+| `drone.png` (+ `_safe`) | shot 3: top-down convergence |
+| `driver.png` | Mittens' point of view at the alert moment: the pair is hidden by the rack end |
+| `set_preview_*.png` | set work-in-progress views |
+
+The `_safe` versions mark the 9:16 centre-safe area for the Reels cut. The set layout and the sightline geometry are defined in `scripts/builders/layout_ep05.py`. The layout is verified so that at the alert, no part of the cage or Bolt is visible from Mittens' eye, while the camera sees them. Render with `scripts/stage2_stills.py`.
 
 ### Stage 1 deliverables (`renders/stage1/`)
 
