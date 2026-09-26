@@ -38,6 +38,7 @@ ap.add_argument("--no-main", action="store_true", help="skip the main cast (fast
 ap.add_argument("--no-render", action="store_true")
 ap.add_argument("--save-blend", action="store_true")
 ap.add_argument("--tag", default="")
+ap.add_argument("--border", default="", help="render region x0,y0,x1,y1 (0..1, y up), cropped")
 a = ap.parse_args(argv)
 
 OUT = os.path.join(ROOT, "renders", "stage3", "cards")
@@ -47,6 +48,11 @@ studio.reset_scene()
 w, h = (int(v) for v in a.res.split("x"))
 scene = studio.render_settings(res=(w, h), samples=a.samples)
 scene.render.use_persistent_data = True
+if a.border:
+    x0, y0, x1, y1 = (float(v) for v in a.border.split(","))
+    r = scene.render
+    r.use_border, r.use_crop_to_border = True, True
+    r.border_min_x, r.border_min_y, r.border_max_x, r.border_max_y = x0, y0, x1, y1
 scene.frame_start, scene.frame_end = 1, 864
 C = {n: geo.collection(n) for n in ("Characters", "Forklift", "Lights", "FX", "Cards")}
 
@@ -180,6 +186,8 @@ if not a.no_render:
         outs.append(p)
         print("[cards] wrote", p)
     try:
-        subprocess.run(["python3", os.path.join(SCRIPTS, "safe_overlay.py"), *outs], check=False)
+        if not a.border:
+            subprocess.run(["python3", os.path.join(SCRIPTS, "safe_overlay.py"), *outs],
+                           check=False)
     except OSError:
         pass

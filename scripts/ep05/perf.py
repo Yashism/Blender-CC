@@ -83,17 +83,47 @@ def _lerp(a, b, t):
 
 
 # ======================================================================== world positions (blocking)
+# Root motion as the lead keys it (ep05/build_episode.py: smoothstep-eased timeline segments).
+# Using the lead's own functions keeps the distance-driven gait in sync with the roots.
+
+def _smooth(keys):
+    def fn(fr):
+        if fr <= keys[0][0]:
+            return keys[0][1]
+        for (fa, va), (fb, vb) in zip(keys, keys[1:]):
+            if fa <= fr <= fb:
+                t = 0.0 if fb == fa else (fr - fa) / (fb - fa)
+                return va + (vb - va) * t * t * (3 - 2 * t)
+        return keys[-1][1]
+    return fn
+
+
+_ROOT_FNS = None
+
+
+def root_fns():
+    """{'cage_x', 'bolt_x', 'bolt_y', 'fl_y'}: frame -> value, as keyed by the lead."""
+    global _ROOT_FNS
+    if _ROOT_FNS is None:
+        try:
+            from ep05 import build_episode as BE
+            _ROOT_FNS = dict(cage_x=BE.cage_x, bolt_x=BE.bolt_x, bolt_y=BE.bolt_y, fl_y=BE.fl_y)
+        except Exception:  # noqa: BLE001  (fallback: same easing, straight from the timeline)
+            _ROOT_FNS = dict(cage_x=_smooth(T.CAGE_FRONT_X), bolt_x=_smooth(T.BOLT_X),
+                             bolt_y=_smooth(T.BOLT_Y), fl_y=_smooth(T.FL_Y))
+    return _ROOT_FNS
+
 
 def pickles_world(f):
-    return Vector((T.lerp_keys(T.CAGE_FRONT_X, f) + 0.3 + T.PICKLES_BEHIND_CAGE, T.CAGE_Y, 0.0))
+    return Vector((root_fns()["cage_x"](f) + 0.3 + T.PICKLES_BEHIND_CAGE, T.CAGE_Y, 0.0))
 
 
 def bolt_world(f):
-    return Vector((T.lerp_keys(T.BOLT_X, f), T.lerp_keys(T.BOLT_Y, f), 0.0))
+    return Vector((root_fns()["bolt_x"](f), root_fns()["bolt_y"](f), 0.0))
 
 
 def mittens_eye_world(f):
-    return Vector((0.0, T.lerp_keys(T.FL_Y, f) + 0.25, MIT_SEAT_Z)) + MIT_EYE
+    return Vector((0.0, root_fns()["fl_y"](f) + 0.25, MIT_SEAT_Z)) + MIT_EYE
 
 
 def _west_local(d):
@@ -210,7 +240,10 @@ def _find_fc(idb, path, index):
 def _fcurve(idb, path, index, group, frame):
     fc = _find_fc(idb, path, index)
     if fc is None:
-        idb.keyframe_insert(path, index=index, frame=frame, group=group)
+        try:
+            idb.keyframe_insert(path, index=index, frame=frame, group=group)
+        except TypeError:                      # scalar property
+            idb.keyframe_insert(path, index=-1, frame=frame, group=group)
         fc = _find_fc(idb, path, index)
     fc.keyframe_points.clear()
     return fc
@@ -310,10 +343,13 @@ def step_root_motion(obj, step=STEP):
 
 
 def _key_frames(busy, extra=()):
-    """Sparse idle grid + every ease breakpoint + every 2nd frame inside busy frames."""
-    fr = set(range(F0, F1 + 1, IDLE_GRID)) | {F0, F1}
+    """Sparse idle grid + every ease breakpoint + every 2nd frame inside busy frames.
+    Cycle keys sit on EVEN frames: the STEPPED modifier (offset 0) holds even frames, so the
+    held drawing is exactly the keyed one (and matches the lead's stepped roots)."""
+    fr = set(range(0, F1 + 1, IDLE_GRID)) | {F0, F1}
+    fr.discard(0)
     fr |= {a for a in _ANCHORS if F0 <= a <= F1}
-    fr |= {f for f in busy if (f - F0) % STEP == 0}
+    fr |= {f for f in busy if f % STEP == 0 and F0 <= f <= F1}
     fr |= set(extra)
     return sorted(fr)
 
@@ -338,10 +374,10 @@ class Gait:
     scripted: {foot index: [(fa, fb, (x, y), lift)]} steps taken while the root is still.
     """
 
-    def __init__(self, xkeys, feet, stance, duty, nominal=14, scripted=None, phase0=0.0):
+    def __init__(self, xfn, feet, stance, duty, nominal=14, scripted=None, phase0=0.0):
         self.feet = feet
         n = F1 - F0 + 1
-        X = [T.lerp_keys(xkeys, F0 + i) for i in range(n)]
+        X = [xfn(F0 + i) for i in range(n)]
         dd = [0.0] + [abs(X[i] - X[i - 1]) for i in range(1, n)]
         self.v = [d * FPS for d in dd]
         scripted = scripted or {}
@@ -456,7 +492,7 @@ def _reach_drop(joints, ankles, chains, k=0.985):
 
 # ================================================================================ PICKLES
 
-PK_HIPS_FWD = -0.075          # hips forward (toward the cage) while pushing
+PK_HIPS_FWD = -0.045          # hips forward (toward the cage) while pushing
 PK_STANCE_Y = -0.035          # centre of the foot stance under the hips
 PK_ANKLE_Z = 0.10
 
@@ -518,7 +554,7 @@ def animate_pickles(pickles_root):
     feet = [dict(home=homeL, off=0.0, lift=0.07), dict(home=homeR, off=0.5, lift=0.07)]
     # lean-out: right foot (his right = north, toward the lane traffic) steps out to peek
     scripted = {1: [(lean_a, lean_a + 6, (homeR.x - 0.10, PK_STANCE_Y - 0.03), 0.05)]}
-    gait = Gait(T.CAGE_FRONT_X, feet, _pk_stance, _pk_duty, nominal=14, scripted=scripted)
+    gait = Gait(root_fns()["cage_x"], feet, _pk_stance, _pk_duty, nominal=14, scripted=scripted)
 
     toe_off = {t: rg.tail[f"IK_foot.{t}"] - rg.head[f"IK_foot.{t}"] for t in "LR"}
     hipj = {t: rg.head[f"thigh.{t}"] for t in "LR"}
@@ -559,7 +595,8 @@ def animate_pickles(pickles_root):
         settle = env(f, tm["stop"] - 2, tm["stop"] + 2, tm["stop"] + 4, tm["stop"] + 12)
         P.move("hips", (hx, hy, -max(drop, 0.02) + bob - 0.012 * settle))
         P.rot("hips", (0, 0, 1), 4.0 * math.sin(cyc) * mw)
-        lean_fwd = 6.0 + 5.0 * fast + 4.0 * settle
+        lean_fwd = 11.0 + 5.0 * fast + 4.0 * settle
+        P.rot("hips", (1, 0, 0), 6.0 + 3.0 * fast)
         P.rot("spine.01", (1, 0, 0), lean_fwd * 0.45)
         P.rot("spine.02", (1, 0, 0), lean_fwd * 0.35)
         P.rot("spine.03", (1, 0, 0), lean_fwd * 0.2)
@@ -572,8 +609,8 @@ def animate_pickles(pickles_root):
         take = env(f, lean_a + 8, lean_a + 10, lean_a + 18, lean_a + 26)
         P.rot("spine.03", (1, 0, 0), -4 * take)
         # ---------------------------------------------------------------- neck / head
-        P.rot("neck", (1, 0, 0), -3.0 - 0.3 * lean_fwd)
-        P.rot("head", (1, 0, 0), -2.0 - 0.3 * lean_fwd + 1.5 * math.cos(2 * cyc) * mw
+        P.rot("neck", (1, 0, 0), -4.0 - 0.35 * lean_fwd)
+        P.rot("head", (1, 0, 0), -4.0 - 0.35 * lean_fwd + 1.5 * math.cos(2 * cyc) * mw
               - 6 * take)
         cock = env(f, tm["eye"] - 2, tm["eye"] + 3, tm["wave"] - 10, tm["wave"] - 4)
         P.rot("head", (0, 1, 0), -9 * cock)
@@ -666,7 +703,7 @@ def animate_bolt(bolt_root):
     lifts = dict(FL=0.045, FR=0.045, HL=0.04, HR=0.04)
     feet = [dict(home=Vector((rg.head[f"IK_{k}"].x, rg.head[f"IK_{k}"].y)), off=offs[k],
                  lift=lifts[k]) for k in BOLT_FEET]
-    gait = Gait(T.BOLT_X, feet, _bolt_stance, _bolt_duty, nominal=10)
+    gait = Gait(root_fns()["bolt_x"], feet, _bolt_stance, _bolt_duty, nominal=10)
     ank_z = {k: rg.head[f"IK_{k}"].z for k in BOLT_FEET}
     toe_off = {k: rg.tail[f"IK_{k}"] - rg.head[f"IK_{k}"] for k in BOLT_FEET}
     joints0 = {k: rg.head[f"upper.{k}"] for k in BOLT_FEET}
@@ -830,7 +867,7 @@ def mittens_timing():
 
 def _mit_local_target(world, f):
     """World point -> Mittens root-local (root at the FL-02 seat point, facing -Y)."""
-    return world - Vector((0.0, T.lerp_keys(T.FL_Y, f) + 0.25, MIT_SEAT_Z))
+    return world - Vector((0.0, root_fns()["fl_y"](f) + 0.25, MIT_SEAT_Z))
 
 
 def animate_mittens(mit_root):
@@ -840,8 +877,10 @@ def animate_mittens(mit_root):
     targets; if she is static, the looks are still in the right directions."""
     from builders import mittens as MB
     root = mit_root
-    arm = next(o for o in root.children_recursive if o.name.startswith("Mittens_rig"))
-    face = next(o for o in root.children_recursive if o.name.startswith("Mittens_face"))
+    kids = {o.name: o for o in root.children_recursive}
+    arm = kids.get("Mittens_rig") or next(o for o in kids.values() if o.type == "ARMATURE")
+    face = kids.get("Mittens_face") or next(o for o in kids.values() if o.name.startswith(
+        "Mittens_face") and o.data.shape_keys)
     rg = Rig(arm)
     tm = mittens_timing()
     _ANCHORS.clear()

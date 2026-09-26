@@ -133,8 +133,16 @@ def _key_twos(obj, path, f0, values, index=-1):
             obj.keyframe_insert(path, frame=f0 + 2 * i)
 
 
-def _step(obj):
+def _step(obj, phase=1):
+    """rig.stepped(obj, 2), with the steps phased to the shots' odd start frames (709, 793):
+    the default offset 0 would hold every odd-frame key one frame late."""
     rig.stepped(obj, 2)
+    ad = getattr(obj, "animation_data", None)
+    if ad and ad.action:
+        for fc in rig._fcurves(ad.action):
+            for md in fc.modifiers:
+                if md.type == "STEPPED":
+                    md.frame_offset = phase
 
 
 def _link_lights(lights, coll):
@@ -217,8 +225,8 @@ def _isolated_build(tag, coll):
 RC = T.RULE_CARD
 BOARD_W, BOARD_H = 1.25, 1.10          # cream felt panel
 BOARD_Z = 0.75                         # board centre height (local)
-GUT_X = -0.255                         # icon gutter centre (x), inside the 9:16 column
-TXT_X = -0.165                         # left edge of the text
+GUT_X = -0.215                         # icon gutter centre (x), inside the 9:16 column
+TXT_X = -0.125                         # left edge of the text
 
 
 def _icon_forklift(name, coll, m, parent, loc, s=1.0):
@@ -348,12 +356,12 @@ def build_rule_card(coll, origin=RULE_ORIGIN):
                                 (-0.95, BOARD_Z + 0.73), (0.95, BOARD_Z - 0.73))):
         _pin(f"CRD_rule_wallpin{i}", (x, 0.114, z), coll, root, r=0.016)
     # masking-tape strips and loose felt bits at the far sides (16:9 only)
-    for i, (x, z, a) in enumerate(((-1.25, 1.18, 12), (1.3, 0.32, -9), (-1.35, 0.35, -4))):
+    for i, (x, z, a) in enumerate(((-0.93, 1.24, 10), (0.95, 0.26, -8))):
         t = geo.box(f"CRD_rule_tape{i}", (0.22, 0.004, 0.05), (x, 0.118, z),
                     (0, math.radians(a), 0), mat=m["kraft"], coll=coll, bevel=0.0)
         t.parent = root
-    _icon_forklift("CRD_rule_decor_fl", coll, m, root, (1.33, 0.112, 1.05), s=1.1)
-    for i, (x, z) in enumerate(((-1.30, 0.82), (-1.22, 0.70), (-1.30, 0.58))):   # paw trail
+    _icon_forklift("CRD_rule_decor_fl", coll, m, root, (0.93, 0.112, 1.0), s=1.3)
+    for i, (x, z) in enumerate(((-0.95, 0.66), (-0.87, 0.52), (-0.95, 0.38))):   # paw trail
         _poly(f"CRD_rule_decor_paw{i}", geo.circle_pts(0.018, 16), 0.003, (x, 0.116, z), coll,
               m["tan"], root)
         for k, (tx, tz) in enumerate(((-0.02, 0.018), (0.0, 0.026), (0.02, 0.018))):
@@ -434,14 +442,14 @@ def build_rule_card(coll, origin=RULE_ORIGIN):
 
     # ---- animation (on twos) -----------------------------------------------------------------
     # Slide in from the right, overshoot, bounce back, settle. Stop-motion spacing.
-    xs = [2.05, 1.62, 1.18, 0.76, 0.40, 0.12, -0.05, -0.085, -0.055, -0.012, 0.018, 0.012,
+    xs = [1.82, 1.50, 1.14, 0.76, 0.40, 0.12, -0.05, -0.085, -0.055, -0.012, 0.018, 0.012,
           0.002, 0.0]
     rys = [-5.0, -4.5, -4.0, -3.4, -2.6, -1.2, 1.4, 2.2, 1.3, 0.2, -0.6, -0.3, 0.0, 0.0]
     zs = [0.025, 0.030, 0.030, 0.026, 0.020, 0.012, 0.0, -0.006, 0.0, 0.004, 0.0, 0.0, 0.0, 0.0]
     _key_twos(board, "location", fin, xs, index=0)
     _key_twos(board, "location", fin, [BOARD_Z + v for v in zs], index=2)
     _key_twos(board, "rotation_euler", fin, [math.radians(v) for v in rys], index=1)
-    _step(board)
+    _step(board, S09[1] % 2)
     settle = fin + 2 * (len(xs) - 1)
     # "look both ways": the felt pupils glance left, right, back (on twos, held poses)
     glance = [(settle + 10, 0.0), (settle + 12, -0.004), (settle + 14, -0.0075),
@@ -453,7 +461,7 @@ def build_rule_card(coll, origin=RULE_ORIGIN):
             pv.location.x = x0 + dx
             pv.keyframe_insert("location", index=0, frame=fr)
         pv.location.x = x0
-        _step(pv)
+        _step(pv, S09[1] % 2)
 
     # ---- lights (warm key, soft fill, grazing top light for the felt texture) ----------------
     L = []
@@ -653,7 +661,7 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
     # ---- the tag ribbon on the plinth front ---------------------------------------------------
     rib = geo.empty("CRD_brand_ribbon", (0, -0.50, 0.05), coll, 0.1)
     rib.parent = root
-    rib.rotation_euler = (math.radians(-24), 0, 0)      # leaning back, toward the camera
+    rib.rotation_euler = (math.radians(-38), 0, 0)      # leaning back, toward the camera
     rw, rh = 0.92, 0.25
     notch = [(-rw / 2 - 0.07, -rh / 2), (-rw / 2 + 0.02, -rh / 2), (-rw / 2 + 0.02, rh / 2),
              (-rw / 2 - 0.07, rh / 2), (-rw / 2 - 0.03, 0.0)]
@@ -675,9 +683,20 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
     sub_bolt = geo.collection("CRD10_BOLT", coll)
     with _isolated_build("CRD10_", sub_bolt):
         bo = BOLT.build(sub_bolt)
+    # Bolt sits up on a kraft carton so his folded legs read over the ribbon
+    bx, by, yaw = -0.30, -0.10, math.radians(22)
+    crate_h = 0.15
+    crate = geo.box("CRD_brand_crate", (0.40, 0.50, crate_h), (0, 0, 0), mat=m["kraft"],
+                    edge_mat=m["edge"], coll=coll, bevel=0.012)
+    tape = geo.box("CRD_brand_crate_tape", (0.10, 0.505, crate_h + 0.004), (0, 0, 0),
+                   mat=m["cardboard"], coll=coll, bevel=0.004)
+    for o in (crate, tape):
+        o.parent = root
+        o.rotation_euler = (0, 0, yaw)
+        o.location = (bx + math.sin(yaw) * -0.04, by + math.cos(yaw) * 0.04, 0.05 + crate_h / 2)
     bo.parent = root
-    bo.location = (-0.30, -0.12, 0.05)
-    bo.rotation_euler = (0, 0, math.radians(24))
+    bo.location = (bx, by, 0.05 + crate_h)
+    bo.rotation_euler = (0, 0, yaw)
     for ob in sub_bolt.all_objects:     # hide rig helpers if any are renderable
         if ob.type == "ARMATURE":
             ob.hide_render = True
@@ -693,8 +712,8 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
     back = fin + 56
     for i, tilt in enumerate((8.0, 4.0, 1.0, 0.0)):
         _key_head(arm, back + 2 * i, tilt)
-    rig.stepped(arm, 2)
-    _step(bo)
+    _step(arm, S10[1] % 2)
+    _step(bo, S10[1] % 2)
     for fc in rig._fcurves(bo.animation_data.action):
         for kp in fc.keyframe_points:
             kp.interpolation = "CONSTANT"
@@ -703,7 +722,7 @@ def build_brand_card(coll, origin=BRAND_ORIGIN, logo_variant="black"):
         rc["lens_glow"] = g
         rc.keyframe_insert('["lens_glow"]', frame=fr)
     rc["lens_glow"] = 1.0
-    _step(rc)
+    _step(rc, S10[1] % 2)
 
     # ---- lights -----------------------------------------------------------------------------
     L = []
