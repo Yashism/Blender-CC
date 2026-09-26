@@ -18,14 +18,17 @@ timeline.E / timeline.SHOTS / the root-motion key lists.
 
 Walk / trot cycles are distance driven: the gait phase advances by (root distance this frame /
 stride length), and a planted foot slides back in root space by exactly the root's travel, so
-feet stay planted for ANY root speed (including the lead's speed changes) as long as the roots
-follow timeline.lerp_keys. Stopping finishes the step in the air and plants it.
+feet stay planted for ANY root speed. The root x per frame is read from the lead's own
+ep05/build_episode.py functions (cage_x / bolt_x / bolt_y / fl_y: smoothstep-eased timeline
+segments), falling back to the same easing here; if the root keying changes, the gait follows.
+Stopping finishes the step in the air and plants it. Stride / duty shorten and add flight at
+speed so legs stay within IK reach (the body drops to reach, capped).
 
 Animation is on twos: every armature / shape-key F-curve gets a STEPPED modifier (step 2) via
-lib.rig.stepped, and the face-variant F-curves are CONSTANT (+ stepped). NOTE for the lead: the
-roots move every frame, so a pose that holds for 2 frames will let planted feet slip by one
-frame of root travel on odd frames (up to ~6 cm at the 1.5 m/s crossing). Put the ROOT MOTION on
-twos as well (step_root_motion(root) below, or rig.stepped on the roots' actions).
+lib.rig.stepped, and the face-variant F-curves are CONSTANT (+ stepped). Cycle keys sit on even
+frames, the frames the STEPPED modifier holds. The roots must be on twos too (build_episode
+already keys them on twos with a stepped modifier; step_root_motion() is here for other
+set-ups) or planted feet slip by one frame of root travel on odd frames.
 
 Keys stay editable: keys every 2 frames only while a cycle / waggle is running, otherwise
 on the story beats (every ease-in/out breakpoint) plus a sparse 8-frame idle grid.
@@ -441,6 +444,8 @@ class Gait:
                 if want_swing:
                     s = (u - du) / (1 - du)
                     if mode[k] != "swing":
+                        if mode[k] in ("stance", "hold"):
+                            pos[k].y += d          # still planted in world at lift-off
                         frm[k] = pos[k].copy()
                         s0[k] = min(s, 0.9)
                         mode[k] = "swing"
@@ -498,11 +503,11 @@ PK_ANKLE_Z = 0.10
 
 
 def _pk_stance(v):
-    return min(0.13 + 0.09 * v, 0.27)
+    return min(0.13 + 0.09 * v, 0.22)
 
 
 def _pk_duty(v):
-    return _lerp(0.62, 0.42, _ss((v - 0.7) / 0.8))
+    return _lerp(0.62, 0.30, _ss((v - 0.7) / 1.4))       # scurry with flight when fast
 
 
 def _pk_setup(root, rg):
@@ -523,10 +528,10 @@ def _pk_setup(root, rg):
     snaps["push"] = snapshot(rg)
     # thumbs up, right hand out to his right side at shoulder height (toward the forklift)
     PK.pose_rest(root)
-    q = Rq((0, 0, 1), -40) @ Rq((1, 0, 0), -100)
-    PK._place(arm, "IK_hand.R", Vector((-0.30, -0.16, 0.86)), q)
+    q = Rq((0, 0, 1), -45) @ Rq((1, 0, 0), -100)          # builder pose_test fist, out + up
+    PK._place(arm, "IK_hand.R", Vector((-0.34, -0.15, 0.88)), q)
     PK._rot(pb["fingers.R"], (0, 0, 1), 85)
-    PK._rot(pb["thumb.R"], (1, 0, 0), -60)
+    PK._rot(pb["thumb.R"], (1, 0, 0), -80)
     snaps["thumb"] = snapshot(rg)
     PK.pose_rest(root)
     return snaps
@@ -587,13 +592,14 @@ def animate_pickles(pickles_root):
             P.place(f"IK_foot.{t}", ank, Rq((1, 0, 0), p))
         # ---------------------------------------------------------------- hips + spine
         w_lean = env(f, lean_a, lean_a + 6, tm["wave"] - 6, tm["cross"] + 3)
-        hx = 0.012 * math.sin(cyc) * mw - 0.05 * w_lean
+        hx = 0.012 * math.sin(cyc) * mw - 0.075 * w_lean
         hy = PK_HIPS_FWD - 0.02 * fast
         joints = [hipj[t] + Vector((hx, hy, 0)) for t in "LR"]
         drop = _reach_drop(joints, ankles, [chain, chain])
         bob = -0.012 * (0.6 + fast) * math.cos(2 * cyc) * mw
         settle = env(f, tm["stop"] - 2, tm["stop"] + 2, tm["stop"] + 4, tm["stop"] + 12)
-        P.move("hips", (hx, hy, -max(drop, 0.02) + bob - 0.012 * settle))
+        drop = min(max(drop, 0.02), 0.07)
+        P.move("hips", (hx, hy, -drop + bob - 0.012 * settle))
         P.rot("hips", (0, 0, 1), 4.0 * math.sin(cyc) * mw)
         lean_fwd = 11.0 + 5.0 * fast + 4.0 * settle
         P.rot("hips", (1, 0, 0), 6.0 + 3.0 * fast)
@@ -602,9 +608,10 @@ def animate_pickles(pickles_root):
         P.rot("spine.03", (1, 0, 0), lean_fwd * 0.2)
         P.rot("spine.02", (0, 0, 1), -3.0 * math.sin(cyc) * mw)
         # lean out to his right (north) to peek past the cage
-        P.rot("spine.01", (0, 1, 0), -5 * w_lean)
-        P.rot("spine.02", (0, 1, 0), -6 * w_lean)
-        P.rot("spine.03", (0, 1, 0), -5 * w_lean)
+        P.rot("spine.01", (0, 1, 0), -7 * w_lean)
+        P.rot("spine.02", (0, 1, 0), -9 * w_lean)
+        P.rot("spine.03", (0, 1, 0), -7 * w_lean)
+        P.rot("neck", (0, 1, 0), -4 * w_lean)
         # surprise take when he sees the forklift (whoa), eye-contact head cock, thank-you nod
         take = env(f, lean_a + 8, lean_a + 10, lean_a + 18, lean_a + 26)
         P.rot("spine.03", (1, 0, 0), -4 * take)
@@ -674,11 +681,11 @@ BOLT_FEET = ("FL", "FR", "HL", "HR")
 
 
 def _bolt_stance(v):
-    return min(max(0.09 + 0.1 * v, 0.1), 0.26)
+    return min(max(0.09 + 0.1 * v, 0.1), 0.18)
 
 
 def _bolt_duty(v):
-    return _lerp(0.56, 0.40, _ss((v - 0.7) / 0.8))
+    return _lerp(0.56, 0.30, _ss((v - 0.7) / 1.4))
 
 
 def bolt_timing():
@@ -701,8 +708,11 @@ def animate_bolt(bolt_root):
 
     offs = dict(FL=0.0, HR=0.06, FR=0.5, HL=0.56)
     lifts = dict(FL=0.045, FR=0.045, HL=0.04, HR=0.04)
-    feet = [dict(home=Vector((rg.head[f"IK_{k}"].x, rg.head[f"IK_{k}"].y)), off=offs[k],
-                 lift=lifts[k]) for k in BOLT_FEET]
+    # hind paws stand ~10 cm behind the hips at rest: centre their stride a little further
+    # forward so the stretched-back leg stays in reach at speed
+    feet = [dict(home=Vector((rg.head[f"IK_{k}"].x,
+                              rg.head[f"IK_{k}"].y - (0.035 if k[0] == "H" else 0.0))),
+                 off=offs[k], lift=lifts[k]) for k in BOLT_FEET]
     gait = Gait(root_fns()["bolt_x"], feet, _bolt_stance, _bolt_duty, nominal=10)
     ank_z = {k: rg.head[f"IK_{k}"].z for k in BOLT_FEET}
     toe_off = {k: rg.tail[f"IK_{k}"] - rg.head[f"IK_{k}"] for k in BOLT_FEET}
@@ -751,11 +761,11 @@ def animate_bolt(bolt_root):
             P.place(f"IK_{k}", ank, Rq((1, 0, 0), p))
         if w_fr > 0:
             if w_paw >= max(w_hat, w_wave):         # traffic-warden STOP: pad forward, high
-                tgt = Vector((FRh.x - 0.01, -0.25, 0.255))
-                R = Rq((1, 0, 0), -100)
+                tgt = Vector((FRh.x - 0.03, -0.29, 0.29))
+                R = Rq((1, 0, 0), -95)
             elif w_hat >= w_wave:                   # up to the hat brim
-                tgt = Vector((FRh.x + 0.03, -0.265, 0.30))
-                R = Rq((0, 1, 0), 20) @ Rq((1, 0, 0), -125)
+                tgt = Vector((FRh.x - 0.02, -0.29, 0.30))
+                R = Rq((0, 1, 0), -20) @ Rq((1, 0, 0), -125)
             else:                                   # wave: paw up, waggling
                 wg = osc(f - tm["wave"], 8)
                 tgt = Vector((FRh.x - 0.02 + 0.03 * wg, -0.23, 0.27))
@@ -772,11 +782,12 @@ def animate_bolt(bolt_root):
                            [chains[k] for k in legs])
         bob = -0.009 * (0.6 + fast) * math.cos(2 * cyc) * mw
         settle = env(f, tm["line"] - 2, tm["line"] + 2, tm["line"] + 4, tm["line"] + 12)
-        P.move("spine.01", (shift.x, shift.y, -max(drop, 0.004) + bob - 0.01 * settle))
+        drop = min(max(drop, 0.004), 0.045)      # beyond that, let the IK reach a touch
+        P.move("spine.01", (shift.x, shift.y, -drop + bob - 0.01 * settle))
         # rump rock + settle dip; chest up for the gestures
         P.rot("spine.01", (1, 0, 0), 1.8 * math.sin(2 * cyc) * mw + 4 * settle)
         P.rot("spine.03", (0, 0, 1), 2.5 * math.sin(cyc) * mw)
-        P.rot("spine.04", (1, 0, 0), -5 * w_paw - 9 * w_hat - 5 * w_wave)
+        P.rot("spine.04", (1, 0, 0), -12 * w_paw - 3 * w_hat - 8 * w_wave)
         P.rot("spine.02", (0, 1, 0), 3 * max(w_paw, w_hat, w_wave))   # weight onto the left
         # ------------------------------------------------------------- head / neck
         P.rot("neck.02", (1, 0, 0), -1.5 * math.cos(2 * cyc - 0.6) * mw)
@@ -789,10 +800,10 @@ def animate_bolt(bolt_root):
                   tm["wave_through"] + 7)
         P.rot("head", (1, 0, 0), 12 * nod)
         # hat tip: bow the head down to the paw, tilt toward it
-        P.rot("neck.01", (1, 0, 0), 12 * w_hat)
-        P.rot("neck.02", (1, 0, 0), 10 * w_hat)
+        P.rot("neck.01", (1, 0, 0), 22 * w_hat)          # a real bow brings the brim down
+        P.rot("neck.02", (1, 0, 0), 18 * w_hat)
         P.rot("head", (1, 0, 0), 22 * w_hat)
-        P.rot("head", (0, 1, 0), 14 * w_hat)
+        P.rot("head", (0, 1, 0), -30 * w_hat)          # hat brim tips down to the right paw
         # looks: back at Pickles for the stop paw, north at Mittens, at Mittens for the tips
         w_pk = env(f, tm["paw"] + 1, tm["paw"] + 6, tm["lean"] - 3, tm["lean"] + 4)
         w_mit = env(f, tm["lean"], tm["lean"] + 8, tm["cross"] + 4, tm["cross"] + 14)
@@ -804,7 +815,7 @@ def animate_bolt(bolt_root):
         wm = max(w_mit, w_mit2 * 0.8)
         if wm > 0:
             y, p = look_yaw_pitch(mittens_eye_world(f), f)
-            head_look(P, y, p, wm)
+            head_look(P, y, p * (1 - w_hat), wm * (1 - 0.5 * w_hat))
             P.rot("spine.04", (0, 1, 0), -4 * w_mit)       # lean out north a touch
         # ------------------------------------------------------------- ears (overlap)
         perk = max(take, env(f, tm["paw"] - 2, tm["paw"] + 2, tm["paw"] + 8, tm["paw"] + 16))
@@ -899,7 +910,7 @@ def animate_mittens(mit_root):
     pair_w = (pickles_world(tm["eye"]) + Vector((0, 0, PK_EYE_Z))
               + bolt_world(tm["eye"]) + Vector((0, 0, BOLT_EYE_Z))) * 0.5
     trade_w = bolt_world(tm["trade"]) + Vector((0, 0, BOLT_EYE_Z + 0.2))
-    looks = dict(screen=look_snap(MB.SCREEN, 0.12, 0.3),
+    looks = dict(screen=look_snap(MB.SCREEN, 0.18, 0.45),
                  pair=look_snap(_mit_local_target(pair_w, tm["eye"]), 0.3, 0.55),
                  trade=look_snap(_mit_local_target(trade_w, tm["trade"]), 0.3, 0.55))
     look_bones = ["neck", "head", "eye.L", "eye.R"]
@@ -926,9 +937,9 @@ def animate_mittens(mit_root):
         jolt = env(f, tm["stopped"] - 2, tm["stopped"] + 2, tm["stopped"] + 3, tm["stopped"] + 8)
         rock = env(f, tm["stopped"] + 5, tm["stopped"] + 9, tm["stopped"] + 11,
                    tm["stopped"] + 20)
-        fwd = 3.0 * brace + 6.0 * jolt - 2.5 * rock
+        fwd = 3.0 * brace + 4.5 * jolt - 2.5 * rock
         for b, k in (("spine.01", 0.4), ("spine.02", 0.35), ("spine.03", 0.25)):
-            P.rot(b, (1, 0, 0), fwd * k * 2.2)
+            P.rot(b, (1, 0, 0), fwd * k * 3.2)
         P.rot("head", (1, 0, 0), 3.0 * env(f, tm["stopped"], tm["stopped"] + 4,
                                            tm["stopped"] + 5, tm["stopped"] + 12))
         # double-beep nods

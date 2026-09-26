@@ -53,8 +53,8 @@ E = {
     "lean_look": f(19.4), "eye_contact": f(21.0),
     # shot 7
     "double_beep": [f(22.2), f(22.45)], "mittens_wave": f(22.5),
-    "cross_start": f(22.6), "hat_tip": f(23.4), "clear": f(25.75), "clear_chime": f(25.75),
-    "fl_roll_on": f(25.85),                # only once Pickles and the cage are out of the lane
+    "cross_start": f(22.35), "hat_tip": f(23.2), "clear": f(25.9), "clear_chime": f(25.9),
+    "fl_roll_on": f(25.95),                # only once Pickles and the cage are out of the lane
     # shot 8
     "lens_blink": f(26.1), "heart": f(26.3), "good_stop_hud": f(26.8), "good_team_hud": f(27.4),
     "wave_trade": f(27.2), "tail_wag": f(27.2), "thumbs_up": f(27.6),
@@ -92,7 +92,7 @@ CAGE_FRONT_X = [
     (f(14.0), L.CAGE_FRONT_X),              # shot 4/5 anchor (hidden from the driver)
     (E["pickles_stops"], L.PED_STOP_X + 0.3),   # stops just before the walkers' stop line
     (E["cross_start"], L.PED_STOP_X + 0.3),
-    (f(25.75), -2.8),                       # Pickles (0.3 + 0.735 m behind) now clear of the lane
+    (f(25.9), -2.8),                        # Pickles (0.3 + 0.735 m behind) now clear of the lane
     (f(29.5), -4.6),
 ]
 BOLT_X = [                                  # Bolt's root x; y follows BOLT_Y
@@ -101,7 +101,7 @@ BOLT_X = [                                  # Bolt's root x; y follows BOLT_Y
     (f(14.0), L.BOLT_SHOT4[0]),
     (E["bolt_at_line"], L.PED_STOP_X + 0.42),   # nose on the stop line, paw up
     (E["cross_start"], L.PED_STOP_X + 0.42),
-    (f(25.5), -2.6),
+    (f(25.9), -2.9),                        # keeps pace with Pickles across the zebra
     (f(29.5), -3.3),
 ]
 BOLT_Y = [(FRAME_START, L.BOLT_SHOT4[1]), (f(15.0), L.BOLT_SHOT4[1]),

@@ -33,7 +33,7 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
 ap.add_argument("--strips", default="all")
 ap.add_argument("--res", default="480x270")
-ap.add_argument("--engine", default="WORKBENCH")
+ap.add_argument("--engine", default="CYCLES")
 ap.add_argument("--samples", type=int, default=8)
 ap.add_argument("--no-step-roots", action="store_true")
 ap.add_argument("--save-blend", default="")
@@ -64,6 +64,17 @@ else:
 scene.render.film_transparent = False
 scene.world = bpy.data.worlds.new("W") if scene.world is None else scene.world
 scene.world.color = (0.55, 0.57, 0.6)
+if scene.world.use_nodes:
+    bg = scene.world.node_tree.nodes.get("Background")
+    if bg:
+        bg.inputs["Color"].default_value = (0.5, 0.52, 0.56, 1)
+        bg.inputs["Strength"].default_value = 0.8
+sun_d = bpy.data.lights.new("perf_sun", "SUN")
+sun_d.energy = 3.5
+sun_d.angle = 0.3
+sun = bpy.data.objects.new("perf_sun", sun_d)
+sun.rotation_euler = (math.radians(40), math.radians(15), math.radians(-30))
+scene.collection.objects.link(sun)
 
 from builders import bolt, mittens, pickles, roll_cage  # noqa: E402
 from ep05 import perf  # noqa: E402
@@ -138,6 +149,39 @@ for fr in range(300, 348):
     scene.frame_set(fr)
 TIMES["eval_per_frame"] = (time.time() - t) / 48
 print(f"[test_perf] eval per frame: {TIMES['eval_per_frame'] * 1000:.0f} ms")
+
+# ------------------------------------------------------------------ foot-slip metric
+def slip_report(root, bones, rest_z, eps=0.004, frames=range(2, 710, 2)):
+    """World XY drift of each ankle between consecutive held drawings (even frames) while the
+    ankle stays on the ground (z < rest + eps). Returns {bone: (max, mean, samples)}."""
+    arm = next(o for o in root.children_recursive if o.type == "ARMATURE")
+    prev = {b: None for b in bones}
+    acc = {b: [] for b in bones}
+    for fr in frames:
+        scene.frame_set(fr)
+        for b in bones:
+            p = arm.matrix_world @ arm.pose.bones[b].head
+            down = p.z < rest_z[b] + eps
+            if down and prev[b] is not None:
+                acc[b].append(((p.xy - prev[b]).length, fr))
+            prev[b] = p.xy.copy() if down else None
+    out = {}
+    for b, v in acc.items():
+        big = sorted(v, reverse=True)[:4]
+        out[b] = (big[0][0] if v else 0.0, sum(x for x, _ in v) / len(v) if v else 0.0, len(v),
+                  [f for _, f in big])
+    return out
+
+
+t = time.time()
+for root, bones in ((pk, ["foot.L", "foot.R"]), (bo, ["paw.FL", "paw.FR", "paw.HL", "paw.HR"])):
+    arm = next(o for o in root.children_recursive if o.type == "ARMATURE")
+    rz = {b: arm.data.bones[b].head_local.z for b in bones}
+    rep = slip_report(root, bones, rz)
+    print(f"[test_perf] SLIP {root.name}: " + ", ".join(
+        f"{b} max {m * 100:.1f}cm @ {fs} mean {mm * 100:.2f}cm (n={n})"
+        for b, (m, mm, n, fs) in rep.items()))
+TIMES["slip_check"] = time.time() - t
 
 # ------------------------------------------------------------------ cameras / label
 cam_data = bpy.data.cameras.new("perfcam")
@@ -229,17 +273,19 @@ STRIPS = {
                   follow(bo, (0, -2.2, 0.35), 0.3, 40, fixed_x=BE.bolt_x(212))),
     "bolt_cross": (list(range(560, 584, 2)),
                    follow(bo, (0, -2.4, 0.35), 0.3, 40, fixed_x=BE.bolt_x(572))),
-    # story beats, 3/4 front from the south-west
-    "pk_beats": ([430, 444, 452, 460, 468, 476, 484, 496, 505, 520, 536, 541, 546, 556,
-                  640, 652, 660, 666, 676, 690, 700, 708],
-                 follow(pk, (-2.2, -2.4, 0.9), 0.75, 35)),
-    "bolt_beats": ([430, 440, 444, 448, 456, 464, 470, 478, 490, 505, 520, 541, 550, 558,
-                    562, 566, 572, 580, 648, 654, 660, 666, 680, 700],
-                   follow(bo, (-1.3, -1.5, 0.5), 0.4, 35)),
-    "mittens_beats": ([300, 337, 343, 349, 353, 361, 372, 386, 390, 394, 402, 420, 480, 500, 505,
+    # story beats (4 per row). Pickles and Bolt gesture north (their right, toward FL-02),
+    # so the beats are shot from the north; Bolt's strip hides Pickles and the cage.
+    "pk_beats": ([200, 444, 452, 470, 478, 490, 505, 520, 541, 548, 566, 620,
+                  652, 660, 668, 690],
+                 follow(pk, (-0.75, 3.0, 0.8), 0.7, 35), ("bolt",)),
+    "bolt_beats": ([200, 436, 440, 446, 456, 466, 474, 490, 505, 541, 552, 560,
+                    566, 572, 580, 620, 650, 656, 662, 670],
+                   follow(bo, (-0.6, 2.2, 0.5), 0.38, 35), ("pickles", "cage")),
+    # Mittens from the front (she faces -Y), a little to her left
+    "mittens_beats": ([300, 337, 345, 351, 361, 372, 386, 392, 398, 420, 480, 500, 505,
                        534, 541, 547, 554, 561, 580, 600, 612, 650, 656, 664, 672, 690],
-                      lambda fr: aim(world_of(mit) + Vector((0.25, -2.2, 0.75)),
-                                     world_of(mit) + Vector((0.02, 0, 0.45)), 45)),
+                      lambda fr: aim(world_of(mit) + Vector((0.55, -2.1, 0.8)),
+                                     world_of(mit) + Vector((0.05, 0, 0.5)), 45)),
     "wide": ([169, 337, 440, 452, 470, 505, 541, 563, 600, 654, 663, 700],
              lambda fr: aim(Vector((1.2, -5.2, 2.2)), Vector((0.9, 0.9, 0.6)), 24)),
 }
@@ -250,20 +296,31 @@ for n in [h for h in a.hide.split(",") if h]:
     for ob in [HIDE[n]] + list(HIDE[n].children_recursive):
         ob.hide_render = True
 VIEWS = {"side": (0, -2.4, 0.5), "front": (-2.4, 0, 0.6), "q34": (-1.7, -1.7, 0.7),
-         "back": (1.8, -1.2, 0.9), "north": (-0.6, 2.4, 0.6)}
-WHO = {"pk": (pk, 0.65, 1.25), "bo": (bo, 0.35, 0.6), "mit": (mit, 0.45, 0.7)}
+         "back": (1.8, -1.2, 0.9), "north": (-0.6, 2.4, 0.6), "nclose": (-1.0, 1.2, 0.3), "south": (-0.6, -2.4, 0.6)}
+WHO = {"pk": (pk, 0.65, 1.25), "bo": (bo, 0.38, 0.85), "mit": (mit, 0.45, 0.8)}
 if a.custom:
-    n, who, view, frs = a.custom.split(":")
-    ob, tz, sc = WHO[who]
-    off = Vector(VIEWS[view]) * sc
-    STRIPS = {n: ([int(x) for x in frs.split(",")], follow(ob, off, tz, 40))}
-    CUSTOM_COLS = 3
-    a.strips = n
-names = list(STRIPS) if a.strips == "all" else [s.strip() for s in a.strips.split(",")]
+    STRIPS = {}
+    for spec in a.custom.split(";"):
+        n, who, view, frs = spec.split(":")
+        ob, tz, sc = WHO[who]
+        off = Vector(VIEWS[view]) * sc
+        STRIPS[n] = ([int(x) for x in frs.split(",")], follow(ob, off, tz, 40))
+    a.strips = ",".join(STRIPS)
+    CUSTOM_COLS = 4
+names = list(STRIPS) if a.strips == "all" else [s.strip() for s in a.strips.split(",")
+                                                  if s.strip() in STRIPS]
 t = time.time()
 for n in names:
-    fr, fn = STRIPS[n]
-    render_frames(n, fr, fn)
+    fr, fn = STRIPS[n][:2]
+    hidden = []
+    for h in (STRIPS[n][2] if len(STRIPS[n]) > 2 else ()):
+        for ob in [HIDE[h]] + list(HIDE[h].children_recursive):
+            if not ob.hide_render:
+                ob.hide_render = True
+                hidden.append(ob)
+    render_frames(n, fr, fn, 4 if n.endswith("_beats") else None)
+    for ob in hidden:
+        ob.hide_render = False
 TIMES["render"] = time.time() - t
 TIMES["total"] = time.time() - t_all
 print("[test_perf] TIMES " + ", ".join(f"{k}={v:.2f}" for k, v in TIMES.items()))

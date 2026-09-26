@@ -68,16 +68,40 @@ TWOS = range(T.FRAME_START, T.FRAME_END + 1, 2)
 
 
 def smooth(keys):
-    """Smoothstep-eased version of a (frame, value) key list: gentle starts and stops."""
+    """Monotone cubic (Fritsch-Carlson PCHIP) through (frame, value) keys.
+
+    Flat exactly where the character holds (equal neighbouring values), smooth velocity through
+    the in-between keys, so nobody stalls at a breakpoint or sprints to catch up.
+    """
+    xs = [float(k[0]) for k in keys]
+    ys = [float(k[1]) for k in keys]
+    n = len(xs)
+    d = [(ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]) for i in range(n - 1)]
+    m = [0.0] * n
+    m[0], m[-1] = 0.0, 0.0                      # start and end at rest
+    for i in range(1, n - 1):
+        if d[i - 1] * d[i] <= 0:
+            m[i] = 0.0                          # a hold or a turn-around: come to rest
+        else:
+            w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1])
+            w2 = (xs[i + 1] - xs[i]) + 2 * (xs[i] - xs[i - 1])
+            m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i])
+
     def fn(fr):
-        if fr <= keys[0][0]:
-            return keys[0][1]
-        for (fa, va), (fb, vb) in zip(keys, keys[1:]):
-            if fa <= fr <= fb:
-                t = 0.0 if fb == fa else (fr - fa) / (fb - fa)
-                t = t * t * (3 - 2 * t)
-                return va + (vb - va) * t
-        return keys[-1][1]
+        if fr <= xs[0]:
+            return ys[0]
+        if fr >= xs[-1]:
+            return ys[-1]
+        for i in range(n - 1):
+            if xs[i] <= fr <= xs[i + 1]:
+                h = xs[i + 1] - xs[i]
+                t = (fr - xs[i]) / h
+                h00 = 2 * t ** 3 - 3 * t ** 2 + 1
+                h10 = t ** 3 - 2 * t ** 2 + t
+                h01 = -2 * t ** 3 + 3 * t ** 2
+                h11 = t ** 3 - t ** 2
+                return h00 * ys[i] + h10 * h * m[i] + h01 * ys[i + 1] + h11 * h * m[i + 1]
+        return ys[-1]
     return fn
 
 
