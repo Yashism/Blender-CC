@@ -224,6 +224,18 @@ def key_fl_mechanics(fl):
         key_fn(sp, "rotation_euler", lambda fr: fr * 2 * math.pi / 20.0, TWOS, index=2, step=2)
     # beacon glow always on (turning beacon); the root prop drives the dome + light
     fl["beacon"] = 1.0
+    from lib.palette import kelvin as kelvin_
+    # a soft warm fill that travels with FL-02 (cinematography cheat for the dark aisle runs)
+    ld = bpy.data.lights.new("FL02_follow_fill", "AREA")
+    ld.energy = 90
+    ld.size = 1.2
+    ld.color = kelvin_(3800)
+    ob = bpy.data.objects.new(ld.name, ld)
+    bpy.context.scene.collection.children["Lights"].objects.link(ob)
+    ob.parent = fl
+    ob.location = (-1.8, -1.0, 2.3)
+    ob.rotation_mode = "QUATERNION"
+    ob.rotation_quaternion = (Vector((0.0, 0.3, 1.3)) - Vector(ob.location)).to_track_quat("-Z", "Y")
     # the two work lights on the front posts really light the aisle ahead
     from lib.palette import kelvin
     for sx, n in ((1, "L"), (-1, "R")):
@@ -331,7 +343,7 @@ def build_cameras(coll, fl, cards):
     scene = bpy.context.scene
     scene.timeline_markers.clear()
     S = T.SHOT
-    pk_head = lambda fr: Vector((pickles_x(fr), T.CAGE_Y, 1.2))
+    pk_head = lambda fr: Vector((pickles_x(fr), T.CAGE_Y, 1.05))
     bolt_head = lambda fr: Vector((bolt_x(fr) - 0.3, bolt_y(fr), 0.6))
     ramscam = (0.0, -0.97, 1.85)          # RAMS lens, FL-02 relative
     screen = (-0.33, -0.76, 1.22)
@@ -344,8 +356,8 @@ def build_cameras(coll, fl, cards):
         ("s01b_screen_boot", 31, 72, lambda fr: fl_rel(fr, over_shoulder),
          lambda fr: fl_rel(fr, screen), 55, 2.8),
         ("s02_tracking", S["s02_tall_racks"][1], S["s02_tall_racks"][2],
-         lambda fr: fl_rel(fr, (-1.3, -2.8 - 0.004 * (fr - 73), 0.55)),
-         lambda fr: fl_rel(fr, (0.1, 0.6, 1.2)), 26, 2.8),
+         lambda fr: fl_rel(fr, (-1.35, -2.3 - 0.004 * (fr - 73), 0.7)),
+         lambda fr: fl_rel(fr, (0.2, 0.3, 1.3)), 24, 2.8),
         ("s03a_walkway", 169, 204, lambda fr: Vector((4.4, -0.7, 0.65)),
          lambda fr: Vector((cage_x(fr) + 0.5, 0.45, 0.9)), 32, 2.8),
         ("s03b_drone", 205, S["s03_cant_see"][2], lambda fr: Vector((0.9, 2.2, 15.5 - 0.02 * (fr - 205))),
@@ -360,12 +372,12 @@ def build_cameras(coll, fl, cards):
          lambda fr: fl_rel(fr, (0.0, -1.3, 1.1)), 28, 4.0),
         ("s06a_paw_up", 433, 480, lambda fr: Vector((0.6, -1.2, 0.35)),
          lambda fr: Vector((bolt_x(fr), bolt_y(fr) + 0.2, 0.45)), 35, 2.8),
-        ("s06b_their_view", 481, 504, lambda fr: Vector((pickles_x(fr) + 0.1, 1.05, 1.25)),
+        ("s06b_their_view", 481, 504, lambda fr: Vector((1.95, 0.85, 1.15)),   # leaning out at the corner
          lambda fr: fl_rel(fr, (0.0, -0.6, 1.4)), 30, 4.0),
         ("s06c_eye_mittens", 505, 512, lambda fr: fl_rel(fr, (1.05, -0.9, 1.6)),
          lambda fr: fl_rel(fr, (0.0, 0.25, 1.75)), 70, 2.0),
-        ("s06d_eye_pickles", 513, 520, lambda fr: pk_head(fr) + Vector((-0.45, 1.0, 0.05)),
-         pk_head, 70, 2.0),
+        ("s06d_eye_pickles", 513, 520, lambda fr: pk_head(fr) + Vector((-0.9, 1.0, -0.15)),  # stays south of the NE rack (y < 1.75)
+         pk_head, 50, 2.0),
         ("s06e_eye_bolt", 521, S["s06_everyone_stops"][2],
          lambda fr: bolt_head(fr) + Vector((-0.7, 0.9, 0.1)), bolt_head, 70, 2.0),
         ("s07a_wave_through", 529, 552, lambda fr: fl_rel(fr, (1.4, -2.4, 1.3)),
