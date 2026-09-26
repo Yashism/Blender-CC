@@ -3,9 +3,9 @@
 blender -b --factory-startup -P scripts/stage2_stills.py -- [--shots hero,lookdev,drone,driver]
         [--res 1920x1080] [--samples 128] [--no-cones] [--save-blend]
 
-Cast is placed at the shot 4 moment (FL-02 at layout.FL_ALERT_Y, the roll cage's front corner at
-layout.CAGE_REVEAL, Bolt leading at its north-west corner). Stills are written to
-renders/stage2/<shot>.png. Run scripts/safe_overlay.py on them to mark the 9:16 Reels centre-safe area.
+Cast is placed at the shot 4 moment (FL-02 at layout.FL_ALERT_Y, the roll cage front face at
+layout.CAGE_FRONT_X, Bolt at layout.BOLT_SHOT4: all hidden from Mittens, seen by the camera).
+Stills are written to renders/stage2/<shot>.png. Run scripts/safe_overlay.py on them to mark the 9:16 Reels centre-safe area.
 """
 import argparse
 import math
@@ -29,7 +29,7 @@ ap.add_argument("--res", default="1920x1080")
 ap.add_argument("--samples", type=int, default=128)
 ap.add_argument("--no-cones", action="store_true")
 ap.add_argument("--save-blend", action="store_true")
-ap.add_argument("--haze", type=float, default=0.008)
+ap.add_argument("--haze", type=float, default=0.004)
 a = ap.parse_args(argv)
 
 OUT = os.path.join(ROOT, "renders", "stage2")
@@ -67,7 +67,7 @@ if cam_root:
 
 face_west = math.radians(-90)          # assets face -Y by default; -90 deg about Z faces -X
 cage = roll_cage.build(geo.collection("ROLLCAGE", C["Props"]))
-cage_front_x, cage_y = L.CAGE_REVEAL[0] + 0.1, L.WALKWAY_Y + 0.05
+cage_front_x, cage_y = L.CAGE_FRONT_X, L.CAGE_Y
 cage.location = (cage_front_x + 0.3, cage_y, 0)          # 0.6 m deep: front face at cage_front_x
 cage.rotation_euler = (0, 0, face_west)
 pk = pickles.build(geo.collection("PICKLES", C["Characters"]))
@@ -76,7 +76,7 @@ pk.rotation_euler = (0, 0, face_west)
 if hasattr(pickles, "pose_push"):
     pickles.pose_push(pk, bar_y=-0.36, bar_z=1.0)
 bo = bolt.build(geo.collection("BOLT", C["Characters"]))
-bo.location = (cage_front_x - 0.3, L.WALKWAY_Y + 0.5, 0)
+bo.location = (*L.BOLT_SHOT4, 0)
 bo.rotation_euler = (0, 0, face_west)
 bpy.context.view_layer.update()
 
@@ -92,7 +92,8 @@ if not a.no_cones:
 # ---------------------------------------------------------------- cameras
 SHOTS = {
     # shot 4 hero: high 3/4 over the NE corner, forklift north, pair entering from the east
-    "hero": dict(loc=(6.2, -4.6, 5.8), tgt=(1.0, 1.9, 0.6), lens=30, fstop=2.0),
+    "hero": dict(loc=(-0.5, -4.0, 11.5), tgt=(0.9, 2.0, 0.3), lens=26, fstop=2.8, roof_off=True,
+                 cones=True),
     # shot 2 look-dev: low tracking beside FL-02 (24-28 mm)
     "lookdev": dict(loc=(-1.25, L.FL_ALERT_Y - 3.2, 0.55), tgt=(0.1, L.FL_ALERT_Y + 0.4, 1.2),
                     lens=26, fstop=2.8),
@@ -108,12 +109,20 @@ for name in [s.strip() for s in a.shots.split(",") if s.strip()]:
     cam.data.dof.focus_object = None
     cam.data.dof.focus_distance = (Vector(spec["loc"]) - Vector(spec["tgt"])).length
     fx_cones = [o for o in bpy.data.objects if o.name.startswith("FX_Cone_")]
-    if name == "driver":   # her POV: no cones, and hide her own head
+    for o in fx_cones:     # the sightline cones only exist in the shot 4 hero view
+        o.hide_render = not spec.get("cones", False)
+    if name == "driver":   # her POV: hide her own head
         for ob in mit.children_recursive:
             if ob.type == "MESH":
                 ob.hide_render = True
-        for o in fx_cones:
-            o.hide_render = True
+    if set_root is not None and hasattr(set_aisle4, "drone_mode"):
+        roof_off = spec.get("roof_off", name == "drone")
+        set_aisle4.drone_mode(set_root, hide=roof_off)                  # roof off
+        # overhead fixtures would sit between a high camera and the action: hide them from
+        # camera rays only (their light still falls on the set)
+        for ob in bpy.data.objects:
+            if ob.name.startswith(("Set_lamp_shade_", "Set_lamp_bulb_", "Set_skylight_glass")):
+                ob.visible_camera = not roof_off
     scene.camera = cam
     scene.render.filepath = os.path.join(OUT, f"{name}.png")
     bpy.ops.render.render(write_still=True)
@@ -121,8 +130,6 @@ for name in [s.strip() for s in a.shots.split(",") if s.strip()]:
         for ob in mit.children_recursive:
             if ob.type == "MESH" and not ob.get("tt_only"):
                 ob.hide_render = False
-        for o in fx_cones:
-            o.hide_render = False
     print(f"[stage2] {name} -> {scene.render.filepath}")
 
 if a.save_blend:

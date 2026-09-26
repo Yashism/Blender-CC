@@ -10,7 +10,7 @@ Top view (metres, +Y = north). The intersection is centred on the origin.
   * Pickles and Bolt walk WEST (-X) along the walkway from the east side, which is the
     driver's LEFT (she faces -Y), hence "BLIND SPOT LEFT".
 
-Checked sightlines: with FL-02 at FL_ALERT_Y, the cage corner at CAGE_REVEAL is hidden
+Checked sightlines: with FL-02 at FL_ALERT_Y, the roll cage and Bolt (shot 4 anchors) are hidden
 from Mittens' eyes by the NE rack end, but visible to the RAMS camera on the front crossbar (0.95 m ahead of her, 0.25 m higher).
 """
 
@@ -50,4 +50,8 @@ FL_START_Y = 13.0          # FL-02 root y at the start of shot 2
 FL_ALERT_Y = 4.6           # where the alert fires (shot 5); leaves ~0.6 m to brake
 FL_STOP_ROOT_Y = FL_STOP_Y + 2.4    # root y with fork tips ~10 cm short of the stop line
 PED_START_X = 9.0          # Pickles and Bolt start (east)
-CAGE_REVEAL = (2.35, 0.8)  # roll-cage front corner the camera catches in shot 4
+CAGE_FRONT_X = 2.6         # shot 4: roll-cage front face (x); cage centre y below
+CAGE_Y = 0.55              # cage spans y 0.15..0.95, inside the walkway
+BOLT_SHOT4 = (3.1, -0.1)   # Bolt trots beside the cage on its south side
+# Verified by sampling: no part of the cage or Bolt is visible from Mittens' eye at
+# FL_ALERT_Y, while the RAMS camera sees ~60% of the cage front face and Bolt's head.

@@ -3,6 +3,7 @@
 * FX_Cone_Driver (blue): from Mittens' eyes. Cut off by the rack ends, so it stops at the blind corner.
 * FX_Cone_Camera (orange): from the RAMS camera lens on the front crossbar, wider. The lens sits
   0.95 m further forward and higher, so its cone reaches past the rack end into the crossing.
+  The blue cone is subtracted from it, so orange marks only what the camera sees beyond the driver.
 
 Each cone is a flattened cone with its apex at the viewpoint. Everything the racks hide from that
 apex is removed by a boolean with the rack blocks' "shadow" volumes (the region behind each block
@@ -19,11 +20,11 @@ from mathutils import Matrix, Vector
 from lib import geo
 from builders import layout_ep05 as L
 
-BLUE = (0.25, 0.62, 1.0)
-ORANGE = (1.0, 0.36, 0.08)
+BLUE = (0.0, 0.42, 1.0)
+ORANGE = (1.0, 0.16, 0.0)
 
 
-def cone_material(name, rgb, strength=0.35, rim=4.0, alpha=0.2):
+def cone_material(name, rgb, strength=0.05, rim=1.4, alpha=0.2, footprint=0.3):
     """Additive translucent glow, brighter towards the silhouette edges."""
     mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     mat.use_nodes = True
@@ -39,7 +40,24 @@ def cone_material(name, rgb, strength=0.35, rim=4.0, alpha=0.2):
     mr.inputs["To Min"].default_value = strength * alpha
     mr.inputs["To Max"].default_value = strength * rim * alpha
     nt.links.new(lw.outputs["Facing"], mr.inputs["Value"])
-    nt.links.new(mr.outputs["Result"], em.inputs["Strength"])
+    # The footprint (the cut face lying on the floor) glows more, so from above the cone reads
+    # as a clear tinted area on the floor: exactly what each viewpoint can see.
+    geom = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(geom.outputs["Normal"], sep.inputs["Vector"])
+    ab = nt.nodes.new("ShaderNodeMath")
+    ab.operation = "ABSOLUTE"
+    nt.links.new(sep.outputs["Z"], ab.inputs[0])
+    flat = nt.nodes.new("ShaderNodeMath")
+    flat.operation = "GREATER_THAN"
+    flat.inputs[1].default_value = 0.97
+    nt.links.new(ab.outputs[0], flat.inputs[0])
+    boost = nt.nodes.new("ShaderNodeMath")
+    boost.operation = "MULTIPLY_ADD"          # result = flat * footprint + rim term
+    boost.inputs[1].default_value = footprint
+    nt.links.new(flat.outputs[0], boost.inputs[0])
+    nt.links.new(mr.outputs["Result"], boost.inputs[2])
+    nt.links.new(boost.outputs[0], em.inputs["Strength"])
     add = nt.nodes.new("ShaderNodeAddShader")
     nt.links.new(tr.outputs[0], add.inputs[0])
     nt.links.new(em.outputs[0], add.inputs[1])
@@ -165,8 +183,11 @@ def build(coll, fl_y=L.FL_ALERT_Y, fl_x=0.0):
     drv = build_cone("FX_Cone_Driver", eye, (0, -1), cone_material("fx_cone_blue", BLUE), coll,
                      half_h_deg=40, half_v_deg=14, length=11.0, tilt_down_deg=7)
     cam = build_cone("FX_Cone_Camera", lens, (0, -1), cone_material("fx_cone_orange", ORANGE,
-                                                                     strength=0.45), coll,
+                                                                     strength=0.06), coll,
                      half_h_deg=58, half_v_deg=20, length=12.0, tilt_down_deg=12)
+    # Orange shows only what the camera sees BEYOND the driver: subtract the blue cone.
+    # (Both meshes have their origin at their own apex; the boolean works in world space.)
+    _apply_boolean(cam, drv)
     for o in (drv, cam):
         geo.parent(o, root)
     root["driver_eye"] = tuple(eye)

@@ -13,7 +13,7 @@ from mathutils import Vector
 from . import geo
 from .palette import kelvin
 
-WORLD = (0.010, 0.013, 0.021)
+WORLD = (0.004, 0.006, 0.010)
 
 
 def _spot(name, loc, energy, temp, size_deg, blend, radius, coll, aim=(0, 0, -1)):
@@ -30,7 +30,7 @@ def _spot(name, loc, energy, temp, size_deg, blend, radius, coll, aim=(0, 0, -1)
     return geo._link(ob, coll)
 
 
-def haze(coll, size=(40, 40, 8), centre=(0, 2, 4), density=0.008, anisotropy=0.35):
+def haze(coll, size=(40, 40, 8), centre=(0, 2, 4), density=0.004, anisotropy=0.35):
     mat = bpy.data.materials.get("night_haze") or bpy.data.materials.new("night_haze")
     mat.use_nodes = True
     nt = mat.node_tree
@@ -48,7 +48,7 @@ def haze(coll, size=(40, 40, 8), centre=(0, 2, 4), density=0.008, anisotropy=0.3
     return box
 
 
-def rig(layout, coll_lights, coll_fx=None, haze_density=0.008):
+def rig(layout, coll_lights, coll_fx=None, haze_density=0.004):
     """Build the set lighting from layout_ep05 constants. Returns dict of light objects."""
     scene = bpy.context.scene
     w = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
@@ -76,7 +76,7 @@ def rig(layout, coll_lights, coll_fx=None, haze_density=0.008):
     ld = bpy.data.lights.new("LGT_Moon_Skylight_7000K", "AREA")
     ld.shape = "RECTANGLE"
     ld.size, ld.size_y = 1.8, 1.2
-    ld.energy = 2200
+    ld.energy = 420
     ld.color = kelvin(7000)
     ld.spread = math.radians(35)
     ob = bpy.data.objects.new(ld.name, ld)
@@ -86,7 +86,7 @@ def rig(layout, coll_lights, coll_fx=None, haze_density=0.008):
     ld = bpy.data.lights.new("LGT_Moon_Fill_7000K", "AREA")
     ld.shape = "DISK"
     ld.size = 14
-    ld.energy = 900
+    ld.energy = 140
     ld.color = kelvin(7000)
     ob = bpy.data.objects.new(ld.name, ld)
     ob.location = (0, 1, layout.CEILING_Z - 0.3)
