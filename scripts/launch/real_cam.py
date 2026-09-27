@@ -96,6 +96,8 @@ def _assign(o, m):
         new = [m["steel"]] * len(me.materials)
     elif part.startswith("XT30"):
         new = [m["nylon_y"] if mt.name.endswith("FFEF23") else m["gold"] for mt in me.materials]
+    elif part.startswith(("corps 3010", "impeller", "plate_electronic")):
+        new = [m["black_plastic"]] * len(me.materials)       # 3010 fan + its mount: black
     elif short.startswith(LED_LENS):
         new = [m["led"]]
     else:
@@ -107,11 +109,29 @@ def _assign(o, m):
             o.material_slots[i].material = mat
 
 
+# staged exploded view: one 0..1 control per layer (front to back)
+GROUPS = ("ex_cover", "ex_bezel", "ex_board", "ex_inner", "ex_housing")
+STAGED = {"ex_cover": -0.15, "ex_bezel": -0.108, "ex_board": -0.064, "ex_inner": 0.0,
+          "ex_housing": 0.062}
+
+
+def group_of(part):
+    if part == "Cover" or part.startswith("socket button"):
+        return "ex_cover"
+    if part in ("RealTek Cam Front", "M3 Nut"):
+        return "ex_bezel"
+    if part == "AMB 82":
+        return "ex_board"
+    if part in ("Back", "Rib", "bushing.STEP"):
+        return "ex_housing"
+    return "ex_inner"
+
+
 def _drive(obj, root, expr, prop="delta_location", index=1):
     fc = obj.driver_add(prop, index)
     d = fc.driver
     d.type = "SCRIPTED"
-    for name in ("explode", "led"):
+    for name in ("explode", "led") + GROUPS:
         v = d.variables.new()
         v.name = name
         v.targets[0].id = root
@@ -123,7 +143,9 @@ def build(coll, cad=CAD, smooth_angle=35.0):
     root = geo.empty("RealCam_root", (0, 0, 0), coll, 0.05, "ARROWS")
     root["led"] = 0.0
     root["explode"] = 0.0
-    for k in ("led", "explode"):
+    for g in GROUPS:
+        root[g] = 0.0
+    for k in ("led", "explode") + GROUPS:
         root.id_properties_ui(k).update(min=0.0, max=1.0)
     objs = import_3mf.load(cad, coll, name_prefix="RealCam")
     m = _mats()
@@ -163,18 +185,14 @@ def build(coll, cad=CAD, smooth_angle=35.0):
         v.targets[0].id = root
         v.targets[0].data_path = '["led"]'
         fcl.driver.expression = "led*0.15"
-    # exploded view: cover + screws + lens module forward (-Y), board forward, housing stays
+    # exploded view. "explode" = the simple v1/v2 version (housing stays); the staged ex_* layers
+    # separate front to back along the lens axis, housing moving back so the internals show.
+    simple = {"ex_cover": -0.055, "ex_bezel": -0.03, "ex_board": -0.018, "ex_inner": 0.02,
+              "ex_housing": 0.0}
     for o in objs:
-        part = o["cad_part"]
-        if part in ("Cover",) or part.startswith("socket button"):
-            _drive(o, root, "-0.055*explode")
-        elif part == "RealTek Cam Front":
-            _drive(o, root, "-0.03*explode")
-        elif part in ("AMB 82",):
-            _drive(o, root, "-0.018*explode")
-        elif part in ("Back", "Rib", "M3 Nut", "bushing.STEP"):
-            pass
-        else:
-            _drive(o, root, "0.02*explode")      # fan, power board, XT30, LED board: backwards
+        g = group_of(o["cad_part"])
+        _drive(o, root, f"{simple[g]}*explode + {STAGED[g]}*{g}")
+    if led_obj:
+        _drive(lo, root, f"{STAGED['ex_inner']}*ex_inner + 0.02*explode")
     root["parts"] = len(objs)
     return root, objs
