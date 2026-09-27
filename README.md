@@ -2,14 +2,14 @@
 
 A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS project in a handmade felt-and-cardboard stop-motion look. Every model, rig and render comes from Python in `scripts/`, so the whole episode can be rebuilt from a fresh checkout.
 
-## Status: Stages 1 and 2 approved, Stage 3 blocking playblast delivered for review
+## Status: Stages 1, 2 and 3 approved, Stage 4 final render ready to run on the client laptop
 
 | Stage | What | Status |
 | --- | --- | --- |
 | 1 | Character, forklift and camera models + turntables | **approved** |
 | 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **approved** |
-| 3 | Blocking playblast of the full episode | **for review** |
-| 4 | Final animation, render, audio, deliverables | |
+| 3 | Blocking playblast of the full episode (60 s v2) | **approved** |
+| 4 | Final animation, render, audio, deliverables | **in progress**: renders on the client laptop, see [docs/RENDER_ON_YOUR_PC.md](docs/RENDER_ON_YOUR_PC.md#final-render-stage-4) |
 
 ### Stage 3 deliverables (`renders/stage3/post/`)
 
@@ -34,12 +34,12 @@ blender -b --factory-startup -P scripts/ep05/build_episode.py -- --save blender/
 python3 scripts/ep05/post.py --src 'renders/stage3/frames/f_%04d.png' --step 2 --out-dir renders/stage3/post --audio renders/stage3/temp_audio.wav
 ```
 
-Known items for Stage 4:
-- The in-cab screen shows a placeholder illustrated feed; the final uses a real render from the RAMS camera's point of view.
+Stage 4 changes since the playblast:
+- The in-cab screen now shows a real render from the RAMS camera's point of view (`scripts/ep05/render_pov.py`), with the PERSON box tracking the cage, Pickles and Bolt.
+- Music bed raised about 4 dB (`scripts/ep05/sfx.py`); the moonlight pool through the skylight is softer and no longer clips in the top-down shots.
+- Thumbnails (`scripts/ep05/thumbnails.py`): top-down convergence, screen alert, and a three-way eye-contact triptych, made from the final frames.
+- Full-rate 24 fps render at 1080p on the client laptop (Cycles on the Arc GPU): one command, `render_final.ps1`, renders, captions, encodes and makes the thumbnails.
 - Bolt's hat tip is a head bow, because his hat is sculpted onto his head.
-- The audio is temporary.
-- Final lighting polish, including the skylight hot spot seen from high angles.
-- Full-rate 24 fps render at 1080p on the client laptop (Cycles on the Arc GPU).
 
 ### Stage 2 deliverables (`renders/stage2/`)
 

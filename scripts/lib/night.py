@@ -76,9 +76,9 @@ def rig(layout, coll_lights, coll_fx=None, haze_density=0.004):
     ld = bpy.data.lights.new("LGT_Moon_Skylight_7000K", "AREA")
     ld.shape = "RECTANGLE"
     ld.size, ld.size_y = 1.8, 1.2
-    ld.energy = 420
+    ld.energy = 320                     # was 420: the floor pool clipped in the top-down shots
     ld.color = kelvin(7000)
-    ld.spread = math.radians(35)
+    ld.spread = math.radians(48)        # wider, softer pool (was 35)
     ob = bpy.data.objects.new(ld.name, ld)
     ob.location = (sx, sy, layout.CEILING_Z + 0.05)
     ob.rotation_euler = (math.radians(12), math.radians(-10), 0)  # slanted moonbeam

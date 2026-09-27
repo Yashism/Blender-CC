@@ -112,6 +112,7 @@ It renders all 1440 frames at 1920x1080 (Cycles on the Arc GPU, 64 samples with 
 | **16:9 video** (1920x1080, H.264 + AAC) | `renders\final\ep05_blind_corner_16x9.mp4` |
 | **9:16 Reels video** (1080x1920) | `renders\final\ep05_blind_corner_9x16.mp4` |
 | **Captions** | `renders\final\ep05_captions.srt` |
+| **Thumbnails** (1280x720, PNG + JPG) | `renders\final\thumbnails\ep05_thumb_1_convergence`, `_2_screen_alert`, `_3_eye_contact` |
 | Rendered frames (16-bit PNG, about 10 GB) | `renders\final\frames\f_0001.png` … `f_1440.png` |
 | Calibration | `renders\final\calibration\report.txt` |
 | Logs of every run | `renders\final\logs\` |
