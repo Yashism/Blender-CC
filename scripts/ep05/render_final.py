@@ -13,6 +13,8 @@
     --device auto      auto (best GPU, else CPU with a warning) | gpu (fail without one) | cpu
     --use-blend        open blender/ep05_blind_corner.blend instead of rebuilding (only if it exists
                        and is up to date with scripts/ep05/timeline.py)
+    --slice i/n        render only every n-th of the selected frames, starting at the i-th (0-based):
+                       lets n processes (one per GPU) share the job, e.g. 0/2 and 1/2
     --max-hours H      stop cleanly after H hours (finish the current frame first)
     --out DIR          default renders/final/frames  (f_0001.png ...)
 
@@ -86,7 +88,11 @@ def select_frames(a):
         for s in want:
             keep.update(range(T.SHOT[s][1], T.SHOT[s][2] + 1))
         frames = [f for f in frames if f in keep]
-    return sorted({f for f in frames if T.FRAME_START <= f <= T.FRAME_END})
+    frames = sorted({f for f in frames if T.FRAME_START <= f <= T.FRAME_END})
+    if getattr(a, "slice", ""):
+        i, n = (int(v) for v in a.slice.split("/"))
+        frames = frames[i::n]
+    return frames
 
 
 # ------------------------------------------------------------------------------------ PNG check
@@ -396,6 +402,7 @@ def main():
     ap.add_argument("--device", choices=("auto", "gpu", "cpu"), default="auto")
     ap.add_argument("--use-blend", action="store_true")
     ap.add_argument("--max-hours", type=float, default=0.0)
+    ap.add_argument("--slice", default="", metavar="i/n")
     ap.add_argument("--out", default=os.path.join(FINAL, "frames"))
     a = ap.parse_args(argv)
 

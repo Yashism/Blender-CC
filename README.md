@@ -9,7 +9,7 @@ A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS
 | 1 | Character, forklift and camera models + turntables | **approved** |
 | 2 | Set, lighting look-dev, hero still of the sightline-cone shot | **approved** |
 | 3 | Blocking playblast of the full episode (60 s v2) | **approved** |
-| 4 | Final animation, render, audio, deliverables | **in progress**: renders on the client laptop, see [docs/RENDER_ON_YOUR_PC.md](docs/RENDER_ON_YOUR_PC.md#final-render-stage-4) |
+| 4 | Final animation, render, audio, deliverables | **in progress**: renders on the client laptop, see [docs/RENDER_ON_KAGGLE.md](docs/RENDER_ON_KAGGLE.md) (free cloud GPUs) or [docs/RENDER_ON_YOUR_PC.md](docs/RENDER_ON_YOUR_PC.md#final-render-stage-4) |
 
 ### Stage 3 deliverables (`renders/stage3/post/`)
 
