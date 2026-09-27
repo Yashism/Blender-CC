@@ -8,3 +8,7 @@ renders/benchmark/
 renders/stage3/frames/
 renders/stage3/post/master/
 renders/stage3/post/vertical/
+renders/stage4/pov/pov_*.png
+renders/final/frames/
+renders/final/master/
+renders/final/vertical/
