@@ -164,6 +164,9 @@ def anchors_at(anchors, fr):
 
 
 # ------------------------------------------------------------------------------------ layers
+FRONT_WORD = {}   # frames whose montage word goes in front (no room beside the product)
+
+
 def behind_layer(W, H, fr, mask=None):
     """Big type BEHIND the product, laid out in the empty space beside it (from the mask)."""
     L = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -222,8 +225,9 @@ def behind_layer(W, H, fr, mask=None):
             if t.width > space:
                 t = t.resize((int(space), int(t.height * space / t.width)), Image.LANCZOS)
             cx = (W * 0.035 + t.width / 2) if left_space >= right_space else (W - W * 0.035 - t.width / 2)
-        else:                                       # product fills the frame: centre, behind it
-            cx = W * 0.5
+        else:                                       # product fills the frame: drawn in front instead
+            FRONT_WORD[fr] = True
+            return L
         place(L, t, cx, H * 0.5, clamp((fr - a + 1) / 2))
     return L
 
@@ -285,8 +289,8 @@ def front_layer(W, H, fr, anchors):
             d.text((lx + H * 0.01, ly - H * 0.036), label, font=fnt, fill=col)
     elif sid == "f4_ai":
         k = ease_out((fr - a - 18) / 18)
-        place(L, text_img("Local AI model.", "SemiBold", H * 0.07, WHITE), W * 0.60, H * 0.44, k * out, anchor="l")
-        place(L, text_img("Everything runs on the device.", "Light", H * 0.036, (200, 204, 210)), W * 0.60, H * 0.53, k * out, anchor="l")
+        place(L, text_img("Local AI model.", "SemiBold", H * 0.066, WHITE), W * 0.655, H * 0.44, k * out, anchor="l")
+        place(L, text_img("Everything runs on the device.", "Light", H * 0.034, (200, 204, 210)), W * 0.655, H * 0.52, k * out, anchor="l")
     elif sid == "f5_offline" and "prod" in rec:
         cx, cy = rec["prod"][:2]
         for i in range(4):                                   # rings leave the product and break up
@@ -311,6 +315,18 @@ def front_layer(W, H, fr, anchors):
                   fill=(255, 220, 170, int(255 * out)))
         k2 = ease_out((fr - a - 24) / 16)
         place(L, text_img("Runs 24/7.", "SemiBold", H * 0.05, WHITE), W * 0.5, H * 0.9, k2 * out)
+    elif sid in MONTAGE_WORDS and FRONT_WORD.get(fr):
+        # no room beside the product: a dark pill badge in the lower third (reads on any background)
+        k = ease_out((fr - a) / 6, 3)
+        al = clamp((fr - a + 1) / 2)
+        t = text_img(MONTAGE_WORDS[sid], "Bold", H * 0.09, WHITE, 0.0)
+        pw, ph = t.width + H * 0.03, H * 0.135
+        cx, cy = W * 0.5, H * 0.82 + (1 - k) * H * 0.02
+        pill = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(pill).rounded_rectangle((cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2), radius=ph / 2,
+                                               fill=(14, 14, 16, int(215 * al)))
+        L.alpha_composite(pill)
+        place(L, t, cx, cy, al)
     elif sid == "e1_end":
         t0 = a + 16
         if fr >= t0:
