@@ -56,3 +56,8 @@ STUDIO = {"r1_hero": (0.6, 0.55), "f3_72g": (0.5, 0.55), "x1_explode": (0.5, 0.5
           "x2_stack": (0.45, 0.6), "s1_snap": (0.55, 0.55), "e1_end": (0.68, 0.52)}
 MONTAGE_WORDS = {"m1_top": "130°", "m2_ports": "2 MP", "m3_rear": "72 g", "m4_low": "Local AI",
                  "m5_logo": "Offline", "m6_lens": "24/7"}
+
+# post-only ending (the render stays N frames): end card, then the orange-line -> logo reveal on black
+END_CARD = (2437, 2550)
+LOGO_REVEAL = (2551, 2700)
+N_POST = 2700            # 112.5 s: the logo holds past the music's decay (110.2 s)

@@ -23,11 +23,104 @@ from PIL import Image, ImageDraw, ImageFilter
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE))
-from launch.film4_timing import DROP, FPS, HIT_A, MONTAGE_WORDS, N, S, STOP  # noqa: E402
+from launch.film4_timing import DROP, END_CARD, FPS, HIT_A, LOGO_REVEAL, MONTAGE_WORDS, N_POST, S, STOP  # noqa: E402
+
+N = N_POST
 from launch.post_film3 import (CALLOUTS, INK, LOGO_BLACK, chroma, clamp, ease_out, font, grade,  # noqa: E402
                                lerp, light_leak, place, shake, text_img, whip_blur, zoom_blur)
 
 MUSIC = os.path.join(ROOT, "assets", "music", "Can_You_Hear_The_Music.mp3")
+LOGO_WHITE = os.path.join(ROOT, "assets", "logo", "rams_logo_white.png")
+ORANGE = (255, 106, 0)
+_LOGO = {}
+
+
+def _logo_parts():
+    """The supplied white logo split into its orange bracket and white lettering (+ bracket geometry)."""
+    if not _LOGO:
+        lg = Image.open(LOGO_WHITE).convert("RGBA")
+        a = np.asarray(lg).astype(np.int16)
+        orange = (a[..., 3] > 20) & (a[..., 0] > 180) & (a[..., 1] < 170) & (a[..., 2] < 120)
+        ys, xs = np.nonzero(orange)
+        x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+        rows = orange[y0:y1, x0:x1].sum(axis=1)
+        thick = int((rows >= 0.9 * (x1 - x0)).sum())
+        letters = np.asarray(lg).copy()
+        letters[orange] = 0
+        _LOGO.update(img=lg, letters=Image.fromarray(letters), box=(x0, y0, x1, y1), thick=thick)
+    return _LOGO
+
+
+def logo_reveal(W, H, fr):
+    """Black; an orange line shoots in, becomes the bracket's top arm, bends down into the L,
+    then RAMS DIGITAL wipes in from the bracket side. Logo = the supplied file."""
+    a, b = LOGO_REVEAL
+    P = _logo_parts()
+    lg = P["img"]
+    sc = W * 0.40 / lg.width
+    lw, lh = int(lg.width * sc), int(lg.height * sc)
+    ox, oy = (W - lw) // 2, (H - lh) // 2
+    bx0, by0, bx1, by1 = (v * sc for v in P["box"])
+    th = max(2.0, P["thick"] * sc)
+    X0, X1, Y0, Y1 = ox + bx0, ox + bx1, oy + by0, oy + by1          # bracket on screen
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    g = ImageDraw.Draw(glow)
+    t = fr - a
+    col = ORANGE + (255,)
+    # 1) line shoots in from the left along the arm's height (t 8..40), tail catches up to X0
+    if t >= 8:
+        k = ease_out((t - 8) / 30, 4)
+        head = lerp(-W * 0.05, X1, k)
+        tail = lerp(-W * 0.6, X0, ease_out((t - 8) / 36, 3))
+        tail = min(tail, head)
+        # fading trail behind the tail while moving
+        trail = max(0.0, 1 - (t - 8) / 36)
+        if trail > 0:
+            for i in range(12):
+                x = tail - (i + 1) * W * 0.025
+                g.rectangle((x, Y0, x + W * 0.025, Y0 + th), fill=ORANGE + (int(150 * trail * (1 - i / 12)),))
+        g.rectangle((tail, Y0, head, Y0 + th), fill=col)
+    # 2) the corner bends down: vertical arm draws from the top-right corner (t 38..54)
+    if t >= 38:
+        k = ease_out((t - 38) / 16, 3)
+        g.rectangle((X1 - th, Y0, X1, lerp(Y0 + th, Y1, k)), fill=col)
+    out = Image.alpha_composite(canvas, glow.filter(ImageFilter.GaussianBlur(H * 0.012)))
+    out = Image.alpha_composite(out, glow.filter(ImageFilter.GaussianBlur(H * 0.004)))
+    out = Image.alpha_composite(out, glow)
+    # corner pulse when the L completes
+    if 50 <= t <= 70:
+        k = math.sin(math.pi * (t - 50) / 20)
+        pulse = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        r = H * 0.05 * (0.6 + k)
+        ImageDraw.Draw(pulse).ellipse((X1 - r, Y0 - r, X1 + r, Y0 + r), fill=ORANGE + (int(120 * k),))
+        out = Image.alpha_composite(out, pulse.filter(ImageFilter.GaussianBlur(H * 0.03)))
+    # 3) once the L is drawn, swap in the exact bracket from the file (crisp) and wipe the letters in
+    if t >= 54:
+        br = lg.resize((lw, lh), Image.LANCZOS)
+        mask_b = Image.new("L", (lw, lh), 0)
+        ImageDraw.Draw(mask_b).rectangle((bx0 - 2, by0 - 2, bx1 + 2, by1 + 2), fill=255)
+        k = clamp((t - 54) / 6)
+        br_only = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
+        br_only.paste(br, (0, 0), mask_b)
+        br_only.putalpha(Image.fromarray((np.asarray(br_only.getchannel("A"), np.float32) * k).astype(np.uint8)))
+        out.alpha_composite(br_only, (ox, oy))
+    if t >= 60:
+        k = ease_out((t - 60) / 34, 3)
+        let = P["letters"].resize((lw, lh), Image.LANCZOS)
+        edge = lerp(lw * 1.05, -lw * 0.15, k)                   # wipe right -> left, soft edge
+        xs = np.arange(lw, dtype=np.float32)[None, :]
+        m = np.clip((xs - edge) / (lw * 0.12), 0, 1) * np.ones((lh, 1), np.float32)
+        al = np.asarray(let.getchannel("A"), np.float32) * m
+        let.putalpha(Image.fromarray(al.astype(np.uint8)))
+        if k < 1:
+            let = let.filter(ImageFilter.GaussianBlur((1 - k) * H * 0.006))
+        out.alpha_composite(let, (ox, oy))
+    # 4) hold, then fade out at the very end
+    fade = clamp((b - fr) / 18)
+    if fade < 1:
+        out = Image.fromarray((np.asarray(out.convert("RGB"), np.float32) * fade).astype(np.uint8))
+    return out.convert("RGB")
 STUDIO_SHOTS = ("r1_hero", "f3_72g", "x1_explode", "x2_stack", "s1_snap", "e1_end")
 CUTS_ACT1 = [S[k][0] for k in ("i2_ribs", "i3_top", "i4_logo", "i5_led")]
 ZOOM_CUT = S["h2_lens"][0]
@@ -209,6 +302,8 @@ def front_layer(W, H, fr, anchors):
 def process(src, mask, fr, rng, anchors):
     im = src
     W, H = im.size
+    if fr >= LOGO_REVEAL[0]:
+        return logo_reveal(W, H, fr)
     sid, a, b = shot_of(fr)
     if sid == "f2_2mp":                                      # pixels resolve into the image
         t = clamp((fr - a) / ((b - a) * 0.45))
@@ -262,7 +357,9 @@ def process(src, mask, fr, rng, anchors):
         arr = arr * (1 - k) + k
     im = Image.fromarray((arr * 255).astype(np.uint8)).convert("RGBA")
     im = Image.alpha_composite(im, front_layer(W, H, fr, anchors)).convert("RGB")
-    k = min(clamp(fr / 12), clamp((N - fr) / 24))
+    k = clamp(fr / 12)
+    if END_CARD[1] - 16 <= fr <= END_CARD[1]:
+        k = min(k, (END_CARD[1] - fr) / 16)                  # end card fades to black
     if STOP <= fr < STOP + 10:
         k = 0.0                                              # the music stops dead: black
     elif STOP + 10 <= fr < STOP + 30:
@@ -313,8 +410,8 @@ def main():
     dur = N / FPS
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(tmp, "p_%04d.png")]
     if a.music and os.path.exists(a.music):
-        af = f"atrim=start=0:duration={dur},asetpts=PTS-STARTPTS,afade=t=out:st={dur - 1.0}:d=1.0"
-        cmd += ["-i", a.music, "-filter:a", af, "-c:a", "aac", "-b:a", "256k", "-shortest"]
+        af = f"atrim=start=0:duration={dur},asetpts=PTS-STARTPTS,apad=whole_dur={dur}"
+        cmd += ["-i", a.music, "-filter:a", af, "-c:a", "aac", "-b:a", "256k", "-t", f"{dur}"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(a.crf), "-preset", "slow", "-movflags", "+faststart", a.out]
     subprocess.run(cmd, check=True)
     print("post4 ->", a.out)
