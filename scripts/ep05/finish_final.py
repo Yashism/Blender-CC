@@ -215,6 +215,10 @@ def main():
     if not os.path.exists(srt):
         shutil.copy(os.path.join(ROOT, "renders", "ep05_captions.srt"), srt)
     ok = all(check_movie(p, f1 - f0 + 1, size) for p, size in outs)
+    # (e) thumbnails from the clean rendered frames
+    thumbs = os.path.join(out_dir, "thumbnails")
+    log("thumbnails (thumbnails.py) ...")
+    pydeps.run_script(os.path.join(HERE, "thumbnails.py"), ["--src", src, "--out", thumbs])
     if ok and not a.keep_post_frames:
         for d in (mdir, vdir):
             shutil.rmtree(d, ignore_errors=True)
@@ -223,6 +227,7 @@ def main():
     for p, _ in outs:
         print("  " + p)
     print("  " + srt)
+    print("  " + thumbs + os.sep + "ep05_thumb_*.png / .jpg")
     print("==============================================================\n", flush=True)
     if not ok:
         sys.exit(5)
