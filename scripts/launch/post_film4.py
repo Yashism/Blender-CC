@@ -164,32 +164,67 @@ def anchors_at(anchors, fr):
 
 
 # ------------------------------------------------------------------------------------ layers
-def behind_layer(W, H, fr):
+def behind_layer(W, H, fr, mask=None):
+    """Big type BEHIND the product, laid out in the empty space beside it (from the mask)."""
     L = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sid, a, b = shot_of(fr)
     out = clamp((b - fr) / 6)
+    bb = None
+    if mask is not None:
+        bb = mask.point(lambda v: 255 if v > 60 else 0).getbbox()
+    x0, x1 = (bb[0], bb[2]) if bb else (W * 0.4, W * 0.6)
 
-    def big(word, col, size, start, glow=0.0, y=0.5, trk=(0.22, -0.02)):
+    def side(word, col, size, start, glow=0.0, y=0.5):
+        """Word in the larger free side of the frame, sized to fit, tracking in."""
         if fr < a + start:
             return
         k = ease_out((fr - a - start) / 34, 4)
-        t = text_img(word, "Black", H * size, col, tracking=lerp(trk[0], trk[1], k), glow=glow)
-        place(L, t, W * 0.5, H * y, clamp((fr - a - start) / 12) * out, blur=(1 - k) * 5)
+        left_space, right_space = x0, W - x1
+        on_left = left_space >= right_space
+        space = max(left_space, right_space) - W * 0.05
+        t = text_img(word, "Black", H * size, col, tracking=lerp(0.18, -0.02, k), glow=glow)
+        if t.width > space:
+            t = t.resize((int(space), int(t.height * space / t.width)), Image.LANCZOS)
+        cx = (W * 0.035 + t.width / 2) if on_left else (W - W * 0.035 - t.width / 2)
+        place(L, t, cx, H * y, clamp((fr - a - start) / 12) * out, blur=(1 - k) * 5)
 
-    if sid == "r1_hero":
-        big("AI Camera", (120, 122, 128), 0.30, 20, y=0.47)
+    if sid == "r1_hero" and fr >= a + 40:
+        # split title flanking the product once the spin settles
+        k = ease_out((fr - a - 40) / 30, 4)
+        al = clamp((fr - a - 40) / 12) * out
+        col = (112, 114, 120)
+        t1 = text_img("AI", "Black", H * 0.2, col, tracking=lerp(0.3, -0.02, k))
+        t2 = text_img("Camera", "Black", H * 0.2, col, tracking=lerp(0.3, -0.02, k))
+        gap, margin = W * 0.025, W * 0.035
+        pad = t2.height * 0.25                       # text_img's side padding
+        fit = min(1.0, (x0 - gap - margin) / max(1, t1.width - 2 * pad),
+                  (W - x1 - gap - margin) / max(1, t2.width - 2 * pad))
+        if fit < 1:
+            t1 = t1.resize((max(1, int(t1.width * fit)), max(1, int(t1.height * fit))), Image.LANCZOS)
+            t2 = t2.resize((max(1, int(t2.width * fit)), max(1, int(t2.height * fit))), Image.LANCZOS)
+            pad *= fit
+        place(L, t1, x0 - gap - t1.width / 2 + pad, H * 0.5, al, blur=(1 - k) * 4)
+        place(L, t2, x1 + gap + t2.width / 2 - pad, H * 0.5, al, blur=(1 - k) * 4)
     elif sid == "f3_72g":
-        big("72 g", (118, 120, 126), 0.42, 10)
+        side("72 g", (112, 114, 120), 0.30, 10)
     elif sid == "s1_snap":
-        big("Engineered.", (118, 120, 126), 0.24, 26)
+        side("Engineered.", (112, 114, 120), 0.2, 26)
     elif sid == "f5_offline":
-        big("Offline.", (70, 72, 78), 0.28, 16, glow=0.0)
+        side("Offline.", (86, 88, 94), 0.24, 16)
     elif sid == "f6_247":
-        big("24/7", (78, 80, 86), 0.40, 12)
+        side("24/7", (96, 98, 104), 0.34, 12)
     elif sid in MONTAGE_WORDS:
         k = ease_out((fr - a) / 7, 3)
-        t = text_img(MONTAGE_WORDS[sid], "Black", H * 0.30 * lerp(1.15, 1.0, k), WHITE, -0.02, glow=0.3)
-        place(L, t, W * 0.5, H * 0.5, clamp((fr - a + 1) / 2))
+        left_space, right_space = x0, W - x1
+        space = max(left_space, right_space) - W * 0.05
+        t = text_img(MONTAGE_WORDS[sid], "Black", H * 0.26 * lerp(1.12, 1.0, k), WHITE, -0.02, glow=0.3)
+        if space > W * 0.25:                        # room beside the product: sit there
+            if t.width > space:
+                t = t.resize((int(space), int(t.height * space / t.width)), Image.LANCZOS)
+            cx = (W * 0.035 + t.width / 2) if left_space >= right_space else (W - W * 0.035 - t.width / 2)
+        else:                                       # product fills the frame: centre, behind it
+            cx = W * 0.5
+        place(L, t, cx, H * 0.5, clamp((fr - a + 1) / 2))
     return L
 
 
@@ -201,7 +236,7 @@ def front_layer(W, H, fr, anchors):
     lw = max(1, int(H / 360))
     rec = anchors_at(anchors, fr)
     if sid == "r1_hero" and fr >= a + 8:
-        place(L, text_img("INTRODUCING", "Text", H * 0.026, (60, 62, 66), tracking=0.45), W * 0.5, H * 0.12,
+        place(L, text_img("INTRODUCING", "Text", H * 0.026, (60, 62, 66), tracking=0.45), W * 0.5, H * 0.95,
               clamp((fr - a - 8) / 12) * out)
     elif sid == "f1_fov" and all(k in rec for k in ("fan_c", "fan_l", "fan_r", "fan_m")):
         k = ease_out((fr - a - 50) / 30)
@@ -308,7 +343,7 @@ def process(src, mask, fr, rng, anchors):
     if sid == "f2_2mp":                                      # pixels resolve into the image
         t = clamp((fr - a) / ((b - a) * 0.45))
         im = pixelate(im, int(lerp(32, 1, ease_out(t, 2)) * W / 1280) or 1)
-    beh = behind_layer(W, H, fr)
+    beh = behind_layer(W, H, fr, mask)
     if beh.getbbox():
         base = Image.alpha_composite(im.convert("RGBA"), beh)
         if mask is not None:
