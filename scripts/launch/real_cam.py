@@ -146,7 +146,8 @@ def build(coll, cad=CAD, smooth_angle=35.0):
     for g in GROUPS:
         root[g] = 0.0
     for k in ("led", "explode") + GROUPS:
-        root.id_properties_ui(k).update(min=0.0, max=1.0)
+        # soft range 0..1; hard max 4 so a layer can be pushed far out of shot (film4 f4_ai)
+        root.id_properties_ui(k).update(min=0.0, max=4.0, soft_min=0.0, soft_max=1.0)
     objs = import_3mf.load(cad, coll, name_prefix="RealCam")
     m = _mats()
     for o in objs:
