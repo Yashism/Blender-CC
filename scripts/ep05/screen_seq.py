@@ -1,6 +1,7 @@
 """Ep. 5: in-cab RAMS AI screen texture as an image sequence (system python + Pillow).
 
-One 1280x720 PNG per episode frame, 1..timeline.FRAME_END:  assets/ui/seq/ui_0001.png ...
+One 1280x720 JPG per episode frame, 1..timeline.FRAME_END:  assets/ui/seq/ui_0001.jpg ...
+(JPG, not PNG: with the rendered camera feed the PNGs came to ~450 MB; JPG q90 is a fraction of that.)
 State per frame comes from timeline.screen_state_at(frame); pixels from make_screen_ui.compose.
 
 Camera-POV feed: if renders/stage3/pov/pov_XXXX.png exists for a frame it replaces the placeholder
@@ -14,10 +15,11 @@ written once and the repeats are hardlinked (copied if hardlinks fail).
     python3 scripts/ep05/screen_seq.py                 # whole episode
     python3 scripts/ep05/screen_seq.py --frames 300-400 --pov renders/stage3/pov
 
-Blender: load ui_0001.png as an image SEQUENCE, frame_start 1, offset 0, duration timeline.FRAME_END, auto refresh
-(lib.mats.screen(name, ".../assets/ui/seq/ui_0001.png", sequence_frames=timeline.FRAME_END) does exactly this).
+Blender: load ui_0001.jpg as an image SEQUENCE, frame_start 1, offset 0, duration timeline.FRAME_END, auto refresh
+(lib.mats.screen(name, ".../assets/ui/seq/ui_0001.jpg", sequence_frames=timeline.FRAME_END) does exactly this).
 """
 import argparse
+import glob
 import json
 import os
 import shutil
@@ -103,12 +105,14 @@ def main():
     f0, f1 = (int(x) for x in a.frames.split("-"))
     os.makedirs(a.out, exist_ok=True)
     boxes = load_boxes(a.boxes)
+    for old in glob.glob(os.path.join(a.out, "ui_*.png")):   # older PNG sequence
+        os.remove(old)
     cache = {}
     t0 = time.time()
     uniques = 0
     for fr in range(f0, f1 + 1):
         state, t = T.screen_state_at(fr)
-        dst = os.path.join(a.out, f"ui_{fr:04d}.png")
+        dst = os.path.join(a.out, f"ui_{fr:04d}.jpg")
         pov = pov_for(fr, a.pov) if state not in ("off", "boot") else None
         box = box_for(fr, boxes)
         key = (visual_key(state, t, fr), pov, box)
@@ -118,7 +122,7 @@ def main():
         feed = Image.open(pov) if pov else None
         if os.path.exists(dst):
             os.remove(dst)  # never write through an old hardlink
-        UI.compose(state, feed=feed, t=t, person_box=box).save(dst, compress_level=3)
+        UI.compose(state, feed=feed, t=t, person_box=box).convert("RGB").save(dst, quality=90)
         cache[key] = dst
         uniques += 1
     print(f"screen_seq: frames {f0}-{f1} -> {a.out}  ({uniques} unique images, "

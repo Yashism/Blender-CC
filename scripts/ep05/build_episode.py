@@ -287,8 +287,10 @@ def key_lens_and_screen():
         cols = {"off": (0.5, 0.6, 1.0), "boot": (0.8, 0.8, 0.9), "idle": (0.55, 0.7, 1.0),
                 "alert": (1.0, 0.32, 0.12), "clear": (0.3, 1.0, 0.85), "heart": (1.0, 0.55, 0.35)}
         key_fn(lt.data, "color", lambda fr: cols[T.screen_state_at(fr)[0]], TWOS, interp="CONSTANT")
-    # in-cab screen: the per-frame UI image sequence (assets/ui/seq/ui_0001.png ...)
-    seq0 = os.path.join(ROOT, "assets", "ui", "seq", "ui_0001.png")
+    # in-cab screen: the per-frame UI image sequence (assets/ui/seq/ui_0001.jpg ...; .png if older)
+    seq0 = os.path.join(ROOT, "assets", "ui", "seq", "ui_0001.jpg")
+    if not os.path.exists(seq0):
+        seq0 = seq0[:-4] + ".png"
     mat = bpy.data.materials.get("cabscreen_glass")
     if mat and os.path.exists(seq0):
         tex = next(n for n in mat.node_tree.nodes if n.type == "TEX_IMAGE")
