@@ -145,7 +145,7 @@ def build(coll, cad=CAD, smooth_angle=35.0):
     v.name = "led"
     v.targets[0].id = root
     v.targets[0].data_path = '["led"]'
-    fc.driver.expression = "led*30"
+    fc.driver.expression = "led*2.5"
     led_obj = next((o for o in objs if o.name.split(" / ")[-1].startswith(LED_LENS)), None)
     if led_obj:
         bpy.context.view_layer.update()

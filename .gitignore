@@ -20,3 +20,4 @@ renders/final/calibration/*.png
 renders/final/_encoding_*
 renders/final/STOP
 renders/launch/**/*.png
+renders/launch/film/frames*/
