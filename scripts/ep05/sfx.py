@@ -411,13 +411,14 @@ def main():
     paws(fx)
     events(fx)
     fx = reverb(fx, 0.7, 0.12, seed=3)
-    mix = mus * 0.3 + fx
+    MUSIC_GAIN = 0.46                        # bed sits ~6 dB under the beeps (was 0.3: too quiet)
+    mix = mus * MUSIC_GAIN + fx
     peak = np.max(np.abs(mix))
     mix = np.tanh(mix / max(peak, 1e-9) * 1.1) / np.tanh(1.1) * 0.89  # soft limit, ~-1 dBFS
     write_wav(a.out, mix)
     if a.stems:
         root, _ = os.path.splitext(a.out)
-        write_wav(root + "_music.wav", mus * 0.3 / max(peak, 1e-9) * 0.89)
+        write_wav(root + "_music.wav", mus * MUSIC_GAIN / max(peak, 1e-9) * 0.89)
         write_wav(root + "_sfx.wav", fx / max(peak, 1e-9) * 0.89)
     print(f"sfx: TEMP audio -> {a.out}  ({DUR:.1f}s, {SR} Hz stereo)")
 
