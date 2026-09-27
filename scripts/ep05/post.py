@@ -33,6 +33,7 @@ from multiprocessing import Pool
 
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import features as _pil_features
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -47,6 +48,10 @@ ORANGE_DK = (196, 58, 8)
 TEAL = (31, 181, 165)
 CREAM = (250, 243, 226)
 NOLIGA = ["-liga", "-clig"]  # keep "fl-02" as two letters
+if not _pil_features.check("raqm"):
+    # Pillow without libraqm (e.g. the Windows wheel inside Blender's python): font features are
+    # unsupported, but its basic layout never forms ligatures anyway, so "fl-02" stays two letters.
+    NOLIGA = None
 BANNED = ("\u2014", "\u2013")  # em / en dash: series rule
 
 DROP_FRAMES = 5
@@ -513,6 +518,9 @@ def main():
     ap.add_argument("--stills", default=None, help="comma list of frames: write PNG checks only")
     ap.add_argument("--checks", default=os.path.join(ROOT, "renders/stage3/post_checks"))
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2)))
+    ap.add_argument("--no-encode", action="store_true",
+                    help="write the master/vertical PNG frames only (the MP4s are encoded elsewhere, "
+                         "e.g. by finish_final.py with Blender's own FFmpeg)")
     a = ap.parse_args()
 
     print("post: srt ->", write_srt(a.srt))
@@ -545,11 +553,21 @@ def main():
         os.makedirs(d)
     cfg.update(mdir=mdir, vdir=vdir)
     t0 = time.time()
-    with Pool(a.jobs, initializer=init, initargs=(cfg,)) as pool:
-        for i, _ in enumerate(pool.imap_unordered(job, range(f0, f1 + 1), chunksize=8)):
+    if a.jobs <= 1:
+        init(cfg)
+        for i, fr in enumerate(range(f0, f1 + 1)):
+            job(fr)
             if i % 144 == 0:
-                print(f"post: {i}/{f1 - f0 + 1} frames")
+                print(f"post: {i}/{f1 - f0 + 1} frames", flush=True)
+    else:
+        with Pool(a.jobs, initializer=init, initargs=(cfg,)) as pool:
+            for i, _ in enumerate(pool.imap_unordered(job, range(f0, f1 + 1), chunksize=8)):
+                if i % 144 == 0:
+                    print(f"post: {i}/{f1 - f0 + 1} frames", flush=True)
     t1 = time.time()
+    if a.no_encode:
+        print(f"post: frames {t1 - t0:.1f}s -> {mdir}, {vdir} (no encode)")
+        return
     m = encode(os.path.join(mdir, "m_%04d.png"), a.audio, os.path.join(a.out_dir, "ep05_16x9.mp4"), f0)
     v = encode(os.path.join(vdir, "v_%04d.png"), a.audio, os.path.join(a.out_dir, "ep05_9x16.mp4"), f0)
     print(f"post: frames {t1 - t0:.1f}s, encode {time.time() - t1:.1f}s\n  {m}\n  {v}")

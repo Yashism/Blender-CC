@@ -12,3 +12,10 @@ renders/stage4/pov/pov_*.png
 renders/final/frames/
 renders/final/master/
 renders/final/vertical/
+# Stage 4 final render (render_final.ps1): Pillow for Blender's python, intermediates
+.pydeps/
+renders/final/post/
+renders/final/logs/
+renders/final/calibration/*.png
+renders/final/_encoding_*
+renders/final/STOP
