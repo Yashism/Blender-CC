@@ -21,3 +21,4 @@ renders/final/_encoding_*
 renders/final/STOP
 renders/launch/**/*.png
 renders/launch/film/frames*/
+renders/launch/film2/frames*/
