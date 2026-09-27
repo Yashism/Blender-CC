@@ -19,3 +19,4 @@ renders/final/logs/
 renders/final/calibration/*.png
 renders/final/_encoding_*
 renders/final/STOP
+renders/launch/**/*.png
