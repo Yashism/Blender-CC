@@ -34,3 +34,15 @@ renders/launch/film4/*.mp4
 renders/launch/film5/frames*/
 renders/launch/film5/t*/
 renders/launch/film5/*.mp4
+renders/launch/film6/frames*/
+renders/launch/film6/t*/
+renders/launch/film6/*.mp4
+renders/launch/film6/*_stills/
+renders/launch/film6/clips/
+renders/launch/film6/logs/
+renders/launch/film6/calibration/
+renders/launch/film6/*.zip
+renders/launch/film6/*.log
+renders/launch/film5/clips/
+renders/launch/film5/*.zip
+.tools/

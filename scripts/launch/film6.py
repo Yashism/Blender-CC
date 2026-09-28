@@ -26,20 +26,13 @@ from launch import real_cam  # noqa: E402
 from launch.film import aim, area, backdrop, key_points  # noqa: E402
 from launch.film4 import EX_ROT, FAN_R, FOV_DEG, V, ease_out, fov_fan, lerp, orbit, rotz, smooth, vl  # noqa: E402
 from launch.film5 import bez, inlay_corner  # noqa: E402
-from launch.film6_timing import DAYS, FPS, LT_STUDIO, RENDER_END, RISE, S, SCREW_LOCKS, SHOTS, STUDIO, TRANSITIONS  # noqa: E402
+from launch.film6_timing import DAYS, FPS, HERO_SCREW, phase247, LT_STUDIO, RENDER_END, RISE, S, SCREW_LOCKS, SHOTS, STUDIO, TRANSITIONS  # noqa: E402
 from lib import geo, studio  # noqa: E402
 from lib.palette import kelvin  # noqa: E402
 from lib.rig import _fcurves  # noqa: E402
 
 INLAY, PTS = {}, {}
 CHIP_BODY = "body1600524"          # the RF shield can over the AMB82's AI SoC
-
-
-def phase247(fr):
-    """a2_247 day count 0..DAYS (smoothstep over the shot, last 14 frames hold on the final day)."""
-    a, b = S["a2_247"]
-    t = min(1.0, max(0.0, (fr - a) / (b - 14 - a)))
-    return t * t * (3 - 2 * t)
 
 
 def hermite(keys, fr):
@@ -144,15 +137,26 @@ def build(args):
         return (rotz(V(L.x, lerp(-0.40, -0.118, u), L.z), EX_ROT), rotz(V(L.x, -0.05, L.z), EX_ROT),
                 rotz(V(L.x, L.y + board, L.z), EX_ROT))
 
+    bpy.context.view_layer.update()
+    hero = bpy.data.objects[root["screw_objs"][HERO_SCREW]].matrix_world.translation.copy()
+
+    def i4(t):                                     # parts come home wide, then a macro on the hero screw locking
+        rot = lerp(EX_ROT, -26.0, ease_out(t))
+        wide = orbit(C, lerp(0.25, 0.36, ease_out(t)), lerp(-60, -26, ease_out(t)), lerp(0.08, 0.04, ease_out(t)))
+        sp = rotz(hero, rot)
+        close = sp + rotz(V(0.035, -0.075, 0.012), rot)
+        u = smooth((t - 0.30) / 0.42)
+        return vl(wide, close, u), vl(C, sp, u), vl(C, sp, u)
+
     end_pos = outer + arm1 * 0.0095 + arm2 * 0.003 + V(0, 0, 0.06)
     CAM = {
         "lt_opening": (lt, None, 8.0),
         "i1_explode": (lambda t: (orbit(EXC, 0.58, lerp(-6, -26, smooth(t)), lerp(0.10, 0.06, smooth(t))), EXC, EXC), 70, 11.0),
         "i2_flythrough": (flythrough, 24, 8.0),
         "v3_72g": (lambda t: (vl((0.03, -0.52, 0.05), (0.025, -0.49, 0.05), t), C, C), 70, 8.0),
-        "i3a_chip": (lambda t: (rel(CHIP, vl((0.030, 0.052, 0.030), (0.012, 0.040, 0.012), smooth(t))), CHIP, CHIP), 35, 11.0),
+        "i3a_chip": (lambda t: (rel(CHIP, vl((0.030, 0.058, 0.030), (0.012, 0.052, 0.012), smooth(t))), CHIP, CHIP), 32, 11.0),
         "i3b_fan": (lambda t: (rel(FAN, vl((0.06, -0.07, 0.035), (0.04, -0.055, 0.022), smooth(t))), FAN, FAN), 40, 8.0),
-        "i4_assemble": (lambda t: (orbit(C, lerp(0.25, 0.40, ease_out(t)), lerp(-60, -22, ease_out(t)), lerp(0.08, 0.04, ease_out(t))), C, C), 60, 8.0),
+        "i4_assemble": (i4, 60, 8.0),
         "a1_offline": (lambda t: (orbit(C, lerp(0.30, 0.50, ease_out(t, 2)), lerp(-62, -26, smooth(t)), lerp(-0.012, 0.03, smooth(t))),
                                   C + V(0, 0, lerp(0.006, 0.0, t)), C), 60, 8.0),
         "a2_247": (lambda t: (orbit(C, lerp(0.47, 0.44, t), -30, 0.02), C, C), 60, 8.0),
@@ -277,6 +281,12 @@ def build(args):
             for k, kp in enumerate(fc.keyframe_points):
                 kp.interpolation = "CONSTANT" if k < 3 else "BEZIER"
                 kp.easing = "EASE_IN_OUT"
+    cuts = {b for _, _, b in SHOTS}                  # no motion-blur smear across a cut
+    for fc in _fcurves(root.animation_data.action):
+        if fc.data_path in ("rotation_euler", "location"):
+            for kp in fc.keyframe_points:
+                if int(round(kp.co.x)) in cuts:
+                    kp.interpolation = "CONSTANT"
     for ob in objs:
         ob.pass_index = 1
 
@@ -364,11 +374,11 @@ def build(args):
     energy(soft, env(350, 520, 1.3))
     ring = area("L_lt_ring", lt_coll, 0.22, temp=6000)
     aim(ring, (L.x, L.y - 0.45, L.z + 0.02), L)
-    energy(ring, env(480, 610, 1.2) [:-1] + [(630, 0.0), (905, 0.0), (925, 1.0), (966, 1.0), (967, 0.0)])
+    energy(ring, env(480, 610, 0.5) [:-1] + [(630, 0.0), (905, 0.0), (925, 1.0), (966, 1.0), (967, 0.0)])
     for sx in (-1, 1):
         st7 = area(f"L_lt_front{sx}", lt_coll, 0.015, 0.35, temp=6200)
         aim(st7, (sx * 0.18, -0.02, zc + 0.02), C)
-        energy(st7, [(1, 0.0), (460, 0.0), (480, 2.5), (600, 2.5), (630, 0.0), (900, 0.0), (920, 2.5), (966, 2.5), (967, 0.0)])
+        energy(st7, [(1, 0.0), (460, 0.0), (480, 0.7), (560, 0.9), (600, 1.6), (630, 0.0), (900, 0.0), (920, 2.5), (966, 2.5), (967, 0.0)])
     for sx in (-1, 1):                                  # the fan in the dark
         r1_ = area(f"L_lt_fanrim{sx}", lt_coll, 0.03, 0.4, temp=6500)
         aim(r1_, (sx * 0.2, 0.18, zc + 0.08), C)
@@ -399,7 +409,7 @@ def build(args):
     energy(t6, spans(dark, 6), "CONSTANT")
     a, b = S["a2_247"]
     sun = area("L_a2_sun", lt_coll, 0.3, temp=5600)
-    energy(sun, spans([(a, b)], 22), "CONSTANT")
+    energy(sun, spans([(a, b)], 13), "CONSTANT")
     base = area("L_a2_base", lt_coll, 0.5, temp=6500)
     aim(base, (0.15, -0.35, zc + 0.3), C)
     energy(base, spans([(a, b)], 1.2), "CONSTANT")
@@ -512,6 +522,28 @@ def render_handles(s, out, step):
             fo.mute = False
 
 
+def setup_outputs(s, out):
+    """Compositor: beauty to the render path, the product mask (object index 1) to out/mask/m_####.png."""
+    s.view_layers[0].use_pass_object_index = True
+    s.use_nodes = True
+    nt = s.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    rl = nt.nodes.new("CompositorNodeRLayers")
+    comp = nt.nodes.new("CompositorNodeComposite")
+    nt.links.new(rl.outputs["Image"], comp.inputs["Image"])
+    idm = nt.nodes.new("CompositorNodeIDMask")
+    idm.index = 1
+    idm.use_antialiasing = True
+    nt.links.new(rl.outputs["IndexOB"], idm.inputs["ID value"])
+    fo = nt.nodes.new("CompositorNodeOutputFile")
+    fo.base_path = os.path.join(out, "mask")
+    fo.format.file_format = "PNG"
+    fo.format.color_mode = "BW"
+    fo.file_slots[0].path = "m_"
+    nt.links.new(idm.outputs["Alpha"], fo.inputs[0])
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
@@ -543,31 +575,18 @@ def main():
     if a.render:
         out = a.render if os.path.isabs(a.render) else os.path.join(ROOT, a.render)
         os.makedirs(out, exist_ok=True)
-        s.view_layers[0].use_pass_object_index = True
-        s.use_nodes = True
-        nt = s.node_tree
-        for n in list(nt.nodes):
-            nt.nodes.remove(n)
-        rl = nt.nodes.new("CompositorNodeRLayers")
-        comp = nt.nodes.new("CompositorNodeComposite")
-        nt.links.new(rl.outputs["Image"], comp.inputs["Image"])
-        idm = nt.nodes.new("CompositorNodeIDMask")
-        idm.index = 1
-        idm.use_antialiasing = True
-        nt.links.new(rl.outputs["IndexOB"], idm.inputs["ID value"])
-        fo = nt.nodes.new("CompositorNodeOutputFile")
-        fo.base_path = os.path.join(out, "mask")
-        fo.format.file_format = "PNG"
-        fo.format.color_mode = "BW"
-        fo.file_slots[0].path = "m_"
-        nt.links.new(idm.outputs["Alpha"], fo.inputs[0])
+        setup_outputs(s, out)
         W, H = s.render.resolution_x, s.render.resolution_y
         ap_ = os.path.join(out, "anchors.json")
         if not os.path.exists(ap_):
             with open(ap_, "w") as fh:
                 json.dump(anchor_track(s, range(1, RENDER_END + 1), W, H), fh)
-        f0, f1 = (int(v) for v in a.frames.split("-")) if a.frames else (1, RENDER_END)
-        for fr in range(f0, f1 + 1, a.step):
+        if a.frames and "," in a.frames:
+            todo = [int(v) for v in a.frames.split(",")]
+        else:
+            f0, f1 = (int(v) for v in a.frames.split("-")) if a.frames else (1, RENDER_END)
+            todo = range(f0, f1 + 1, a.step)
+        for fr in todo:
             p = os.path.join(out, f"f_{fr:04d}.png")
             if os.path.exists(p):
                 continue

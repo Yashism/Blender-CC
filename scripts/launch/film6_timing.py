@@ -37,7 +37,7 @@ LT_STUDIO = [(1, 0.0), (596, 0.0), (640, 1.0), (748, 1.0), (790, 0.0), (966, 0.0
 TRANSITIONS = {967: ("dip", 16), 1251: ("dissolve", 14), 1341: ("dissolve", 12), 1513: ("dip", 16), 1701: ("dissolve", 16)}
 # titles by frame span: (first, last, title, subline); lower-left, one line
 TITLE_SPANS = [
-    (795, 876, "130° field of view", ""),
+    (838, 904, "130° field of view", ""),
     (930, 962, "2 MP camera", ""),
     (1071, 1146, "Engineered inside out.", ""),
     (1268, 1337, "Local AI model.", "Runs entirely on the device."),
@@ -52,4 +52,13 @@ RISE = (986, 1018)                 # product rise from below frame: fast -> slow
 NET = (1513, 1700)                 # a1: network links reach out, then are cut one by one
 NET_CUT = (1556, 1600)
 DAYS = 7                           # a2: seven day/night cycles, one ring sweep per day
-SCREW_LOCKS = [(1452 + i * 9, i) for i in range(4)]   # (start frame, screw index): 18-frame drive-in
+# (start frame, screw index): 18-frame drive-in; screw 1 (front, bottom-right) is the macro hero and goes last
+SCREW_LOCKS = [(1448, 0), (1455, 2), (1462, 3), (1474, 1)]
+HERO_SCREW = 1
+
+
+def phase247(fr):
+    """a2_247 day count 0..1 (x DAYS): smoothstep over the shot, the last 14 frames hold on the final day."""
+    a, b = S["a2_247"]
+    t = min(1.0, max(0.0, (fr - a) / (b - 14 - a)))
+    return t * t * (3 - 2 * t)
