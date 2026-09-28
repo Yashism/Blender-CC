@@ -109,6 +109,28 @@ def _assign(o, m):
             o.material_slots[i].material = mat
 
 
+SCREWS = ("screw_0", "screw_1", "screw_2", "screw_3")   # 1 = seated, 0 = backed out 4 mm, 3 turns
+FAN_REV_PER_S = 4.0                                        # visible spin with motion blur
+
+
+def set_pivot_to_centre(objs):
+    """Move each object's origin to its geometry centre without moving it (handles shared meshes)."""
+    from mathutils import Matrix as _M
+    done = {}
+    for o in objs:
+        me = o.data
+        if me.name not in done:
+            c = sum((v.co for v in me.vertices), Vector()) / max(1, len(me.vertices))
+            me.transform(_M.Translation(-c))
+            done[me.name] = c
+        o.matrix_basis = o.matrix_basis @ _M.Translation(done[me.name])
+
+
+def long_axis(o, longest=True):
+    d = list(o.dimensions)
+    return d.index(max(d)) if longest else d.index(min(d))
+
+
 # staged exploded view: one 0..1 control per layer (front to back)
 GROUPS = ("ex_cover", "ex_bezel", "ex_board", "ex_inner", "ex_housing")
 STAGED = {"ex_cover": -0.15, "ex_bezel": -0.108, "ex_board": -0.064, "ex_inner": 0.0,
@@ -131,7 +153,7 @@ def _drive(obj, root, expr, prop="delta_location", index=1):
     fc = obj.driver_add(prop, index)
     d = fc.driver
     d.type = "SCRIPTED"
-    for name in ("explode", "led") + GROUPS:
+    for name in ("explode", "led") + GROUPS + SCREWS:
         v = d.variables.new()
         v.name = name
         v.targets[0].id = root
@@ -145,7 +167,9 @@ def build(coll, cad=CAD, smooth_angle=35.0):
     root["explode"] = 0.0
     for g in GROUPS:
         root[g] = 0.0
-    for k in ("led", "explode") + GROUPS:
+    for sc in SCREWS:
+        root[sc] = 1.0
+    for k in ("led", "explode") + GROUPS + SCREWS:
         # soft range 0..1; hard max 4 so a layer can be pushed far out of shot (film4 f4_ai)
         root.id_properties_ui(k).update(min=0.0, max=4.0, soft_min=0.0, soft_max=1.0)
     objs = import_3mf.load(cad, coll, name_prefix="RealCam")
@@ -195,5 +219,30 @@ def build(coll, cad=CAD, smooth_angle=35.0):
         _drive(o, root, f"{simple[g]}*explode + {STAGED[g]}*{g}")
     if led_obj:
         _drive(lo, root, f"{STAGED['ex_inner']}*ex_inner + 0.02*explode")
+    # screws: pivot at their centre; each one threads in (-4 mm -> seated) and turns 3 times
+    screws = sorted([o for o in objs if o["cad_part"].startswith("socket button")],
+                    key=lambda o: (round(o.matrix_world.translation.z, 3), o.matrix_world.translation.x))
+    impellers = [o for o in objs if o["cad_part"].startswith("impeller")]
+    set_pivot_to_centre(screws + impellers)
+    for i, o in enumerate(screws):
+        sc = SCREWS[i % 4]
+        o["screw_prop"] = sc
+        o.animation_data.drivers.remove(o.animation_data.drivers.find("delta_location", index=1))
+        g = group_of(o["cad_part"])
+        _drive(o, root, f"{simple[g]}*explode + {STAGED[g]}*{g} - 0.004*(1-{sc})")
+        _drive(o, root, f"(1-{sc})*18.85", prop="delta_rotation_euler", index=long_axis(o))
+    # the 3010 fan's impeller spins about its thin axis for the whole film
+    for o in impellers:
+        ax = long_axis(o, longest=False)
+        o.rotation_mode = "XYZ"
+        o.delta_rotation_euler[ax] = 0.0
+        o.keyframe_insert("delta_rotation_euler", index=ax, frame=0)
+        o.delta_rotation_euler[ax] = 2 * math.pi * FAN_REV_PER_S * 3000 / 24
+        o.keyframe_insert("delta_rotation_euler", index=ax, frame=3000)
+        from lib.rig import _fcurves
+        for fc in _fcurves(o.animation_data.action):
+            for kp in fc.keyframe_points:
+                kp.interpolation = "LINEAR"
+    root["screw_objs"] = [o.name for o in screws]
     root["parts"] = len(objs)
     return root, objs
