@@ -46,3 +46,4 @@ renders/launch/film6/*.log
 renders/launch/film5/clips/
 renders/launch/film5/*.zip
 .tools/
+renders/launch/film6/*.blend
