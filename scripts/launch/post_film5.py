@@ -35,6 +35,7 @@ LOGO_WHITE = os.path.join(ROOT, "assets", "logo", "rams_logo_white.png")
 ORANGE = (255, 106, 0)
 WHITE = (240, 240, 242)
 _LOGO = {}
+TITLE_Y = {"i1_explode": 0.12}     # titles default to the lower-left; the exploded stack fills it
 
 
 def shot_of(fr):
@@ -91,9 +92,10 @@ def title_layer(im, fr, mask, anchors):
         title, sub, delay = TITLES[sid]
         k = ease_out((fr - a - delay) / 16)
         if k > 0:
-            dark = lum_of(im, (W * 0.05, H * 0.72, W * 0.5, H * 0.9)) < 0.45
+            y0 = TITLE_Y.get(sid, 0.80)
+            dark = lum_of(im, (W * 0.05, H * (y0 - 0.08), W * 0.5, H * (y0 + 0.1))) < 0.45
             col, col2 = (WHITE, (196, 198, 204)) if dark else (INK, (70, 70, 76))
-            y = H * 0.80 + (1 - k) * H * 0.018
+            y = H * y0 + (1 - k) * H * 0.018
             place(L, text_img(title, "SemiBold", H * 0.056, col), W * 0.07, y, k * out, anchor="l")
             if sub:
                 place(L, text_img(sub, "Light", H * 0.03, col2), W * 0.07, y + H * 0.06, k * out, anchor="l")
