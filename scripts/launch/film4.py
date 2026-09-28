@@ -103,14 +103,14 @@ def fov_fan(coll, center):
     tr = nt.nodes.new("ShaderNodeBsdfTransparent")
     em = nt.nodes.new("ShaderNodeEmission")
     em.inputs["Color"].default_value = (1.0, 0.32, 0.06, 1)
-    em.inputs["Strength"].default_value = 1.6
+    em.inputs["Strength"].default_value = 1.2
     tc = nt.nodes.new("ShaderNodeTexCoord")
     ln = nt.nodes.new("ShaderNodeVectorMath")
     ln.operation = "LENGTH"
     mp = nt.nodes.new("ShaderNodeMapRange")
     mp.inputs["From Min"].default_value = 0.0
     mp.inputs["From Max"].default_value = FAN_R
-    mp.inputs["To Min"].default_value = 0.30
+    mp.inputs["To Min"].default_value = 0.22
     mp.inputs["To Max"].default_value = 0.0
     nt.links.new(tc.outputs["Object"], ln.inputs[0])
     nt.links.new(ln.outputs["Value"], mp.inputs["Value"])
