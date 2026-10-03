@@ -655,8 +655,8 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
     def s5(fr, t):
         a, b = S["s5_robot"]
         dc = V((CELL["x0"] + 0.4, (CELL["door_y"][0] + CELL["door_y"][1]) / 2, FLOOR + 1.2))
-        k = [(a, V((CELL["x0"] - 3.5, CELL["y1"] + 3.0, FLOOR + 3.2)), rob, 28),
-             (a + 120, V((CELL["x1"] - 0.8, CELL["y1"] + 2.4, FLOOR + 3.4)), rob, 30),
+        k = [(a, V((CELL["x0"] - 2.6, CELL["y1"] + 2.4, FLOOR + 5.4)), rob, 28),           # over the weld screens
+             (a + 120, V((CELL["x1"] - 1.2, CELL["y1"] + 2.0, FLOOR + 4.8)), rob, 30),
              (ROBOT_ENTER - 60, V((ccam.x - 0.5, ccam.y + 1.9, ccam.z + 0.7)), dc, 30),
              (ROBOT_RELAY, V((ccam.x - 1.0, ccam.y + 1.6, ccam.z + 0.4)), dc, 30),
              (ROBOT_RELAY + 1, V((rob.x - 3.0, rob.y - 3.0, FLOOR + 2.4)), rob + V((-0.5, 0, -0.25)), 30),
