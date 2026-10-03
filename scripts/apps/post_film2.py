@@ -468,7 +468,7 @@ def titles(W, H, fr, im):
         k2 = ease_out((fr - HERO_HIT - 40) / 24)
         place(L, text_img("See. Detect. Protect.", "Medium", H * 0.042, (255, 140, 60)), W * 0.22, H * 0.49, k2 * out)
         k3 = ease_out((fr - HERO_HIT - 80) / 24)
-        place(L, text_img("with Omnibox Edge", "Light", H * 0.026, (200, 204, 212)), W * 0.22, H * 0.56, k3 * out)
+        place(L, text_img("with Omnibox Edge", "Medium", H * 0.036, (215, 218, 225)), W * 0.22, H * 0.565, k3 * out)
     return L
 
 
