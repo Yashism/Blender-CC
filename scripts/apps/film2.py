@@ -588,8 +588,8 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
     def s5(fr, t):
         a, b = S["s5_robot"]
         k = [(a, V((CELL["x0"] - 3.5, CELL["y1"] + 3.0, FLOOR + 3.2)), rob, 28),
-             (a + 120, V((CELL["x1"] + 0.6, CELL["y0"] - 2.4, FLOOR + 3.6)), rob, 30),
-             (ROBOT_ENTER - 60, V((ccam.x + 0.4, ccam.y + 0.9, ccam.z + 0.3)), V((CELL["x0"], CELL["door_y"][0] + 0.9, FLOOR + 1.3)), 30),
+             (a + 120, V((CELL["x1"] + 0.15, CELL["y0"] - 2.4, FLOOR + 3.6)), rob, 30),
+             (ROBOT_ENTER - 60, V((ccam.x + 0.1, ccam.y + 0.9, ccam.z + 0.3)), V((CELL["x0"], CELL["door_y"][0] + 0.9, FLOOR + 1.3)), 30),
              (ROBOT_RELAY, V((ccam.x - 0.2, ccam.y + 1.2, ccam.z + 0.1)), V((CELL["x0"] + 0.6, CELL["door_y"][0] + 0.9, FLOOR + 1.2)), 30),
              (ROBOT_RELAY + 1, V((rob.x - 2.9, rob.y - 3.3, FLOOR + 2.1)), rob + V((-0.6, 0, -0.3)), 40),
              (b, V((rob.x - 2.4, rob.y - 2.8, FLOOR + 1.9)), rob + V((-0.6, 0, -0.3)), 40)]
@@ -598,6 +598,7 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         else:
             kk = k[4:]
         loc = hermite([(f, p) for f, p, _, _ in kk], fr)
+        loc.x = min(loc.x, 21.2)                       # never through the east wall
         tgt = hermite([(f, p) for f, _, p, _ in kk], fr)
         lens = hermite([(f, float(l)) for f, _, _, l in kk], fr)
         return loc, tgt, tgt, lens

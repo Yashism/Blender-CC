@@ -193,6 +193,14 @@ def omnibox(coll, name="OBX"):
     s = k_ref / k                              # rescale so the Pi is 85 mm
     fit.scale = tuple(v * s for v in fit.scale)
     fit.location = tuple(v * s for v in fit.location)
+    for o in new:                                  # the real Omnibox Edge enclosure is matte black
+        if o.type == "MESH" and o.name.startswith("Enclosure"):
+            for sl in o.material_slots:
+                if sl.material and sl.material.use_nodes:
+                    bn = sl.material.node_tree.nodes.get("Principled BSDF")
+                    if bn:
+                        bn.inputs["Base Color"].default_value = (0.025, 0.026, 0.028, 1)
+                        bn.inputs["Roughness"].default_value = 0.55
     led = next((o for o in new if o.name.startswith("Status LED")), None)
     from apps.kit import emissive
     led_m = emissive(f"{name}_status", (0.1, 1.0, 0.25), 8.0)
