@@ -182,7 +182,7 @@ def charging_bay(coll, P, cam_src):
     for i, (x, y, rz) in enumerate(((sx - 3.2, 12.55, 0), (sx + 3.2, 12.55, 0), (cx + 0.2, cy + 0.17, 0), (2.0, 12.55, 0), (-4.0, 12.55, 0))):
         b, m = kit.light_bar(f"fire_bar{i}", (x, y, z + 3.0), 0.8, rot_z=rz, coll=coll)
         bars.append((b, m, Vector((x, y))))
-    return dict(cam=cam, bars=bars, src=Vector((sx, sy, z + 0.82)))
+    return dict(cam=cam, bars=bars, src=Vector((sx - 0.8, 11.0, z + 0.82)))   # on top of the second battery
 
 
 def robot_cell(coll, P, cam_src):

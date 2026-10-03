@@ -121,6 +121,9 @@ def perception(src, fr, size):
     e2 = np.clip((np.maximum(nx, ny) - 0.25) / 0.35, 0, 1)
     e = np.maximum(e1, e2)
     e[bg] = 0
+    m3e = load_pass(src, "m3", fr, size)
+    if m3e is not None:
+        e = e * (1 - np.clip(m3e * 3, 0, 1))
     eim = Image.fromarray((e * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.45 * W / 1280))
     e = np.asarray(eim, np.float32) / 255
     L = np.array([0.35, -0.45, 0.82], np.float32)
@@ -134,9 +137,12 @@ def perception(src, fr, size):
     if m2 is not None:
         pm = m2[..., None]
         img = img * (1 - pm) + pm * (np.array([1.0, 0.42, 0.06], np.float32) * (0.55 + 0.45 * lam[..., None]) + e[..., None] * 0.35)
-    if m3 is not None:
-        fm = m3[..., None]
-        img = img * (1 - 0.8 * fm) + fm * np.array([1.0, 0.22, 0.05], np.float32)
+    if m3 is not None:               # smoke / fire as a smooth heat map (no edge noise from the volume)
+        fb = np.asarray(Image.fromarray((m3 * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(7 * W / 1280)),
+                        np.float32) / 255
+        fb = np.clip(fb * 1.6, 0, 1)
+        heat = np.stack([np.ones_like(fb), 0.15 + 0.6 * fb, 0.04 * fb], -1)
+        img = img * (1 - 0.85 * fb[..., None]) + fb[..., None] * heat * (0.35 + 0.65 * fb[..., None])
     # subtle scanline texture
     yy = (np.arange(H) % 3 == 0).astype(np.float32)[:, None, None]
     img = img * (1 - 0.06 * yy)
@@ -447,8 +453,11 @@ def frame(src, fr, size, rng, anchors):
     c = S["s1a_crane"][0]
     if c - 14 <= fr < c + 14:
         arr = arr * smooth(abs(fr - c + 0.5) / 14)
-    if fr <= 10:
-        arr = arr * smooth(fr / 10)
+    if fr <= 24:
+        arr = arr * smooth(fr / 24)
+    h0 = S["s7_hero"][0]
+    if h0 <= fr < h0 + 18:                       # the converged point opens into the hero
+        arr = arr * smooth((fr - h0) / 18)
     if sid == "s6_system" and fr > CONVERGE:
         arr = arr * (1 - 0.85 * smooth((fr - CONVERGE) / max(1, b - CONVERGE)))
     out = Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8)).convert("RGBA")

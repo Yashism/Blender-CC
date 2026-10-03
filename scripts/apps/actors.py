@@ -362,7 +362,9 @@ def _volume_mat(name, kind):
     nt.links.new(tc.outputs["Generated"], mp.inputs["Vector"])
     noise = nt.nodes.new("ShaderNodeTexNoise")
     noise.noise_dimensions = "4D"
-    noise.inputs["Scale"].default_value = 3.2 if kind == "smoke" else 5.5
+    noise.inputs["Scale"].default_value = 3.0 if kind == "smoke" else 6.5
+    if "Distortion" in noise.inputs:
+        noise.inputs["Distortion"].default_value = 0.0 if kind == "smoke" else 1.2
     noise.inputs["Detail"].default_value = 8.0
     noise.inputs["Roughness"].default_value = 0.62
     nt.links.new(mp.outputs["Vector"], noise.inputs["Vector"])
@@ -389,8 +391,8 @@ def _volume_mat(name, kind):
     nt.links.new(dx2.outputs[0], r2.inputs[0])
     nt.links.new(dy2.outputs[0], r2.inputs[1])
     # width grows with height (plume)
-    wid = math_node("MULTIPLY_ADD", None, 0.18 if kind == "smoke" else 0.05)
-    wid.inputs[1].default_value = 0.06 if kind == "smoke" else 0.03
+    wid = math_node("MULTIPLY_ADD", None, 0.24 if kind == "smoke" else 0.04)     # radius = a*z + b (generated coords)
+    wid.inputs[2].default_value = 0.08 if kind == "smoke" else 0.2
     nt.links.new(sep.outputs[2], wid.inputs[0])
     wid2 = math_node("MULTIPLY")
     nt.links.new(wid.outputs[0], wid2.inputs[0])
@@ -400,56 +402,213 @@ def _volume_mat(name, kind):
     nt.links.new(wid2.outputs[0], rad.inputs[1])
     radf = math_node("SUBTRACT", 1.0)
     nt.links.new(rad.outputs[0], radf.inputs[1])
-    radc = math_node("MAXIMUM", None, 0.0)
-    nt.links.new(radf.outputs[0], radc.inputs[0])
+    radc0 = math_node("MAXIMUM", None, 0.0)
+    nt.links.new(radf.outputs[0], radc0.inputs[0])
+    radc = math_node("POWER", None, 2.0)                  # soft plume edge
+    nt.links.new(radc0.outputs[0], radc.inputs[0])
     hf = math_node("SUBTRACT", 1.0)
     nt.links.new(sep.outputs[2], hf.inputs[1])
     if kind == "fire":
-        hf2 = math_node("POWER", None, 2.2)
+        hf2 = math_node("POWER", None, 1.15)
         nt.links.new(hf.outputs[0], hf2.inputs[0])
         hf = hf2
     shape = math_node("MULTIPLY")
     nt.links.new(radc.outputs[0], shape.inputs[0])
     nt.links.new(hf.outputs[0], shape.inputs[1])
+    nz = math_node("SUBTRACT", None, 0.36 if kind == "smoke" else 0.40)       # contrasty noise: wisps / tongues
+    nt.links.new(noise.outputs["Fac"], nz.inputs[0])
+    nzc = math_node("MAXIMUM", None, 0.0)
+    nt.links.new(nz.outputs[0], nzc.inputs[0])
+    nzs = math_node("MULTIPLY", None, 3.5)
+    nt.links.new(nzc.outputs[0], nzs.inputs[0])
     dens = math_node("MULTIPLY")
     nt.links.new(shape.outputs[0], dens.inputs[0])
-    nt.links.new(noise.outputs["Fac"], dens.inputs[1])
-    thr = math_node("SUBTRACT", None, 0.22 if kind == "smoke" else 0.3)
+    nt.links.new(nzs.outputs[0], dens.inputs[1])
+    thr = math_node("ADD", None, 0.0)
     nt.links.new(dens.outputs[0], thr.inputs[0])
     amt = math_node("MULTIPLY", None, 0.0)          # keyed growth
     nt.links.new(thr.outputs[0], amt.inputs[0])
     clamp = math_node("MAXIMUM", None, 0.0)
     nt.links.new(amt.outputs[0], clamp.inputs[0])
     if kind == "smoke":
-        vol.inputs["Color"].default_value = (0.16, 0.16, 0.17, 1)
+        vol.inputs["Color"].default_value = (0.46, 0.46, 0.48, 1)
+        mp.inputs["Scale"].default_value = (1.0, 1.0, 0.7)
         nt.links.new(clamp.outputs[0], vol.inputs["Density"])
     else:
-        vol.inputs["Density"].default_value = 0.0
-        nt.links.new(clamp.outputs[0], vol.inputs["Blackbody Intensity"])
-        vol.inputs["Temperature"].default_value = 1500
+        # flame: pure emission volume, coloured by intensity (yellow-white core -> orange -> deep red edges)
+        nt.nodes.remove(vol)
+        emv = nt.nodes.new("ShaderNodeEmission")
+        nt.links.new(emv.outputs[0], out.inputs["Volume"])
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        cr = ramp.color_ramp
+        cr.elements[0].position, cr.elements[0].color = 0.0, (0.55, 0.04, 0.0, 1)
+        cr.elements[1].position, cr.elements[1].color = 0.55, (1.0, 0.42, 0.05, 1)
+        e3 = cr.elements.new(1.0)
+        e3.color = (1.0, 0.86, 0.55, 1)
+        nrm = math_node("MULTIPLY", None, 0.22)
+        nt.links.new(clamp.outputs[0], nrm.inputs[0])
+        nt.links.new(nrm.outputs[0], ramp.inputs["Fac"])
+        nt.links.new(ramp.outputs["Color"], emv.inputs["Color"])
+        nt.links.new(clamp.outputs[0], emv.inputs["Strength"])
+        mp.inputs["Scale"].default_value = (1.0, 1.0, 0.42)       # tall flame tongues
+        vol = emv
     return m, noise, mp, amt
+
+
+def _flame_card_mat(name, seed, f_flame, f_end):
+    """Animated flame on a card (UV: u across, v up): noise-distorted tongue shape -> colour ramp + alpha."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    if hasattr(m, "blend_method"):
+        m.blend_method = "BLEND"
+    nt = m.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    L = nt.links.new
+
+    def M(op, a=None, b=None):
+        n = nt.nodes.new("ShaderNodeMath")
+        n.operation = op
+        if a is not None:
+            n.inputs[0].default_value = a
+        if b is not None:
+            n.inputs[1].default_value = b
+        return n
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    uv = nt.nodes.new("ShaderNodeTexCoord")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    L(uv.outputs["UV"], sep.inputs[0])
+    # rising, flickering noise
+    mp = nt.nodes.new("ShaderNodeMapping")
+    L(uv.outputs["UV"], mp.inputs["Vector"])
+    mp.inputs["Scale"].default_value = (2.2, 1.1, 1.0)
+    nz = nt.nodes.new("ShaderNodeTexNoise")
+    nz.noise_dimensions = "4D"
+    nz.inputs["Scale"].default_value = 3.2
+    nz.inputs["Detail"].default_value = 6.0
+    nz.inputs["Roughness"].default_value = 0.55
+    L(mp.outputs["Vector"], nz.inputs["Vector"])
+    for fr in (1, f_end):
+        mp.inputs["Location"].default_value = (seed * 3.1, -fr / FPS * 2.4, 0)
+        mp.inputs["Location"].keyframe_insert("default_value", frame=fr)
+        nz.inputs["W"].default_value = seed * 7.0 + fr / FPS * 1.3
+        nz.inputs["W"].keyframe_insert("default_value", frame=fr)
+    # tongue shape: |u - 0.5 + distortion| < width(v)
+    du = M("SUBTRACT", None, 0.5)
+    L(nz.outputs["Fac"], du.inputs[0])
+    dus = M("MULTIPLY", None, 0.55)
+    L(du.outputs[0], dus.inputs[0])
+    dv = M("MULTIPLY")                      # distortion grows with height
+    L(dus.outputs[0], dv.inputs[0])
+    L(sep.outputs["Y"], dv.inputs[1])
+    ux = M("SUBTRACT", None, 0.5)
+    L(sep.outputs["X"], ux.inputs[0])
+    uxd = M("ADD")
+    L(ux.outputs[0], uxd.inputs[0])
+    L(dv.outputs[0], uxd.inputs[1])
+    ax = M("ABSOLUTE")
+    L(uxd.outputs[0], ax.inputs[0])
+    onev = M("SUBTRACT", 1.0)
+    L(sep.outputs["Y"], onev.inputs[1])
+    wid = M("POWER", None, 0.75)
+    L(onev.outputs[0], wid.inputs[0])
+    widk = M("MULTIPLY", None, 0.42)
+    L(wid.outputs[0], widk.inputs[0])
+    ratio = M("DIVIDE")
+    L(ax.outputs[0], ratio.inputs[0])
+    L(widk.outputs[0], ratio.inputs[1])
+    inside = M("SUBTRACT", 1.0)
+    L(ratio.outputs[0], inside.inputs[1])
+    insc = M("MAXIMUM", None, 0.0)
+    L(inside.outputs[0], insc.inputs[0])
+    # brighter at the base, noisy breakup toward the tips
+    base = M("POWER", None, 1.6)
+    L(onev.outputs[0], base.inputs[0])
+    nzb = M("MULTIPLY_ADD", None, 0.9)
+    nzb.inputs[2].default_value = 0.35
+    L(nz.outputs["Fac"], nzb.inputs[0])
+    f1 = M("MULTIPLY")
+    L(insc.outputs[0], f1.inputs[0])
+    L(base.outputs[0], f1.inputs[1])
+    f2 = M("MULTIPLY")
+    L(f1.outputs[0], f2.inputs[0])
+    L(nzb.outputs[0], f2.inputs[1])
+    amt = M("MULTIPLY", None, 0.0)          # keyed growth
+    L(f2.outputs[0], amt.inputs[0])
+    for fr, v in ((1, 0.0), (f_flame, 0.0), (f_flame + 20, 1.6), (f_end, 2.0)):
+        amt.inputs[1].default_value = v
+        amt.inputs[1].keyframe_insert("default_value", frame=fr)
+    fc = M("MINIMUM", None, 1.0)
+    L(amt.outputs[0], fc.inputs[0])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    cr = ramp.color_ramp
+    cr.elements[0].position, cr.elements[0].color = 0.0, (0.35, 0.02, 0.0, 1)
+    cr.elements[1].position, cr.elements[1].color = 0.45, (1.0, 0.35, 0.03, 1)
+    e3 = cr.elements.new(0.85)
+    e3.color = (1.0, 0.8, 0.4, 1)
+    L(fc.outputs[0], ramp.inputs["Fac"])
+    em = nt.nodes.new("ShaderNodeEmission")
+    L(ramp.outputs["Color"], em.inputs["Color"])
+    es = M("MULTIPLY", None, 9.0)
+    L(fc.outputs[0], es.inputs[0])
+    L(es.outputs[0], em.inputs["Strength"])
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    al = M("POWER", None, 0.7)
+    L(fc.outputs[0], al.inputs[0])
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    L(al.outputs[0], mix.inputs["Fac"])
+    L(tr.outputs[0], mix.inputs[1])
+    L(em.outputs[0], mix.inputs[2])
+    L(mix.outputs[0], out.inputs["Surface"])
+    from lib.rig import _fcurves
+    for fc_ in _fcurves(nt.animation_data.action):
+        for kp in fc_.keyframe_points:
+            kp.interpolation = "LINEAR"
+    return m
+
+
+def flame_cards(coll, src, f_flame, f_end, h=1.1, w=0.78):
+    """Three crossed flame cards (0/60/120 deg) standing on src."""
+    import bmesh
+    obs = []
+    for i in range(3):
+        bm = bmesh.new()
+        vs = [bm.verts.new(c) for c in ((-w / 2, 0, 0), (w / 2, 0, 0), (w / 2, 0, h), (-w / 2, 0, h))]
+        f = bm.faces.new(vs)
+        uvl = bm.loops.layers.uv.new("UVMap")
+        for lp, uvc in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+            lp[uvl].uv = uvc
+        me = bpy.data.meshes.new(f"flame_card{i}")
+        bm.to_mesh(me)
+        bm.free()
+        me.materials.append(_flame_card_mat(f"flame_card{i}_m", i + 1, f_flame, f_end))
+        ob = bpy.data.objects.new(f"flame_card{i}", me)
+        coll.objects.link(ob)
+        ob.location = (src[0], src[1], src[2] - 0.02)
+        ob.rotation_euler.z = math.radians(60 * i + 15)
+        ob.visible_shadow = False
+        obs.append(ob)
+    return obs
 
 
 def fire(coll, src, f_smoke, f_flame, f_end):
     x, y, z = src
-    smoke = geo.box("fire_smoke_domain", (1.8, 1.8, 3.4), loc=(x, y, z + 1.7), coll=coll, bevel=0)
+    smoke = geo.box("fire_smoke_domain", (2.8, 2.8, 4.2), loc=(x, y, z + 2.1), coll=coll, bevel=0)
     sm, snoise, smap, samt = _volume_mat("smoke_vol", "smoke")
     smoke.data.materials.append(sm)
-    flame = geo.box("fire_flame_domain", (0.8, 0.8, 1.3), loc=(x, y, z + 0.62), coll=coll, bevel=0)
-    fm, fnoise, fmap, famt = _volume_mat("flame_vol", "fire")
-    flame.data.materials.append(fm)
-    for nz, mp, speed in ((snoise, smap, 0.35), (fnoise, fmap, 1.6)):
+    cards = flame_cards(coll, (x, y, z), f_flame, f_end)
+    flame = cards[0]
+    for nz, mp, speed in ((snoise, smap, 0.35),):
         for fr in (1, f_end):
             nz.inputs["W"].default_value = fr / FPS * 0.9
             nz.inputs["W"].keyframe_insert("default_value", frame=fr)
             mp.inputs["Location"].default_value = (0, 0, -fr / FPS * speed)
             mp.inputs["Location"].keyframe_insert("default_value", frame=fr)
-    for node, keys in ((samt, [(1, 0.0), (f_smoke, 0.0), (f_flame, 6.0), (f_end, 22.0)]),
-                       (famt, [(1, 0.0), (f_flame, 0.0), (f_flame + 30, 40.0), (f_end, 60.0)])):
+    for node, keys in ((samt, [(1, 0.0), (f_smoke, 0.0), (f_flame, 10.0), (f_end, 24.0)]),):
         for fr, v in keys:
             node.inputs[1].default_value = v
             node.inputs[1].keyframe_insert("default_value", frame=fr)
-    for m in (sm, fm):
+    for m in (sm,):
         from lib.rig import _fcurves
         for fc in _fcurves(m.node_tree.animation_data.action):
             for kp in fc.keyframe_points:
@@ -463,8 +622,8 @@ def fire(coll, src, f_smoke, f_flame, f_end):
     rng = random.Random(9)
     for fr in range(1, f_end + 1, 2):
         k = 0.0 if fr < f_flame else min(1.0, (fr - f_flame) / 30)
-        fl.energy = k * rng.uniform(250, 520)
+        fl.energy = k * rng.uniform(140, 300)
         fl.keyframe_insert("energy", frame=fr)
-    for o in (smoke, flame):
+    for o in [smoke] + cards:
         o.pass_index = 3
-    return dict(smoke=smoke, flame=flame, light=flo)
+    return dict(smoke=smoke, flame=flame, cards=cards, light=flo)

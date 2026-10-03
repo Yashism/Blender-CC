@@ -112,18 +112,33 @@ def forklift(coll, cam_coll, P):
     new = _import_glb(os.path.join(A, "forklift.glb"), coll)
     root, fit, k = _fit(new, "FK", coll, height=FORK_H)
     meshes = [o for o in new if o.type == "MESH"]
-    # wheels: pivot to centre so they can roll; record local spin axis (world Y at rest)
+    # wheels: tyre + rim of each wheel grouped under a pivot empty at the wheel centre; the pivot rolls about
+    # the axle (truck Y). Objects keep their own transforms (no rotation-mode changes).
+    wobs = [o for o in meshes if o.name.startswith(("wheelfront", "wheelback"))]
+    groups = []
+    for o in wobs:
+        lo_, hi_ = _bbox([o])
+        c = (lo_ + hi_) / 2
+        for g in groups:
+            if (g["c"] - c).length < 0.35:
+                g["obs"].append(o)
+                break
+        else:
+            groups.append(dict(c=c, obs=[o]))
     wheels = []
-    for o in meshes:
-        if o.name.startswith(("wheelfront", "wheelback")) and "wheels" in o.name:
-            _pivot_centre(o)
-    bpy.context.view_layer.update()
-    for o in meshes:
-        if o.name.startswith(("wheelfront", "wheelback")):
-            o.rotation_mode = "QUATERNION"
-            ax = (o.matrix_world.to_3x3().normalized().inverted() @ Vector((0, 1, 0))).normalized()
-            lo, hi = _bbox([o])
-            wheels.append((o, ax, (hi.z - lo.z) / 2))
+    for i, g in enumerate(groups):
+        lo_, hi_ = _bbox(g["obs"])
+        c = (lo_ + hi_) / 2
+        pv = bpy.data.objects.new(f"FK_wheel{i}", None)
+        coll.objects.link(pv)
+        pv.location = c                       # root is at the origin with no rotation while building
+        pv.parent = root
+        bpy.context.view_layer.update()
+        for o in g["obs"]:
+            mw = o.matrix_world.copy()
+            o.parent = pv
+            o.matrix_world = mw
+        wheels.append((pv, None, (hi_.z - lo_.z) / 2))
     lo, hi = _bbox(meshes)
     # brake / tail lights on the counterweight (rear = +X)
     from apps.kit import emissive
@@ -153,34 +168,30 @@ def forklift(coll, cam_coll, P):
         cams.append(e)
     roof = [o for o in meshes if o.name.startswith("roof")]
     rlo, rhi = _bbox(roof)
-    # mounting arms: from the nearest point of the overhead guard to the back of each camera
+    # the units sit ON the overhead guard (config positions clamped to the guard's edge), each on a small plate
     from lib import geo
     arm_m = bpy.data.materials.get("steel_dark")
     for e in cams:
         p = Vector(e.location)
-        q = Vector((min(max(p.x, rlo.x + 0.03), rhi.x - 0.03), min(max(p.y, rlo.y + 0.03), rhi.y - 0.03), rhi.z - 0.03))
+        q = Vector((min(max(p.x, rlo.x - 0.02), rhi.x + 0.02), min(max(p.y, rlo.y - 0.02), rhi.y + 0.02), rhi.z + 0.006))
+        e.location = q
         th = e.rotation_euler.z - math.pi / 2
-        back = p + Vector((-math.cos(th), -math.sin(th), 0)) * 0.03 + Vector((0, 0, 0.04))
-        arm = geo.box(f"{e.name}_arm", ((back - q).length + 0.03, 0.025, 0.025), mat=arm_m, coll=coll, bevel=0.003)
-        arm.parent = root
-        arm.location = (q + back) / 2
-        arm.rotation_mode = "QUATERNION"
-        arm.rotation_quaternion = (back - q).to_track_quat("X", "Z")
-        plate = geo.box(f"{e.name}_plate", (0.05, 0.05, 0.008), mat=arm_m, coll=coll, bevel=0.002)
+        plate = geo.box(f"{e.name}_plate", (0.085, 0.085, 0.01), mat=arm_m, coll=coll, bevel=0.002)
         plate.parent = root
-        plate.location = q + Vector((0, 0, 0.012))
+        plate.location = q + Vector((-math.cos(th), -math.sin(th), 0)) * 0.012 + Vector((0, 0, -0.004))
+        plate.rotation_euler.z = th
     return dict(root=root, fit=fit, k=k, meshes=meshes, wheels=wheels, brake=brake, cams=cams,
-                roof_top=rhi.z, roof_c=Vector(((rlo.x + rhi.x) / 2, (rlo.y + rhi.y) / 2)), length=hi.x - lo.x,
+                roof_top=rhi.z, roof_lo=rlo, roof_hi=rhi, roof_c=Vector(((rlo.x + rhi.x) / 2, (rlo.y + rhi.y) / 2)), length=hi.x - lo.x,
                 rear_x=hi.x, front_x=lo.x)
 
 
 def roll_wheels(fk, frames_x):
-    """Key wheel spin from the truck's X travel. frames_x: [(frame, x)]."""
-    for o, ax, r in fk["wheels"]:
+    """Key wheel roll from the truck's X travel (rolling without slip). frames_x: [(frame, x)]."""
+    for pv, _, r in fk["wheels"]:
+        pv.rotation_mode = "XYZ"
         for fr, x in frames_x:
-            ang = -(x - frames_x[0][1]) / max(r, 0.05)
-            o.delta_rotation_quaternion = Quaternion(ax, ang)
-            o.keyframe_insert("delta_rotation_quaternion", frame=fr)
+            pv.rotation_euler = (0.0, (x - frames_x[0][1]) / max(r, 0.05), 0.0)
+            pv.keyframe_insert("rotation_euler", frame=fr, index=1)
 
 
 # ------------------------------------------------------------------------------------ Omnibox Edge
@@ -193,14 +204,30 @@ def omnibox(coll, name="OBX"):
     s = k_ref / k                              # rescale so the Pi is 85 mm
     fit.scale = tuple(v * s for v in fit.scale)
     fit.location = tuple(v * s for v in fit.location)
-    for o in new:                                  # the real Omnibox Edge enclosure is matte black
-        if o.type == "MESH" and o.name.startswith("Enclosure"):
+    for o in new:                                  # the real Omnibox Edge is matte black (all housing parts)
+        if o.type == "MESH" and not o.name.startswith("Status LED"):
             for sl in o.material_slots:
                 if sl.material and sl.material.use_nodes:
-                    bn = sl.material.node_tree.nodes.get("Principled BSDF")
+                    nt_ = sl.material.node_tree
+                    bn = nt_.nodes.get("Principled BSDF")
                     if bn:
-                        bn.inputs["Base Color"].default_value = (0.025, 0.026, 0.028, 1)
+                        bc = bn.inputs["Base Color"]
+                        if bc.links:             # textured (engraved logo): keep the texture, darken it
+                            src_ = bc.links[0].from_socket
+                            mx = nt_.nodes.new("ShaderNodeMix")
+                            mx.data_type = "RGBA"
+                            mx.blend_type = "MULTIPLY"
+                            mx.inputs["Factor"].default_value = 1.0
+                            mx.inputs["B"].default_value = (0.09, 0.09, 0.1, 1)
+                            nt_.links.new(src_, mx.inputs["A"])
+                            nt_.links.new(mx.outputs["Result"], bc)
+                        else:
+                            bc.default_value = (0.025, 0.026, 0.028, 1)
                         bn.inputs["Roughness"].default_value = 0.55
+                        bn.inputs["Metallic"].default_value = 0.0
+                        for k_ in ("Metallic", "Roughness"):
+                            for l_ in list(bn.inputs[k_].links):
+                                nt_.links.remove(l_)
     led = next((o for o in new if o.name.startswith("Status LED")), None)
     from apps.kit import emissive
     led_m = emissive(f"{name}_status", (0.1, 1.0, 0.25), 8.0)

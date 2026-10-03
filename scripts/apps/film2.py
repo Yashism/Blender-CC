@@ -247,7 +247,7 @@ def build(args):
     # ---- Omnibox Edge: source in the studio, instanced on the truck + every install
     obx_coll = geo.collection("OMNIBOX_SRC")
     OB = assets.omnibox(obx_coll)
-    OB["root"].location = STUDIO + V((0.16, 0.02, 0.0))
+    OB["root"].location = STUDIO + V((0.13, 0.11, 0.0))
     obx_coll.instance_offset = OB["root"].location
 
     def obx_instance(name, loc, rot_z=0.0, parent=None):
@@ -263,11 +263,28 @@ def build(args):
 
     # Omnibox Edge next to every fixed install (the camera always works with its Omnibox)
     obx_sites = {}
-    for key, cam in (("zone", W["zone"]["cam"]), ("door", W["door"]["cam"]), ("fire", W["fire"]["cam"]), ("cell", W["cell"]["cam"])):
+    zc_, fc_ = ZONE["col"], FIRE["cam"]
+    mounts_ = {   # (location, facing yaw): Omnibox on a column face / wall / cell frame, ~1.7 m up
+        "zone": ((zc_[0] + 0.16 + 0.05, zc_[1], FLOOR + 1.7), 0.0),
+        "fire": ((fc_[0] + 0.16 + 0.05, fc_[1], FLOOR + 1.7), 0.0),
+        "door": ((DOOR["x"] + 1.1, -12.62 + 0.05, FLOOR + 1.7), math.pi / 2),
+        "cell": ((CELL["x0"] - 0.05, CELL["door_y"][1] + 0.7, FLOOR + 1.7), math.pi),
+    }
+    for key, (loc, yaw) in mounts_.items():
+        e = obx_instance(f"obx_{key}", loc, yaw + math.pi / 2)
+        e.rotation_euler.x = math.pi / 2              # stood on its side, back against the surface
+        obx_sites[key] = e
+    # short steel brackets from the column to the column-mounted cameras
+    for key in ("zone", "fire"):
+        cam = W[key]["cam"]
+        cx_, cy_ = (zc_ if key == "zone" else fc_[:2])
         p = cam.location
-        th = cam.rotation_euler.z
-        back = V((math.sin(th), -math.cos(th), 0)) * -0.18
-        obx_sites[key] = obx_instance(f"obx_{key}", (p.x + back.x, p.y + back.y, p.z - 0.32), th)
+        a_ = V((cx_ + 0.16, cy_, p.z + 0.03))
+        b_ = V((p.x, p.y, p.z + 0.03))
+        arm = geo.box(f"{key}_cam_arm", ((b_ - a_).length + 0.04, 0.03, 0.03), mat=P["steel_dark"], coll=fx, bevel=0.004)
+        arm.location = (a_ + b_) / 2
+        arm.rotation_mode = "QUATERNION"
+        arm.rotation_quaternion = (b_ - a_).to_track_quat("X", "Z")
 
     # ---- forklift
     fkc = geo.collection("Forklift")
@@ -289,7 +306,7 @@ def build(args):
                 if int(round(kp.co.x)) == FK_JUMP - 1:
                     kp.interpolation = "CONSTANT"
     # alert light bar on the rear of the guard + zone ring + five coverage fans
-    fk_bar, fk_bar_m = kit.light_bar("FK_bar", (FK["rear_x"] - 0.75, 0.0, FK["roof_top"] + 0.05), 0.7,
+    fk_bar, fk_bar_m = kit.light_bar("FK_bar", (FK["roof_hi"].x - 0.05, 0.0, FK["roof_top"] + 0.04), 0.32,
                                      rot_z=math.pi / 2, coll=fkc)
     fk_bar.parent = fk
     ring_m, ring_em = fan_material("zone_ring_m", WHITE, 3.0, falloff=1e6)
@@ -299,7 +316,7 @@ def build(args):
     ring.parent = fk
     ring.location = ((FK["front_x"] + FK["rear_x"]) / 2 + 0.25, 0, 0.012)
     fans = []
-    fan_m, fan_em = fan_material("fov_fan_m", (0.75, 0.88, 1.0), 1.4, falloff=3.4)
+    fan_m, fan_em = fan_material("fov_fan_m", (0.75, 0.88, 1.0), 0.55, falloff=3.4)
     for i, c in enumerate(FK["cams"]):
         th = c.rotation_euler.z - math.pi / 2
         f = fan_mesh(f"FK_fan_{i}", 3.6, 130.0, fkc, fan_m)
@@ -404,7 +421,7 @@ def build(args):
 
     # ---- fire
     F = actors.fire(fx, W["fire"]["src"], FIRE_SMOKE, FIRE_FLAME, S["s4_fire"][1] + 2)
-    vis([F["smoke"], F["flame"]], [S["s4_fire"]])
+    vis([F["smoke"]] + F["cards"], [S["s4_fire"]])
     for i, (b, m, p) in enumerate(W["fire"]["bars"]):
         kit.key_emission(m, [(1, 6.0)], [(1, GREEN), (FIRE_DETECT + i * 5, RED)], "CONSTANT")
 
@@ -442,6 +459,19 @@ def build(args):
     for fr, v in ((1, 0.0), (S["s4_fire"][0] - 1, 0.0), (S["s4_fire"][0], 60.0), (S["s4_fire"][1], 60.0), (S["s4_fire"][1] + 1, 0.0)):
         rim.energy = v
         rim.keyframe_insert("energy", frame=fr)
+    fl_ = bpy.data.lights.new("fire_cam_fill", "AREA")
+    fl_.size, fl_.color = 0.6, kelvin(7500)
+    flo_ = bpy.data.objects.new("fire_cam_fill", fl_)
+    lc.objects.link(flo_)
+    fcl = W["fire"]["cam"].location
+    flo_.location = fcl + V((0.9, -0.9, 0.5))
+    flo_.rotation_mode = "QUATERNION"
+    flo_.rotation_quaternion = (fcl - flo_.location).to_track_quat("-Z", "Y")
+    a4 = S["s4_fire"][0]
+    fl_.size = 0.25
+    for fr, v in ((1, 0.0), (a4 - 1, 0.0), (a4, 4.0), (a4 + 80, 4.0), (a4 + 130, 0.0)):
+        fl_.energy = v
+        fl_.keyframe_insert("energy", frame=fr)
     # roof turns to glass in the system shot
     world.roof_to_glass(W["shell"]["roof"], (S["s6_system"][0] + 70, S["s6_system"][0] + 150))
     # outside daylight for the aerial (system) shot: world brighter
@@ -455,15 +485,9 @@ def build(args):
     # ---- studio (s0 open + s7 hero): product + Omnibox Edge
     hero = W["cam_root"]
     hero.rotation_mode = "XYZ"
-    for fr, a in ((1, -62.0), (f_bar(3.5), -62.0), (f_bar(7.0), -18.0), (S["s0_open"][1], -12.0), (S["s0_open"][1] + 1, 0.0),
-                  (S["s7_hero"][0] - 1, 0.0), (S["s7_hero"][0], -40.0), (RENDER_END + 1, -2.0)):
-        hero.rotation_euler.z = math.radians(a)
+    for fr in range(1, RENDER_END + 2):
+        hero.rotation_euler.z = math.radians(hero_rot(fr))
         hero.keyframe_insert("rotation_euler", frame=fr, index=2)
-    for fc in _fcurves(hero.animation_data.action):
-        kps = fc.keyframe_points
-        for kp in kps:
-            kp.interpolation = "BEZIER"
-            kp.easing = "EASE_IN_OUT"
     for fr, v in ((1, 0.0), (f_bar(4), 0.0), (f_bar(4) + 2, 1.0), (f_bar(4) + 8, 0.0), (f_bar(4) + 14, 1.0)):
         hero["led"] = v
         hero.keyframe_insert('["led"]', frame=fr)
@@ -482,7 +506,7 @@ def build(args):
         for a, b in stud_on:
             keys += [(a, e if a > 1 else 0.0), (b, e), (b + 1, 0.0)]
         if lt is k1:
-            keys += [(f_bar(2), 0.0), (f_bar(5), e)]
+            keys += [(2, e * 0.1), (f_bar(3.8), e * 0.13), (f_bar(5), e)]
         keys.sort()
         for fr, v in keys:
             lt.data.energy = v
@@ -495,7 +519,7 @@ def build(args):
             STUDIO + V((0.0, -0.0295, 0.017)))
         ring_l.keyframe_insert("location", frame=fr)
         ring_l.keyframe_insert("rotation_quaternion", frame=fr)
-        ring_l.data.energy = 3.0 * math.sin(math.pi * max(0.0, min(1.0, u)))
+        ring_l.data.energy = 0.35 * math.sin(math.pi * max(0.0, min(1.0, u)))
         ring_l.data.keyframe_insert("energy", frame=fr)
 
     # ---- cameras
@@ -504,6 +528,17 @@ def build(args):
 
 
 # ------------------------------------------------------------------------------------ cameras
+def hero_rot(fr):
+    """Yaw of the hero camera (degrees): head-on for the opening macro, turning to 3/4 for the reveal."""
+    a0, b0 = S["s0_open"]
+    a7, b7 = S["s7_hero"]
+    if fr <= b0:
+        return hermite([(1, 0.0), (f_bar(3.8), 0.0), (f_bar(7.0), -16.0), (b0, -10.0)], fr)
+    if fr < a7:
+        return 0.0
+    return lerp(-34.0, -4.0, smooth((fr - a7) / max(1, b7 - a7)))
+
+
 def make_cameras(s, W, FK, OB, R, F, crowd):
     cc = geo.collection("Shot_cams")
     rearx = FK["rear_x"]
@@ -522,15 +557,24 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         return V((fk_x(fr), MHE_AISLE_Y, FLOOR))
 
     def s0(fr, t):
-        u1 = smooth((fr - 1) / (f_bar(4) - 1))
-        u2 = smooth((fr - f_bar(4)) / (f_bar(7) - f_bar(4)))
-        u3 = smooth((fr - f_bar(7)) / (S["s0_open"][1] - f_bar(7)))
-        p0 = lens_c + V((0.004, -0.055, 0.004))
-        p1 = lens_c + V((0.02, -0.075, 0.01))
-        p2 = body_c + V((0.11, -0.30, 0.05))
-        loc = vl(p0, p1, u1).lerp(p2, u2).lerp(lens_c + V((0, -0.012, 0)), u3)
-        tgt = vl(lens_c, body_c + V((-0.075, 0.0, 0.0)), u2 * (1 - u3)).lerp(lens_c, u3)
-        return loc, tgt, tgt, lerp(lerp(80, 55, u2), 30, u3)
+        e = S["s0_open"][1]
+        K = [(1, lens_c + V((-0.022, -0.072, 0.010)), lens_c, 70.0),
+             (f_bar(3.6), lens_c + V((0.016, -0.066, 0.005)), lens_c, 70.0),
+             (f_bar(7.0), body_c + V((0.13, -0.32, 0.06)), body_c + V((-0.055, 0.0, 0.0)), 55.0),
+             (e, lens_c + V((0.0, -0.011, 0.0)), lens_c, 30.0)]
+        loc = hermite([(f, p) for f, p, _, _ in K], fr)
+        tgt = hermite([(f, p) for f, _, p, _ in K], fr)
+        # the push-in follows the real (turned) lens position
+        ang = math.radians(hero_rot(fr))
+        lens_now = STUDIO + V((0.0, -0.0295, 0.017)).copy()
+        rl = V((0.0, -0.0295, 0.017))
+        lens_now = STUDIO + V((rl.x * math.cos(ang) - rl.y * math.sin(ang), rl.x * math.sin(ang) + rl.y * math.cos(ang), rl.z))
+        u3 = smooth((fr - f_bar(7.0)) / (e - f_bar(7.0)))
+        if u3 > 0:
+            d_ = V((math.sin(ang), -math.cos(ang), 0.0))
+            loc = loc.lerp(lens_now + d_ * 0.011, u3)
+            tgt = tgt.lerp(lens_now, u3)
+        return loc, tgt, (lens_c if fr < f_bar(4.5) else (body_c if fr < f_bar(7.2) else lens_now)), hermite([(f, l) for f, _, _, l in K], fr)
 
     def s1a(fr, t):
         tp = T(fr)
@@ -559,40 +603,49 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
 
     def s2(fr, t):
         a, b = S["s2_zone"]
-        u1 = smooth((fr - a) / 90)
-        u2 = smooth((fr - a - 60) / 120)
-        p0 = zcam + V((-0.25, -0.35, 0.05))
-        p1 = zcam + V((-0.9, -2.2, 0.7))
-        p2 = V((zc.x - 4.8, zc.y - 7.2, FLOOR + 4.6))
-        loc = vl(p0, p1, u1).lerp(p2, u2)
-        tgt = vl(zcam + V((0, 0, 0.04)), zc + V((0, 0.4, 0.5)), u2)
-        return loc, tgt, tgt, lerp(55, 30, u2)
+        d = (V((zc.x, zc.y, 0)) - V((zcam.x, zcam.y, 0))).normalized()
+        side = V((-d.y, d.x, 0))
+        unit = zcam + V((0, 0, 0.045))
+        K = [(a, unit + d * 0.42 + side * 0.10 + V((0, 0, -0.04)), unit, 55.0),          # in front of the lens
+             (a + 70, unit + side * 0.6 + d * 0.15 + V((0, 0, 0.12)), unit + d * 0.8, 42.0),   # round the side
+             (a + 150, unit + side * 0.9 + d * 0.3 + V((0, 0, 0.6)), zc + V((0, 0.3, 0.5)), 30.0),   # over its shoulder
+             (b, V((zc.x + 1.4, zc.y - 7.4, FLOOR + 4.8)), zc + V((0, 0.4, 0.5)), 30.0)]
+        loc = hermite([(f, p) for f, p, _, _ in K], fr)
+        tgt = hermite([(f, p) for f, _, p, _ in K], fr)
+        foc = unit if fr < a + 80 else zc + V((0, 0.3, 0.6))
+        return loc, tgt, foc, hermite([(f, l) for f, _, _, l in K], fr)
 
     def s3(fr, t):
         a, b = S["s3_door"]
-        u = smooth((fr - a) / 100)
-        p0 = dcam + V((-0.6, 1.4, -0.6))
-        p1 = V((DOOR["x"], -10.4, FLOOR + 6.6))
+        u = smooth((fr - a) / 96)
+        p0 = V((DOOR["x"] + 2.3, -8.7, FLOOR + 2.2))      # inside, looking at the door and the camera above it
+        p1 = V((DOOR["x"] + 0.1, -9.3, FLOOR + 6.6))      # high, looking steeply down (slight tilt keeps it level)
         loc = vl(p0, p1, u)
-        tgt = vl(dcam + V((0, 0, 0.03)), V((DOOR["x"], -10.4 + 0.001, FLOOR)), u)
-        return loc, tgt, tgt, lerp(40, 17, u)
+        tgt = vl(dcam + V((0, 0, -0.7)), V((DOOR["x"] + 0.1, -11.3, FLOOR)), u)
+        return loc, tgt, tgt, lerp(28, 18, u)
 
     def s4(fr, t):
-        u = smooth(t)
-        p0 = fcam + V((-0.35, -0.4, 0.1))
-        p1 = V((src.x - 3.2, src.y - 5.0, FLOOR + 2.4))
-        loc = vl(p0, p1, smooth(t / 0.7))
-        tgt = vl(fcam + V((0, 0, 0.04)), src + V((0, 0, 0.6)), smooth(t / 0.45))
-        return loc, tgt, tgt, lerp(50, 32, smooth(t / 0.6))
+        a, b = S["s4_fire"]
+        d = (V((src.x, src.y, 0)) - V((fcam.x, fcam.y, 0))).normalized()
+        side = V((-d.y, d.x, 0))
+        unit = fcam + V((0, 0, 0.045))
+        K = [(a, unit + d * 0.42 - side * 0.1 + V((0, 0, -0.04)), unit, 55.0),            # its lens + LED, in the dark
+             (a + 90, unit - side * 0.8 + d * 0.5 + V((0, 0, 0.2)), src + V((0, 0, 0.6)), 40.0),
+             (b, V((src.x - 1.9, src.y - 3.1, FLOOR + 1.9)), src + V((0, 0, 0.6)), 32.0)]
+        loc = hermite([(f, p) for f, p, _, _ in K], fr)
+        tgt = hermite([(f, p) for f, _, p, _ in K], fr)
+        foc = unit if fr < a + 60 else src + V((0, 0, 0.6))
+        return loc, tgt, foc, hermite([(f, l) for f, _, _, l in K], fr)
 
     def s5(fr, t):
         a, b = S["s5_robot"]
+        dc = V((CELL["x0"] + 0.4, (CELL["door_y"][0] + CELL["door_y"][1]) / 2, FLOOR + 1.2))
         k = [(a, V((CELL["x0"] - 3.5, CELL["y1"] + 3.0, FLOOR + 3.2)), rob, 28),
-             (a + 120, V((CELL["x1"] + 0.15, CELL["y0"] - 2.4, FLOOR + 3.6)), rob, 30),
-             (ROBOT_ENTER - 60, V((ccam.x + 0.1, ccam.y + 0.9, ccam.z + 0.3)), V((CELL["x0"], CELL["door_y"][0] + 0.9, FLOOR + 1.3)), 30),
-             (ROBOT_RELAY, V((ccam.x - 0.2, ccam.y + 1.2, ccam.z + 0.1)), V((CELL["x0"] + 0.6, CELL["door_y"][0] + 0.9, FLOOR + 1.2)), 30),
-             (ROBOT_RELAY + 1, V((rob.x - 2.9, rob.y - 3.3, FLOOR + 2.1)), rob + V((-0.6, 0, -0.3)), 40),
-             (b, V((rob.x - 2.4, rob.y - 2.8, FLOOR + 1.9)), rob + V((-0.6, 0, -0.3)), 40)]
+             (a + 120, V((CELL["x1"] - 0.8, CELL["y1"] + 2.4, FLOOR + 3.4)), rob, 30),
+             (ROBOT_ENTER - 60, V((ccam.x - 0.5, ccam.y + 1.9, ccam.z + 0.7)), dc, 30),
+             (ROBOT_RELAY, V((ccam.x - 1.0, ccam.y + 1.6, ccam.z + 0.4)), dc, 30),
+             (ROBOT_RELAY + 1, V((rob.x - 3.0, rob.y - 3.0, FLOOR + 2.4)), rob + V((-0.5, 0, -0.25)), 30),
+             (b, V((rob.x - 2.6, rob.y - 2.6, FLOOR + 2.2)), rob + V((-0.5, 0, -0.25)), 32)]
         if fr <= ROBOT_RELAY:
             kk = k[:4]
         else:
@@ -605,22 +658,22 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
 
     def s6(fr, t):
         u = smooth(t / 0.85)
-        p0 = V((rob.x - 2.4, rob.y - 2.8, FLOOR + 1.9))
+        p0 = V((rob.x - 2.6, rob.y - 2.6, FLOOR + 2.2))
         p1 = V((rob.x - 4.0, rob.y - 6.0, FLOOR + 14.0))
         p2 = V((-28.0, -48.0, 46.0))
         loc = vl(p0, p1, smooth(u / 0.35)).lerp(p2, smooth((u - 0.25) / 0.75))
-        tgt = vl(rob, V((0.0, 0.0, FLOOR)), smooth((u - 0.1) / 0.6))
-        return loc, tgt, tgt, lerp(45, 28, smooth(u))
+        tgt = vl(rob + V((-0.5, 0, -0.25)), V((0.0, 0.0, FLOOR)), smooth((u - 0.1) / 0.6))
+        return loc, tgt, tgt, lerp(32, 28, smooth(u))
 
     def s7(fr, t):
         u = smooth(t)
-        loc = body_c + V((lerp(0.32, 0.26, u), lerp(-0.44, -0.38, u), lerp(0.10, 0.07, u)))
-        tgt = body_c + V((-0.035, 0, -0.005))
+        loc = body_c + V((lerp(-0.07, -0.04, u), lerp(-0.60, -0.53, u), lerp(0.13, 0.10, u)))
+        tgt = body_c + V((-0.005, 0.05, -0.005))
         return loc, tgt, body_c, 50
 
-    FN = {"s0_open": (s0, 8.0), "s1a_crane": (s1a, 5.6), "s1b_cones": (s1b, 11.0), "s1c_detect": (s1c, 4.0),
-          "s1d_stop": (s1d, 5.6), "s2_zone": (s2, 5.6), "s3_door": (s3, 8.0), "s4_fire": (s4, 4.0),
-          "s5_robot": (s5, 4.0), "s6_system": (s6, 11.0), "s7_hero": (s7, 5.6)}
+    FN = {"s0_open": (s0, 8.0), "s1a_crane": (s1a, 8.0), "s1b_cones": (s1b, 11.0), "s1c_detect": (s1c, 5.6),
+          "s1d_stop": (s1d, 8.0), "s2_zone": (s2, 8.0), "s3_door": (s3, 11.0), "s4_fire": (s4, 5.6),
+          "s5_robot": (s5, 8.0), "s6_system": (s6, 16.0), "s7_hero": (s7, 8.0)}
     out = {}
     for sid, a, b in SHOTS:
         fn, fstop = FN[sid]
