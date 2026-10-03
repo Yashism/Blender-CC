@@ -447,7 +447,7 @@ def titles(W, H, fr, im):
             k = ease_out((fr - f0) / 16)
             out = clamp((f1 - fr) / 10)
             y = H * 0.84 + (1 - k) * H * 0.018
-            for t, sz, wt, yy, col in ((title, 0.05, "SemiBold", y, WHITE), (sub, 0.028, "Light", y + H * 0.055, (205, 208, 215))):
+            for t, sz, wt, yy, col in ((title, 0.05, "SemiBold", y, WHITE), (sub, 0.033, "Medium", y + H * 0.058, (205, 208, 215))):
                 if not t:
                     continue
                 sh = text_img(t, wt, H * sz, (0, 0, 0))
@@ -459,7 +459,7 @@ def titles(W, H, fr, im):
         out = clamp((f_bar(6.9) - fr) / 8)
         place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.06, WHITE, tracking=lerp(0.4, 0.18, k)), W * 0.24, H * 0.46, k * out)
         k2 = ease_out((fr - f_bar(6.0)) / 16)
-        place(L, text_img("One camera. Every safety scenario.", "Light", H * 0.032, (215, 218, 224)), W * 0.24, H * 0.54, k2 * out)
+        place(L, text_img("One camera. Every safety scenario.", "Medium", H * 0.038, (215, 218, 224)), W * 0.24, H * 0.54, k2 * out)
     # hero
     if fr >= HERO_HIT:
         k = ease_out((fr - HERO_HIT - 6) / 24)
