@@ -409,12 +409,12 @@ def titles(W, H, fr, im):
                 place(L, sh, W * 0.07, yy + H * 0.003, 0.55 * k * out, anchor="l", blur=H * 0.012)
                 place(L, text_img(t, wt, H * sz, col), W * 0.07, yy, k * out, anchor="l")
     # opening titles
-    if f_bar(5) <= fr <= f_bar(7.7):
-        k = ease_out((fr - f_bar(5)) / 24)
-        out = clamp((f_bar(7.6) - fr) / 10)
-        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.06, WHITE, tracking=lerp(0.4, 0.18, k)), W * 0.27, H * 0.46, k * out)
-        k2 = ease_out((fr - f_bar(6)) / 20)
-        place(L, text_img("One camera. Every safety scenario.", "Light", H * 0.032, (215, 218, 224)), W * 0.27, H * 0.54, k2 * out)
+    if f_bar(5.6) <= fr <= f_bar(7.0):
+        k = ease_out((fr - f_bar(5.6)) / 20)
+        out = clamp((f_bar(6.9) - fr) / 8)
+        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.06, WHITE, tracking=lerp(0.4, 0.18, k)), W * 0.24, H * 0.46, k * out)
+        k2 = ease_out((fr - f_bar(6.0)) / 16)
+        place(L, text_img("One camera. Every safety scenario.", "Light", H * 0.032, (215, 218, 224)), W * 0.24, H * 0.54, k2 * out)
     # hero
     if fr >= HERO_HIT:
         k = ease_out((fr - HERO_HIT - 6) / 24)

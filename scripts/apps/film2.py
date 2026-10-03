@@ -316,7 +316,7 @@ def build(args):
     ring.parent = fk
     ring.location = ((FK["front_x"] + FK["rear_x"]) / 2 + 0.25, 0, 0.012)
     fans = []
-    fan_m, fan_em = fan_material("fov_fan_m", (0.75, 0.88, 1.0), 0.55, falloff=3.4)
+    fan_m, fan_em = fan_material("fov_fan_m", (0.75, 0.88, 1.0), 0.9, falloff=3.4)
     for i, c in enumerate(FK["cams"]):
         th = c.rotation_euler.z - math.pi / 2
         f = fan_mesh(f"FK_fan_{i}", 3.6, 130.0, fkc, fan_m)
@@ -519,7 +519,7 @@ def build(args):
             STUDIO + V((0.0, -0.0295, 0.017)))
         ring_l.keyframe_insert("location", frame=fr)
         ring_l.keyframe_insert("rotation_quaternion", frame=fr)
-        ring_l.data.energy = 0.35 * math.sin(math.pi * max(0.0, min(1.0, u)))
+        ring_l.data.energy = 0.05 * math.sin(math.pi * max(0.0, min(1.0, u)))
         ring_l.data.keyframe_insert("energy", frame=fr)
 
     # ---- cameras
