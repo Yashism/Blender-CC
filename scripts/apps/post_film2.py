@@ -249,10 +249,13 @@ def bracket_box(L, box, col, s, k=1.0):
         L.line([(px + dx * ln, py), (px, py), (px, py + dy * ln)], col, 2.0 * s)
 
 
-def tag(extra, text, x, y, col, s, H, alpha=1.0, size=0.024, anchor="l", weight="SemiBold"):
+def tag(extra, text, x, y, col, s, H, alpha=1.0, size=0.024, anchor="l", weight="SemiBold", flip_x=None):
+    """flip_x: if the text would run off the right edge, end it at flip_x instead (label on the other side)."""
     size *= 1.32
     t = text_img(text, weight, H * size, col, tracking=0.08)
     sh = text_img(text, weight, H * size, (0, 0, 0), tracking=0.08)
+    if flip_x is not None and anchor == "l" and x + t.width > extra.width - H * 0.02:
+        x = flip_x - t.width + t.height * 0.33
     place(extra, sh, x, y + H * 0.002, 0.6 * alpha, anchor=anchor, blur=H * 0.006)
     place(extra, t, x, y, alpha, anchor=anchor)
 
@@ -428,8 +431,8 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
             if al > 0:
                 L.dot((x, y), (5 + 4 * conv) * s, ORANGE + (int(255 * al),))
                 L.arc((x, y), (12 + 10 * math.sin(fr / 6 + i)) * s, 0, 360, ORANGE + (int(120 * al * (1 - conv)),), 1.2 * s)
-                if conv < 0.3:
-                    tag(extra, lab, x + 16 * s, y - 16 * s, WHITE, s, H, al * (1 - conv / 0.3), size=0.022)
+                if conv < 0.12:          # gone before the converging sites crowd each other
+                    tag(extra, lab, x + 16 * s, y - 16 * s, WHITE, s, H, al * (1 - conv / 0.12), size=0.022, flip_x=x - 16 * s)
         if conv > 0.6:
             L.dot((W / 2, H / 2), lerp(4, 22, (conv - 0.6) / 0.4) * s, (255, 245, 235, int(255 * (conv - 0.6) / 0.4)))
     img = L.result(glow=0.9)
