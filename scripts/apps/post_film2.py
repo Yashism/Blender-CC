@@ -132,6 +132,14 @@ def perception(src, fr, size):
         return None, None
     D = np.clip(d * DEPTH_MAX, 0.05, DEPTH_MAX)
     noisy = _NOISY.get("m", np.zeros_like(D))
+    m3n = load_pass(src, "m3", fr, size)           # smoke handling only near the fire (racks/fences speckle too)
+    if m3n is None or m3n.max() < 0.05:
+        noisy = np.zeros_like(D)
+    else:
+        up = np.maximum.accumulate(np.clip(m3n * 4, 0, 1)[::-1], axis=0)[::-1]      # the plume rises above the fire
+        near = np.asarray(Image.fromarray((up * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(9))
+                          .filter(ImageFilter.GaussianBlur(30 * W / 1280)), np.float32) / 255
+        noisy = noisy * np.clip(near * 3, 0, 1)
     bg = D > DEPTH_MAX * 0.995
     Nw = n * 2 - 1
     logd = np.log(D)

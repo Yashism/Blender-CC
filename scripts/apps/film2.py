@@ -652,15 +652,17 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         tgt = hermite([(f, p) for f, _, p, _ in K], fr)
         return loc, tgt, src + V((0, 0, 0.6)), hermite([(f, l) for f, _, _, l in K], fr)
 
+    S5_END = (V((15.5, CELL["y0"] + 0.7, FLOOR + 2.4)), V((15.6, -3.1, FLOOR + 0.9)))
+
     def s5(fr, t):
         a, b = S["s5_robot"]
         dc = V((CELL["x0"] + 0.4, (CELL["door_y"][0] + CELL["door_y"][1]) / 2, FLOOR + 1.2))
         k = [(a, V((CELL["x0"] - 2.6, CELL["y1"] + 2.4, FLOOR + 5.4)), rob, 28),           # over the weld screens
              (a + 120, V((CELL["x1"] - 1.2, CELL["y1"] + 2.0, FLOOR + 4.8)), rob, 30),
-             (ROBOT_ENTER - 60, V((ccam.x - 0.5, ccam.y + 1.9, ccam.z + 0.7)), dc, 30),
-             (ROBOT_RELAY, V((ccam.x - 1.0, ccam.y + 1.6, ccam.z + 0.4)), dc, 30),
-             (ROBOT_RELAY + 1, V((rob.x - 3.0, rob.y - 3.0, FLOOR + 2.4)), rob + V((-0.5, 0, -0.25)), 30),
-             (b, V((rob.x - 2.6, rob.y - 2.6, FLOOR + 2.2)), rob + V((-0.5, 0, -0.25)), 32)]
+             (ROBOT_ENTER - 60, V((ccam.x - 0.3, ccam.y + 3.0, ccam.z + 1.6)), dc.lerp(rob, 0.35), 26),   # behind the cell camera
+             (ROBOT_RELAY, V((ccam.x - 0.8, ccam.y + 2.6, ccam.z + 1.3)), dc.lerp(rob, 0.35), 26),
+             (ROBOT_RELAY + 1, S5_END[0] + V((0.3, -0.2, 0.2)), S5_END[1], 24),        # worker + halted robot, both in frame
+             (b, S5_END[0], S5_END[1], 24)]
         if fr <= ROBOT_RELAY:
             kk = k[:4]
         else:
@@ -673,12 +675,12 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
 
     def s6(fr, t):
         u = smooth(t / 0.85)
-        p0 = V((rob.x - 2.6, rob.y - 2.6, FLOOR + 2.2))
+        p0 = S5_END[0]
         p1 = V((rob.x - 4.0, rob.y - 6.0, FLOOR + 14.0))
         p2 = V((-28.0, -48.0, 46.0))
         loc = vl(p0, p1, smooth(u / 0.35)).lerp(p2, smooth((u - 0.25) / 0.75))
-        tgt = vl(rob + V((-0.5, 0, -0.25)), V((0.0, 0.0, FLOOR)), smooth((u - 0.1) / 0.6))
-        return loc, tgt, tgt, lerp(32, 28, smooth(u))
+        tgt = vl(S5_END[1], V((0.0, 0.0, FLOOR)), smooth((u - 0.1) / 0.6))
+        return loc, tgt, tgt, lerp(24, 28, smooth(u))
 
     def s7(fr, t):
         u = smooth(t)
