@@ -55,7 +55,7 @@ def roof_to_glass(roof, frames):
             glass.inputs["Color"].default_value = (0.85, 0.92, 1.0, 1)
             tr = nt.nodes.new("ShaderNodeBsdfTransparent")
             g2 = nt.nodes.new("ShaderNodeMixShader")
-            g2.inputs["Fac"].default_value = 0.85
+            g2.inputs["Fac"].default_value = 1.0          # clean cutaway: fully clear (glass layers stacked into a milky haze)
             nt.links.new(glass.outputs[0], g2.inputs[1])
             nt.links.new(tr.outputs[0], g2.inputs[2])
             mix = nt.nodes.new("ShaderNodeMixShader")

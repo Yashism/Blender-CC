@@ -479,6 +479,12 @@ def build(args):
         fl_.keyframe_insert("energy", frame=fr)
     # roof turns to glass in the system shot
     world.roof_to_glass(W["shell"]["roof"], (S["s6_system"][0] + 70, S["s6_system"][0] + 150))
+    for fx_, disc, lo, em in W["high_bays"]:            # lamp housings would read as black dots from above
+        for o in (fx_, disc):
+            for fr, k in ((1, 1.0), (S["s6_system"][0] + 110, 1.0), (S["s6_system"][0] + 150, 0.0), (S["s6_system"][1], 0.0),
+                          (S["s6_system"][1] + 1, 1.0)):
+                o.scale = (k, k, k)
+                o.keyframe_insert("scale", frame=fr)
     # outside daylight for the aerial (system) shot: world brighter
     wn = s.world.node_tree.nodes["Background"]
     for fr, c, v in ((1, (0.012, 0.014, 0.018), 1.0), (S["s6_system"][0] + 90, (0.012, 0.014, 0.018), 1.0),
@@ -661,8 +667,8 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
              (a + 120, V((CELL["x1"] - 1.2, CELL["y1"] + 2.0, FLOOR + 4.8)), rob, 30),
              (ROBOT_ENTER - 60, V((ccam.x - 0.2, ccam.y + 3.0, ccam.z + 2.0)), dc.lerp(rob, 0.5), 26),   # behind the cell camera
              (ROBOT_RELAY, V((ccam.x - 0.5, ccam.y + 2.7, ccam.z + 1.8)), dc.lerp(rob, 0.5), 26),
-             (ROBOT_RELAY + 1, S5_END[0] + V((0.3, -0.2, 0.2)), S5_END[1], 24),        # worker + halted robot, both in frame
-             (b, S5_END[0], S5_END[1], 24)]
+             (ROBOT_RELAY + 1, S5_END[0] + V((0.3, -0.2, 0.2)), S5_END[1], 21),        # worker + halted robot, both in frame
+             (b, S5_END[0], S5_END[1], 21)]
         if fr <= ROBOT_RELAY:
             kk = k[:4]
         else:
@@ -680,7 +686,7 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         p2 = V((-28.0, -48.0, 46.0))
         loc = vl(p0, p1, smooth(u / 0.35)).lerp(p2, smooth((u - 0.25) / 0.75))
         tgt = vl(S5_END[1], V((0.0, 0.0, FLOOR)), smooth((u - 0.1) / 0.6))
-        return loc, tgt, tgt, lerp(24, 28, smooth(u))
+        return loc, tgt, tgt, lerp(21, 28, smooth(u))
 
     def s7(fr, t):
         u = smooth(t)
