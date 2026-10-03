@@ -659,8 +659,8 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         dc = V((CELL["x0"] + 0.4, (CELL["door_y"][0] + CELL["door_y"][1]) / 2, FLOOR + 1.2))
         k = [(a, V((CELL["x0"] - 2.6, CELL["y1"] + 2.4, FLOOR + 5.4)), rob, 28),           # over the weld screens
              (a + 120, V((CELL["x1"] - 1.2, CELL["y1"] + 2.0, FLOOR + 4.8)), rob, 30),
-             (ROBOT_ENTER - 60, V((ccam.x - 0.3, ccam.y + 3.0, ccam.z + 1.6)), dc.lerp(rob, 0.35), 26),   # behind the cell camera
-             (ROBOT_RELAY, V((ccam.x - 0.8, ccam.y + 2.6, ccam.z + 1.3)), dc.lerp(rob, 0.35), 26),
+             (ROBOT_ENTER - 60, V((ccam.x - 0.2, ccam.y + 3.0, ccam.z + 2.0)), dc.lerp(rob, 0.5), 26),   # behind the cell camera
+             (ROBOT_RELAY, V((ccam.x - 0.5, ccam.y + 2.7, ccam.z + 1.8)), dc.lerp(rob, 0.5), 26),
              (ROBOT_RELAY + 1, S5_END[0] + V((0.3, -0.2, 0.2)), S5_END[1], 24),        # worker + halted robot, both in frame
              (b, S5_END[0], S5_END[1], 24)]
         if fr <= ROBOT_RELAY:
