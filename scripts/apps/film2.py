@@ -431,7 +431,8 @@ def build(args):
 
     # ---- lights
     lc = W["lights"]
-    day = [(1, 0.0), (S["s1a_crane"][0], 1.0), (DOOR_NIGHT, 1.0), (DOOR_NIGHT + 50, 0.0), (S["s5_robot"][0] - 1, 0.0),
+    NIGHT = 0.14                                   # night shift: high bays dimmed, never off
+    day = [(1, 0.0), (S["s1a_crane"][0], 1.0), (DOOR_NIGHT, 1.0), (DOOR_NIGHT + 50, NIGHT), (S["s5_robot"][0] - 1, NIGHT),
            (S["s5_robot"][0], 1.0), (S["s6_system"][1], 1.0), (S["s7_hero"][0], 0.0)]
     for fx_, disc, lo, em in W["high_bays"]:
         e0 = lo.data.energy
