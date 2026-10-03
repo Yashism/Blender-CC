@@ -431,7 +431,7 @@ def _volume_mat(name, kind):
     clamp = math_node("MAXIMUM", None, 0.0)
     nt.links.new(amt.outputs[0], clamp.inputs[0])
     if kind == "smoke":
-        vol.inputs["Color"].default_value = (0.46, 0.46, 0.48, 1)
+        vol.inputs["Color"].default_value = (0.30, 0.30, 0.32, 1)
         mp.inputs["Scale"].default_value = (1.0, 1.0, 0.7)
         nt.links.new(clamp.outputs[0], vol.inputs["Density"])
     else:
@@ -604,7 +604,7 @@ def fire(coll, src, f_smoke, f_flame, f_end):
             nz.inputs["W"].keyframe_insert("default_value", frame=fr)
             mp.inputs["Location"].default_value = (0, 0, -fr / FPS * speed)
             mp.inputs["Location"].keyframe_insert("default_value", frame=fr)
-    for node, keys in ((samt, [(1, 0.0), (f_smoke, 0.0), (f_flame, 10.0), (f_end, 24.0)]),):
+    for node, keys in ((samt, [(1, 0.0), (f_smoke, 0.0), (f_smoke + 24, 22.0), (f_flame, 34.0), (f_end, 50.0)]),):
         for fr, v in keys:
             node.inputs[1].default_value = v
             node.inputs[1].keyframe_insert("default_value", frame=fr)

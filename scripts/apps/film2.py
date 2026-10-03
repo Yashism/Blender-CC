@@ -641,13 +641,16 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         d = (V((src.x, src.y, 0)) - V((fcam.x, fcam.y, 0))).normalized()
         side = V((-d.y, d.x, 0))
         unit = fcam + V((0, 0, 0.045))
-        K = [(a, unit + d * 0.42 - side * 0.1 + V((0, 0, -0.04)), unit, 55.0),            # its lens + LED, in the dark
-             (a + 90, unit - side * 0.8 + d * 0.5 + V((0, 0, 0.2)), src + V((0, 0, 0.6)), 40.0),
+        cut = f_bar(32.75)                               # its lens + LED in the dark, then cut to the charging bay
+        if fr < cut:
+            u = smooth((fr - a) / (cut - a))
+            loc = unit + d * lerp(0.48, 0.40, u) - side * lerp(0.12, 0.08, u) + V((0, 0, -0.04))
+            return loc, unit, unit, lerp(52.0, 56.0, u)
+        K = [(cut, unit - side * 0.8 + d * 0.5 + V((0, 0, 0.2)), src + V((0, 0, 0.6)), 40.0),
              (b, V((src.x - 1.9, src.y - 3.1, FLOOR + 1.9)), src + V((0, 0, 0.6)), 32.0)]
         loc = hermite([(f, p) for f, p, _, _ in K], fr)
         tgt = hermite([(f, p) for f, _, p, _ in K], fr)
-        foc = unit if fr < a + 60 else src + V((0, 0, 0.6))
-        return loc, tgt, foc, hermite([(f, l) for f, _, _, l in K], fr)
+        return loc, tgt, src + V((0, 0, 0.6)), hermite([(f, l) for f, _, _, l in K], fr)
 
     def s5(fr, t):
         a, b = S["s5_robot"]

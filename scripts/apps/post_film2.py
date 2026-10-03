@@ -96,6 +96,9 @@ def load_pass(src, prefix, fr, size, mode="L", bits16=False):
         a = a / (65535.0 if a.max() > 255 else 255.0)
         if a.ndim == 3:
             a = a[..., 0]
+        if prefix == "d":
+            a, nz = clean_depth(a)
+            _NOISY["m"] = np.asarray(Image.fromarray((nz * 255).astype(np.uint8)).resize(size, Image.BILINEAR), np.float32) / 255
         im = Image.fromarray(a.astype(np.float32), "F").resize(size, Image.BILINEAR)
         return np.asarray(im, np.float32)
     im = im.convert(mode).resize(size, Image.BILINEAR)
@@ -103,6 +106,24 @@ def load_pass(src, prefix, fr, size, mode="L", bits16=False):
 
 
 # ------------------------------------------------------------------------------------ perception
+_NOISY = {}
+
+
+def clean_depth(a):
+    """Smoke volumes turn the depth pass into salt-and-pepper (about half the samples read 'infinitely far').
+    At source resolution: find pixels that disagree with their 3x3 median, take dense clusters of them as the
+    noisy region, and there use the nearest surface (local min). Returns (depth 0..1, noisy 0..1)."""
+    F = lambda x: Image.fromarray(x.astype(np.float32), "F")
+    med = np.asarray(F(a).filter(ImageFilter.MedianFilter(3)), np.float32)
+    spk = (np.abs(np.log(a + 1e-3) - np.log(med + 1e-3)) > 0.1).astype(np.float32)
+    L8 = lambda x: Image.fromarray((np.clip(x, 0, 1) * 255).astype(np.uint8))
+    dens = np.asarray(L8(spk).filter(ImageFilter.BoxBlur(3)), np.float32) / 255
+    noisy = np.clip((dens - 0.06) / 0.08, 0, 1)
+    noisy = np.asarray(L8(noisy).filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.GaussianBlur(1.5)), np.float32) / 255
+    lo = np.asarray(F(a).filter(ImageFilter.MinFilter(5)), np.float32)
+    return a * (1 - noisy) + lo * noisy, noisy
+
+
 def perception(src, fr, size):
     W, H = size
     d = load_pass(src, "d", fr, size, bits16=True)
@@ -110,7 +131,8 @@ def perception(src, fr, size):
     if d is None or n is None:
         return None, None
     D = np.clip(d * DEPTH_MAX, 0.05, DEPTH_MAX)
-    bg = d > 0.995
+    noisy = _NOISY.get("m", np.zeros_like(D))
+    bg = D > DEPTH_MAX * 0.995
     Nw = n * 2 - 1
     logd = np.log(D)
     gx = np.abs(np.diff(logd, axis=1, append=logd[:, -1:]))
@@ -121,9 +143,12 @@ def perception(src, fr, size):
     e2 = np.clip((np.maximum(nx, ny) - 0.25) / 0.35, 0, 1)
     e = np.maximum(e1, e2)
     e[bg] = 0
+    e = e * (1 - noisy)
     m3e = load_pass(src, "m3", fr, size)
-    if m3e is not None:
-        e = e * (1 - np.clip(m3e * 3, 0, 1))
+    if m3e is not None:              # the smoke volume's mask is sparse: widen it so no edge speckle survives
+        m3w = np.asarray(Image.fromarray((m3e * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))
+                         .filter(ImageFilter.GaussianBlur(4 * W / 1280)), np.float32) / 255
+        e = e * (1 - np.clip(m3w * 6, 0, 1))
     eim = Image.fromarray((e * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.45 * W / 1280))
     e = np.asarray(eim, np.float32) / 255
     L = np.array([0.35, -0.45, 0.82], np.float32)
@@ -147,6 +172,10 @@ def perception(src, fr, size):
         fb = np.clip(fb * 1.6, 0, 1)
         heat = np.stack([np.ones_like(fb), 0.15 + 0.6 * fb, 0.04 * fb], -1)
         img = img * (1 - 0.85 * fb[..., None]) + fb[..., None] * heat * (0.35 + 0.65 * fb[..., None])
+    if noisy.any():                  # smoke (found from the speckled depth) as a soft grey haze
+        hz = np.asarray(Image.fromarray((noisy * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(5 * W / 1280)),
+                        np.float32)[..., None] / 255
+        img = img * (1 - 0.6 * hz) + hz * 0.6 * np.array([0.42, 0.40, 0.40], np.float32)
     # subtle scanline texture
     yy = (np.arange(H) % 3 == 0).astype(np.float32)[:, None, None]
     img = img * (1 - 0.06 * yy)
