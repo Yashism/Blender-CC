@@ -412,6 +412,10 @@ def build(args):
     zf = geo.box("zone_fill", (ZONE["x1"] - ZONE["x0"] - 0.44, ZONE["y1"] - ZONE["y0"] - 0.44, 0.002),
                  loc=((ZONE["x0"] + ZONE["x1"]) / 2, (ZONE["y0"] + ZONE["y1"]) / 2, FLOOR + 0.006), mat=zone_fill_m, coll=fx, bevel=0)
     key_strength(zone_fill_em, [(1, 0.0), (ZONE_CROSS, 0.0), (ZONE_CROSS + 4, 2.5), (ZONE_CLEAR, 2.5), (ZONE_CLEAR + 8, 0.0)])
+    zf_tm = zone_fill_m.node_tree.nodes["Map Range"].inputs["To Min"]      # fade the coverage too, not just the glow
+    for fr, v in [(1, 0.0), (ZONE_CROSS, 0.0), (ZONE_CROSS + 4, 0.35), (ZONE_CLEAR, 0.35), (ZONE_CLEAR + 8, 0.0)]:
+        zf_tm.default_value = v
+        zf_tm.keyframe_insert("default_value", frame=fr)
 
     # ---- door
     hinge = W["door"]["hinge"]
@@ -591,9 +595,9 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
 
     def s1c(fr, t):
         u = smooth(t)
-        loc = V((-5.2 + 0.3 * u, MHE_AISLE_Y + 1.25, FLOOR + 1.0))
-        tgt = vl((-11.5, MHE_AISLE_Y - 0.3, FLOOR + 1.1), (-9.4, MHE_AISLE_Y - 0.6, FLOOR + 1.0), u)
-        return loc, tgt, V((-8.5, MHE_AISLE_Y, FLOOR + 1.0)), 32
+        loc = V((-3.4 + 0.4 * u, MHE_AISLE_Y + 0.9, FLOOR + 1.45))
+        tgt = vl((-11.5, MHE_AISLE_Y - 0.2, FLOOR + 1.0), (-9.2, MHE_AISLE_Y - 0.3, FLOOR + 0.95), u)
+        return loc, tgt, V((-8.6, MHE_AISLE_Y, FLOOR + 1.0)), 30
 
     def s1d(fr, t):
         u = smooth(t)
@@ -606,14 +610,16 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         d = (V((zc.x, zc.y, 0)) - V((zcam.x, zcam.y, 0))).normalized()
         side = V((-d.y, d.x, 0))
         unit = zcam + V((0, 0, 0.045))
-        K = [(a, unit + d * 0.42 + side * 0.10 + V((0, 0, -0.04)), unit, 55.0),          # in front of the lens
-             (a + 70, unit + side * 0.6 + d * 0.15 + V((0, 0, 0.12)), unit + d * 0.8, 42.0),   # round the side
-             (a + 150, unit + side * 0.9 + d * 0.3 + V((0, 0, 0.6)), zc + V((0, 0.3, 0.5)), 30.0),   # over its shoulder
+        cut = f_bar(20)                                  # close-up on the unit, then cut wide on the bar
+        if fr < cut:
+            u = smooth((fr - a) / (cut - a))
+            loc = unit + d * lerp(0.50, 0.40, u) + side * lerp(0.14, 0.08, u) + V((0, 0, -0.04))
+            return loc, unit, unit, lerp(52.0, 56.0, u)
+        K = [(cut, unit + d * 0.6 + side * 0.9 + V((0, 0, 0.9)), zc + V((0, 0.3, 0.5)), 30.0),
              (b, V((zc.x + 1.4, zc.y - 7.4, FLOOR + 4.8)), zc + V((0, 0.4, 0.5)), 30.0)]
         loc = hermite([(f, p) for f, p, _, _ in K], fr)
         tgt = hermite([(f, p) for f, _, p, _ in K], fr)
-        foc = unit if fr < a + 80 else zc + V((0, 0.3, 0.6))
-        return loc, tgt, foc, hermite([(f, l) for f, _, _, l in K], fr)
+        return loc, tgt, zc + V((0, 0.3, 0.6)), 30.0
 
     def s3(fr, t):
         a, b = S["s3_door"]

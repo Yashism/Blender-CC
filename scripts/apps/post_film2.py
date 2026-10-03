@@ -137,6 +137,10 @@ def perception(src, fr, size):
     if m2 is not None:
         pm = m2[..., None]
         img = img * (1 - pm) + pm * (np.array([1.0, 0.42, 0.06], np.float32) * (0.55 + 0.45 * lam[..., None]) + e[..., None] * 0.35)
+    for mk in ("m4", "m5"):          # machines (forklift, robot): a subtle cool fill so they stay readable
+        mm = load_pass(src, mk, fr, size)
+        if mm is not None:
+            img = img * (1 - 0.55 * mm[..., None]) + mm[..., None] * (np.array([0.16, 0.24, 0.36], np.float32) * (0.5 + 0.5 * lam[..., None]))
     if m3 is not None:               # smoke / fire as a smooth heat map (no edge noise from the volume)
         fb = np.asarray(Image.fromarray((m3 * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(7 * W / 1280)),
                         np.float32) / 255
@@ -158,16 +162,16 @@ def scan_mix(real, fr, src, size):
                 return real, 0.0
             r_in = (fr - a) * SCAN_SPEED
             m = (D < r_in).astype(np.float32)
-            front = np.exp(-((D - r_in) ** 2) / 0.6) * (r_in < DEPTH_MAX)
+            front = np.exp(-((D - r_in) ** 2) / 0.12) * (r_in < DEPTH_MAX)
             if fr >= b:
                 if instant:
                     return real, 0.0
                 r_out = (fr - b) * SCAN_SPEED
                 m = m * (D >= r_out)
-                front = front * 0 + np.exp(-((D - r_out) ** 2) / 0.6)
+                front = front * 0 + np.exp(-((D - r_out) ** 2) / 0.12)
             mm = Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.0))
             m = np.asarray(mm, np.float32)[..., None] / 255
-            out = real * (1 - m) + pimg * m + front[..., None] * np.array([0.5, 0.85, 1.0], np.float32) * 0.9
+            out = real * (1 - m) + pimg * m + front[..., None] * np.array([0.5, 0.85, 1.0], np.float32) * 0.45
             return np.clip(out, 0, 1), float(m.mean())
     return real, 0.0
 
@@ -307,7 +311,8 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
                 k = (fr - MHE_RELAY + 3) / 14
                 if k < 1:
                     L.arc(c1[:2], lerp(6, 40, ease_out(k)) * s, 0, 360, RED + (int(230 * (1 - k)),), 2.2 * s)
-                tag(extra, "RELAY · MHE STOP", c1[0] + 14 * s, c1[1] - 14 * s, RED, s, H, clamp((fr - MHE_RELAY + 3) / 6), size=0.022)
+                if fr < MHE_STOP:
+                    tag(extra, "RELAY", c1[0] + 14 * s, c1[1] - 14 * s, RED, s, H, clamp((fr - MHE_RELAY + 3) / 6), size=0.022)
         if fr >= MHE_STOP and sid == "s1d_stop":
             tag(extra, "MHE STOPPED", W * 0.5, H * 0.12, RED, s, H, smooth((fr - MHE_STOP) / 8), size=0.034, anchor="c", weight="Bold")
     if sid == "s1d_stop" and fr >= MHE_CLEAR:
