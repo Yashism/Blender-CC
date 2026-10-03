@@ -48,3 +48,5 @@ renders/launch/film5/*.zip
 .tools/
 renders/launch/film6/*.blend
 exports/
+assets/music/In_Motion.mp3
+assets/music/*_film2.wav
