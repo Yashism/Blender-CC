@@ -624,7 +624,12 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
 
     def s3(fr, t):
         a, b = S["s3_door"]
-        u = smooth((fr - a) / 96)
+        cut = f_bar(26.75)                               # close-up on the unit over the door, cut wide on the beat
+        if fr < cut:
+            u = smooth((fr - a) / (cut - a))
+            loc = dcam + V((lerp(0.42, 0.34, u), lerp(0.95, 0.85, u), -0.50))
+            return loc, dcam + V((0, 0, 0.07)), dcam, 70.0
+        u = smooth((fr - cut) / 100)
         p0 = V((DOOR["x"] + 2.3, -8.7, FLOOR + 2.2))      # inside, looking at the door and the camera above it
         p1 = V((DOOR["x"] + 0.1, -9.3, FLOOR + 6.6))      # high, looking steeply down (slight tilt keeps it level)
         loc = vl(p0, p1, u)

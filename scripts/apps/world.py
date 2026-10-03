@@ -156,6 +156,9 @@ def door(coll, P, cam_src):
     clo.location = (x, y - 1.8, z + 2.8)
     coll.objects.link(clo)
     cam = assets.camera_instance("cam_door", cam_src, coll, (x, y + 0.45, z + h + 0.75), (0, 1), pitch_deg=62)
+    # wall bracket: plate on the wall + arm out to the back of the unit
+    geo.box("door_cam_plate", (0.12, 0.02, 0.16), loc=(x, y + 0.13, z + h + 0.80), mat=fr, coll=coll, bevel=0.004)
+    geo.box("door_cam_arm", (0.035, 0.30, 0.035), loc=(x, y + 0.28, z + h + 0.80), mat=fr, coll=coll, bevel=0.004)
     # counting line on the floor (inside, parallel to the wall)
     kit.floor_line("count_line", (x - 1.6, y + 1.6), (x + 1.6, y + 1.6), 0.05, P["white_paint"], coll, z)
     return dict(hinge=hinge, cam=cam, corridor_light=clo)
