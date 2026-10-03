@@ -59,9 +59,9 @@ RACK_X = (-20.4, -3.2)                       # rack runs along X
 CROSS_AISLE = (-9.6, -7.6)                   # gap in the rows (the worker steps out here)
 MHE_AISLE_Y = -6.0
 ZONE = dict(x0=0.8, x1=6.2, y0=5.4, y1=10.2, col=(0.3, 4.6))         # restricted machine bay
-DOOR = dict(x=17.6, w=1.8, h=2.4)                                    # personnel door, front wall
+DOOR = dict(x=15.0, w=1.2, h=2.2)          # personnel door office -> warehouse, between dock doors 5 and 6
 FIRE = dict(src=(13.6, 11.0), cam=(8.4, 4.0, 6.0))                   # charging bay, column camera
-CELL = dict(x0=12.8, x1=20.6, y0=-8.6, y1=0.2, door_y=(-5.0, -3.0), robot=(17.6, -4.2))
+CELL = dict(x0=12.8, x1=20.6, y0=-7.4, y1=1.4, door_y=(-3.9, -2.1), robot=(17.6, -3.0))
 
 # ---- events (frames) ----
 MHE_REVERSE = (f_bar(13.5), f_bar(17))       # forklift reversing along +X
