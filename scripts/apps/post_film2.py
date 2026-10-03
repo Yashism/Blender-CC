@@ -38,6 +38,7 @@ RED = (255, 40, 30)
 GREEN = (60, 230, 110)
 CYAN = (120, 210, 255)
 LINE = np.array([0.62, 0.76, 0.98], np.float32)
+COUNT_Y = -11.1
 
 # perception windows: (scan-in start, scan-out start, instant_out)
 SCANS = [
@@ -202,6 +203,7 @@ def bracket_box(L, box, col, s, k=1.0):
 
 
 def tag(extra, text, x, y, col, s, H, alpha=1.0, size=0.024, anchor="l", weight="SemiBold"):
+    size *= 1.32
     t = text_img(text, weight, H * size, col, tracking=0.08)
     sh = text_img(text, weight, H * size, (0, 0, 0), tracking=0.08)
     place(extra, sh, x, y + H * 0.002, 0.6 * alpha, anchor=anchor, blur=H * 0.006)
@@ -233,10 +235,10 @@ def door_counts(anchors):
         prev = None
         for fr in range(S["s3_door"][0], S["s3_door"][1] + 1):
             rec = anchors.get(str(fr)) or {}
-            p, l, r = rec.get(key), rec.get("count_l"), rec.get("count_r")
-            if not p or not l or not r:
+            y = rec.get("Y:" + key[2:])
+            if not y:
                 continue
-            side = (r[0] - l[0]) * (p[1] - l[1]) - (r[1] - l[1]) * (p[0] - l[0])
+            side = y[0] - COUNT_Y          # world Y of the counting line (inside the door)
             if prev is not None and (side > 0) != (prev > 0):
                 ev.append((fr, "IN" if i % 3 != 2 else "OUT"))
                 break
@@ -509,8 +511,13 @@ def main():
     raw = json.load(open(os.path.join(a.src, "anchors.json")))
     fs = sorted(glob.glob(os.path.join(a.src, "f_*.png")) + glob.glob(os.path.join(a.src, "f_*.jpg")))
     sc = size[0] / Image.open(fs[0]).size[0] if fs else 1.0
-    anchors = {f: {n: [v[0] * sc, v[1] * sc] + [v[i] * sc for i in range(2, len(v) - 1)] + [v[-1]] if len(v) == 5 else
-                   [v[0] * sc, v[1] * sc, v[2]] for n, v in rec.items()} for f, rec in raw.items()}
+    def scale(n, v):
+        if n.startswith("Y:"):
+            return v
+        if len(v) == 5:
+            return [v[0] * sc, v[1] * sc, v[2] * sc, v[3] * sc, v[4]]
+        return [v[0] * sc, v[1] * sc, v[2]]
+    anchors = {f: {n: scale(n, v) for n, v in rec.items()} for f, rec in raw.items()}
     frames = [int(v) for v in a.stills.split(",")] if a.stills else list(range(1, N + 1))
     sd = os.path.splitext(a.out)[0] + "_stills"
     dst = sd if a.stills else tempfile.mkdtemp(prefix="post_f2_")

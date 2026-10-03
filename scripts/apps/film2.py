@@ -529,7 +529,7 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         p1 = lens_c + V((0.02, -0.075, 0.01))
         p2 = body_c + V((0.11, -0.30, 0.05))
         loc = vl(p0, p1, u1).lerp(p2, u2).lerp(lens_c + V((0, -0.012, 0)), u3)
-        tgt = vl(lens_c, body_c, u2 * (1 - u3)).lerp(lens_c, u3)
+        tgt = vl(lens_c, body_c + V((-0.075, 0.0, 0.0)), u2 * (1 - u3)).lerp(lens_c, u3)
         return loc, tgt, tgt, lerp(lerp(80, 55, u2), 30, u3)
 
     def s1a(fr, t):
@@ -614,7 +614,7 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
     def s7(fr, t):
         u = smooth(t)
         loc = body_c + V((lerp(0.32, 0.26, u), lerp(-0.44, -0.38, u), lerp(0.10, 0.07, u)))
-        tgt = body_c + V((0.07, 0, -0.005))
+        tgt = body_c + V((-0.035, 0, -0.005))
         return loc, tgt, body_c, 50
 
     FN = {"s0_open": (s0, 8.0), "s1a_crane": (s1a, 5.6), "s1b_cones": (s1b, 11.0), "s1c_detect": (s1c, 4.0),
@@ -704,6 +704,7 @@ def anchor_track(s, frames, W_, H_, ctx):
             put(f"firebar{i}", b_.matrix_world.translation)
         for J in ctx["workers"]:
             put("P:" + J["root"].name, J["root"].matrix_world.translation)
+            rec["Y:" + J["root"].name] = [round(J["root"].matrix_world.translation.y, 3)]
         out[fr] = rec
     return out
 
