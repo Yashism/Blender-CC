@@ -231,7 +231,7 @@ def robot_program(R, f0, f1, freeze, resume, seed=3):
     Returns list of (frame, welding?) for sparks/light."""
     rng = random.Random(seed)
     poses = []
-    for k in range(10):
+    for k in range(42):                           # enough weld passes for the whole cell sequence (30 + 14 frames each)
         a1 = math.radians(rng.uniform(-150, -110) if k % 2 else rng.uniform(-205, -165))
         poses.append((a1, math.radians(rng.uniform(20, 38)), math.radians(rng.uniform(30, 55)),
                       math.radians(rng.uniform(25, 50))))

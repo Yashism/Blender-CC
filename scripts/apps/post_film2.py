@@ -283,12 +283,17 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
     # --- s1b: the five cameras
     if sid == "s1b_cones":
         names = {"fl": "FRONT L", "fr": "FRONT R", "sl": "LEFT", "sr": "RIGHT", "rr": "REAR"}
+        ctr = A(rec, "fk_obx")
         for i, k in enumerate(("fl", "fr", "sl", "sr", "rr")):
             p = A(rec, f"fk_{k}")
             al = smooth((fr - f_bar(11.3) - i * 7) / 10) * clamp((b - fr) / 8)
-            if p and al > 0:
-                L.dot(p[:2], 4 * s, WHITE + (int(255 * al),))
-                tag(extra, names[k], p[0] + 10 * s, p[1] - 10 * s, WHITE, s, H, al, size=0.022)
+            if p and ctr and al > 0:
+                dx, dy = p[0] - ctr[0], p[1] - ctr[1]
+                n_ = max(1e-3, math.hypot(dx, dy))
+                q = (p[0] + dx / n_ * 120 * s, p[1] + dy / n_ * 120 * s)     # out along the fan
+                L.dot(p[:2], 3 * s, WHITE + (int(255 * al),))
+                L.line([p[:2], q], WHITE + (int(110 * al),), 1.0 * s)
+                tag(extra, names[k], q[0], q[1], WHITE, s, H, al, size=0.02, anchor="c")
         al = smooth((fr - f_bar(12.4)) / 12) * clamp((b - fr) / 8)
         tag(extra, "5 CAMERAS · 360° COVERAGE", W * 0.5, H * 0.1, WHITE, s, H, al, size=0.03, anchor="c")
     # --- MHE decision
@@ -407,18 +412,18 @@ def titles(W, H, fr, im):
     if f_bar(5) <= fr <= f_bar(7.7):
         k = ease_out((fr - f_bar(5)) / 24)
         out = clamp((f_bar(7.6) - fr) / 10)
-        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.06, WHITE, tracking=lerp(0.4, 0.18, k)), W * 0.30, H * 0.46, k * out)
+        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.06, WHITE, tracking=lerp(0.4, 0.18, k)), W * 0.27, H * 0.46, k * out)
         k2 = ease_out((fr - f_bar(6)) / 20)
-        place(L, text_img("One camera. Every safety scenario.", "Light", H * 0.032, (215, 218, 224)), W * 0.30, H * 0.54, k2 * out)
+        place(L, text_img("One camera. Every safety scenario.", "Light", H * 0.032, (215, 218, 224)), W * 0.27, H * 0.54, k2 * out)
     # hero
     if fr >= HERO_HIT:
         k = ease_out((fr - HERO_HIT - 6) / 24)
         out = clamp((RENDER_END - fr) / 12)
-        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.055, WHITE, tracking=lerp(0.35, 0.16, k)), W * 0.30, H * 0.40, k * out)
+        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.055, WHITE, tracking=lerp(0.35, 0.16, k)), W * 0.22, H * 0.40, k * out)
         k2 = ease_out((fr - HERO_HIT - 40) / 24)
-        place(L, text_img("See. Detect. Protect.", "Medium", H * 0.042, (255, 140, 60)), W * 0.30, H * 0.49, k2 * out)
+        place(L, text_img("See. Detect. Protect.", "Medium", H * 0.042, (255, 140, 60)), W * 0.22, H * 0.49, k2 * out)
         k3 = ease_out((fr - HERO_HIT - 80) / 24)
-        place(L, text_img("with Omnibox Edge", "Light", H * 0.026, (200, 204, 212)), W * 0.30, H * 0.56, k3 * out)
+        place(L, text_img("with Omnibox Edge", "Light", H * 0.026, (200, 204, 212)), W * 0.22, H * 0.56, k3 * out)
     return L
 
 
@@ -509,6 +514,7 @@ def main():
     ap.add_argument("--size", default="1280x720")
     ap.add_argument("--music", default=MUSIC)
     ap.add_argument("--no-music", action="store_true")
+    ap.add_argument("--no-sfx", action="store_true")
     ap.add_argument("--stills", default="")
     ap.add_argument("--crf", type=int, default=20)
     ap.add_argument("--clips", action="store_true")
@@ -547,8 +553,27 @@ def main():
         return
     dur = N / FPS
     cmd = [FFMPEG, "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(dst, "p_%04d.png")]
-    if a.music and os.path.exists(a.music):
-        cmd += ["-i", a.music, "-filter:a", f"atrim=0:{dur},apad=whole_dur={dur}", "-c:a", "aac", "-b:a", "256k", "-t", f"{dur}"]
+    sfx = os.path.join(ROOT, "assets", "music", "film2_sfx.wav")
+    if not os.path.exists(sfx):
+        subprocess.run([sys.executable, os.path.join(HERE, "sfx_film2.py")], check=False)
+    have_m = bool(a.music and os.path.exists(a.music))
+    have_s = os.path.exists(sfx) and not a.no_sfx
+    if have_m or have_s:
+        ins, chains, labels = [], [], []
+        k = 1
+        if have_m:
+            ins += ["-i", a.music]
+            chains.append(f"[{k}:a]atrim=0:{dur},asetpts=PTS-STARTPTS,apad=whole_dur={dur}[m]")
+            labels.append("[m]")
+            k += 1
+        if have_s:
+            ins += ["-i", sfx]
+            chains.append(f"[{k}:a]atrim=0:{dur},asetpts=PTS-STARTPTS,apad=whole_dur={dur},volume=0.9[x]")
+            labels.append("[x]")
+        mix = "".join(labels) + (f"amix=inputs={len(labels)}:normalize=0:duration=longest,alimiter=limit=0.95[a]"
+                                  if len(labels) > 1 else "anull[a]")
+        cmd += ins + ["-filter_complex", ";".join(chains + [mix]), "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "256k",
+                      "-t", f"{dur}"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(a.crf), "-preset", "slow", "-movflags", "+faststart", a.out]
     subprocess.run(cmd, check=True)
     print("post_f2 ->", a.out)
