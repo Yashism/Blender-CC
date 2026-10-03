@@ -261,6 +261,14 @@ def build(args):
         e.rotation_euler.z = rot_z
         return e
 
+    # Omnibox Edge next to every fixed install (the camera always works with its Omnibox)
+    obx_sites = {}
+    for key, cam in (("zone", W["zone"]["cam"]), ("door", W["door"]["cam"]), ("fire", W["fire"]["cam"]), ("cell", W["cell"]["cam"])):
+        p = cam.location
+        th = cam.rotation_euler.z
+        back = V((math.sin(th), -math.cos(th), 0)) * -0.18
+        obx_sites[key] = obx_instance(f"obx_{key}", (p.x + back.x, p.y + back.y, p.z - 0.32), th)
+
     # ---- forklift
     fkc = geo.collection("Forklift")
     FK = assets.forklift(fkc, cam_src, P)
@@ -492,7 +500,7 @@ def build(args):
 
     # ---- cameras
     cams = make_cameras(s, W, FK, OB, R, F, crowd)
-    return s, dict(W=W, FK=FK, OB=OB, R=R, F=F, workers=[w1, w2, w4] + crowd, fk_obx=fk_obx, cams=cams)
+    return s, dict(W=W, FK=FK, OB=OB, R=R, F=F, workers=[w1, w2, w4] + crowd, fk_obx=fk_obx, cams=cams, obx_sites=obx_sites)
 
 
 # ------------------------------------------------------------------------------------ cameras
@@ -655,6 +663,7 @@ def anchor_track(s, frames, W_, H_, ctx):
     out = {}
     named = {"cam_zone": W["zone"]["cam"], "cam_door": W["door"]["cam"], "cam_fire": W["fire"]["cam"],
              "cam_cell": W["cell"]["cam"], "fk_obx": ctx["fk_obx"]}
+    named.update({f"obx_{k}": o for k, o in ctx["obx_sites"].items()})
     for c in FK["cams"]:
         named[f"fk_{c.name.split('_')[-1]}"] = c
     for fr in frames:
@@ -686,11 +695,20 @@ def anchor_track(s, frames, W_, H_, ctx):
         put("fk_rear", rp)
         put("fire", W["fire"]["src"] + V((0, 0, 0.5)))
         put("robot_tip", ctx["R"]["tip"].matrix_world.translation)
+        put("count_l", V((DOOR["x"] - 1.6, -11.1, FLOOR)))
+        put("count_r", V((DOOR["x"] + 1.6, -11.1, FLOOR)))
+        for k_ in ("x0", "x1"):
+            for kk in ("y0", "y1"):
+                put(f"zone_{k_}{kk}", V((ZONE[k_], ZONE[kk], FLOOR)))
+        for i, (b_, m_, p_) in enumerate(W["fire"]["bars"]):
+            put(f"firebar{i}", b_.matrix_world.translation)
+        for J in ctx["workers"]:
+            put("P:" + J["root"].name, J["root"].matrix_world.translation)
         out[fr] = rec
     return out
 
 
-def setup_passes(s, out):
+def setup_passes(s, out, scale=1.0):
     vl_ = s.view_layers[0]
     vl_.use_pass_z = True
     vl_.use_pass_normal = True
@@ -705,6 +723,13 @@ def setup_passes(s, out):
     pd = os.path.join(out, "pass")
 
     def fout(prefix, sock, depth8=True, bw=True):
+        if scale < 1.0:
+            sc = nt.nodes.new("CompositorNodeScale")
+            sc.space = "RELATIVE"
+            sc.inputs["X"].default_value = scale
+            sc.inputs["Y"].default_value = scale
+            nt.links.new(sock, sc.inputs["Image"])
+            sock = sc.outputs["Image"]
         fo = nt.nodes.new("CompositorNodeOutputFile")
         fo.base_path = pd
         fo.format.file_format = "PNG"
@@ -751,8 +776,28 @@ def main():
     ap.add_argument("--samples", type=int, default=32)
     ap.add_argument("--frames", default="")
     ap.add_argument("--step", type=int, default=1)
+    ap.add_argument("--anchors-only", default="", help="write DIR/anchors.json for --res and stop")
+    ap.add_argument("--device", default="keep", choices=("keep", "auto", "gpu", "cpu"))
+    ap.add_argument("--slice", default="", help="i/n: render every n-th frame starting at the i-th (one process per GPU)")
+    ap.add_argument("--max-hours", type=float, default=0)
+    ap.add_argument("--jpeg", action="store_true", help="beauty frames as JPEG (q95) instead of PNG")
+    ap.add_argument("--pass-scale", type=float, default=1.0, help="render the AI-vision passes at this fraction of --res")
     a = ap.parse_args(argv)
     s, ctx = build(a)
+    s.render.use_persistent_data = True
+    if a.device != "keep":
+        from launch.render_film6 import pick_device
+        s.cycles.use_denoising = True
+        if hasattr(s.cycles, "denoising_use_gpu"):
+            s.cycles.denoising_use_gpu = True
+        s.render.use_persistent_data = True
+        print("[film2] device:", pick_device(s, a.device), flush=True)
+    if a.anchors_only:
+        out = a.anchors_only if os.path.isabs(a.anchors_only) else os.path.join(ROOT, a.anchors_only)
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "anchors.json"), "w") as fh:
+            json.dump(anchor_track(s, range(1, RENDER_END + 1), s.render.resolution_x, s.render.resolution_y, ctx), fh)
+        return
     if a.save:
         p = a.save if os.path.isabs(a.save) else os.path.join(ROOT, a.save)
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -770,7 +815,11 @@ def main():
     if a.render:
         out = a.render if os.path.isabs(a.render) else os.path.join(ROOT, a.render)
         os.makedirs(out, exist_ok=True)
-        setup_passes(s, out)
+        setup_passes(s, out, a.pass_scale)
+        ext = ".jpg" if a.jpeg else ".png"
+        if a.jpeg:
+            s.render.image_settings.file_format = "JPEG"
+            s.render.image_settings.quality = 95
         W_, H_ = s.render.resolution_x, s.render.resolution_y
         ap_ = os.path.join(out, "anchors.json")
         if not os.path.exists(ap_):
@@ -780,15 +829,27 @@ def main():
             todo = [int(v) for v in a.frames.split(",")]
         else:
             f0, f1 = (int(v) for v in a.frames.split("-")) if a.frames else (1, RENDER_END)
-            todo = range(f0, f1 + 1, a.step)
-        for fr in todo:
-            p = os.path.join(out, f"f_{fr:04d}.png")
-            if os.path.exists(p):
-                continue
+            todo = list(range(f0, f1 + 1, a.step))
+        if a.slice:
+            i, n = (int(v) for v in a.slice.split("/"))
+            todo = todo[i::n]
+        import time
+        t_start = time.time()
+        todo = [fr for fr in todo if not os.path.exists(os.path.join(out, f"f_{fr:04d}{ext}"))]
+        print(f"[film2] {len(todo)} frames to render", flush=True)
+        for k, fr in enumerate(todo):
+            if a.max_hours and time.time() - t_start > a.max_hours * 3600:
+                print("[film2] max hours reached; stopping (run again to continue)", flush=True)
+                sys.exit(3)
+            p = os.path.join(out, f"f_{fr:04d}{ext}")
+            t0 = time.time()
             s.frame_set(fr)
-            s.render.filepath = p
+            s.render.filepath = p[:-4] + ".part" + ext
             bpy.ops.render.render(write_still=True)
-            print("[film2] frame", fr, flush=True)
+            os.replace(p[:-4] + ".part" + ext, p)
+            el = time.time() - t_start
+            print(f"[film2] frame {fr} ({k + 1}/{len(todo)}) {time.time() - t0:.1f}s | left ~{el / (k + 1) * (len(todo) - k - 1) / 3600:.2f}h",
+                  flush=True)
 
 
 if __name__ == "__main__":
