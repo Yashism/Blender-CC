@@ -615,7 +615,7 @@ def main():
             ins += ["-i", sfx]
             chains.append(f"[{k}:a]atrim=0:{dur},asetpts=PTS-STARTPTS,apad=whole_dur={dur},volume=0.9[x]")
             labels.append("[x]")
-        mix = "".join(labels) + (f"amix=inputs={len(labels)}:normalize=0:duration=longest,alimiter=limit=0.95[a]"
+        mix = "".join(labels) + (f"amix=inputs={len(labels)}:normalize=0:duration=longest,alimiter=limit=0.89:level=0[a]"
                                   if len(labels) > 1 else "anull[a]")
         cmd += ins + ["-filter_complex", ";".join(chains + [mix]), "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "256k",
                       "-t", f"{dur}"]
