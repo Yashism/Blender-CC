@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE))
 from apps.timing import (DOOR_NIGHT, FIRE_DETECT, FIRE_FLAME, FIRE_SMOKE, FPS, MHE_CLEAR, MHE_DETECT,  # noqa: E402
                          MHE_RELAY, MHE_STOP, N_POST, RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_RELAY, ROBOT_RESUME,
-                         S, SHOTS, ZONE_CLEAR, ZONE_CROSS, CONVERGE, HERO_HIT, LOGO_FORM, LOGO_WORD, ROBOT_POV, f_bar)
+                         S, SHOTS, ZONE_CLEAR, ZONE_CROSS, CONVERGE, HERO_HIT, LOGO_ARRIVE, LOGO_FORM, LOGO_WORD, ROBOT_POV, f_bar)
 from launch.post_film3 import INK, clamp, ease_out, lerp, place, text_img  # noqa: E402
 from launch.post_film5 import smooth  # noqa: E402
 from launch.post_film6 import SS, point_at, polyline_part  # noqa: E402
@@ -318,7 +318,7 @@ def welding_at(fr):
 
 def arc_flare(L, W, H, fr, rec):
     """Weld arc: a small blue-white flare at the torch tip while welding, only where the tip is not hidden."""
-    if not welding_at(fr) or shot_of(fr)[0] not in ("s5_robot", "s6_system"):
+    if not welding_at(fr) or shot_of(fr)[0] not in ("s5_robot", "s6_system") or fr >= CONVERGE - 30:
         return
     p = A(rec, "robot_tip")
     if not p or not (0 <= p[0] < W and 0 <= p[1] < H):
@@ -339,29 +339,51 @@ def arc_flare(L, W, H, fr, rec):
 
 
 def use_case_badge(extra, W, H, fr):
-    """Top-left: which use case this is (number in orange, name in white, one-line detail)."""
+    """Top-left use-case card: an orange number tile pops in, a crisp dark plate wipes open beside it with the
+    use-case name, an orange rule draws underneath; reverses out at the end of the scene. No soft shadows."""
     for f0, f1, num, name, detail in USE_CASES:
-        if f0 <= fr <= f1:
-            k = ease_out((fr - f0) / 14) * clamp((f1 - fr) / 8)
-            if k <= 0:
-                return
-            x, y = W * 0.045, H * 0.085
-            dx = (1 - k) * -W * 0.01
-            pn = Image.new("RGBA", (W, H), (0, 0, 0, 0))     # soft dark backing so it reads on bright scenes
-            ImageDraw.Draw(pn).rounded_rectangle([x - H * 0.04, y - H * 0.04, x + W * 0.27, y + H * 0.15], H * 0.02,
-                                                 fill=(0, 0, 0, int(95 * k)))
-            extra.alpha_composite(pn.filter(ImageFilter.GaussianBlur(H * 0.025)))
-            sh = text_img("USE CASE " + num, "Bold", H * 0.022, (0, 0, 0), tracking=0.12)
-            place(extra, sh, x + dx, y + H * 0.002, 0.5 * k, anchor="l", blur=H * 0.005)
-            place(extra, text_img("USE CASE " + num, "Bold", H * 0.022, ORANGE, tracking=0.12), x + dx, y, k, anchor="l")
-            for t, sz, wt, yy, col in ((name, 0.046, "SemiBold", y + H * 0.05, WHITE),
-                                       (detail, 0.028, "Medium", y + H * 0.098, (210, 214, 222))):
-                shd = text_img(t, wt, H * sz, (0, 0, 0))
-                place(extra, shd, x + dx, yy + H * 0.003, 0.55 * k, anchor="l", blur=H * 0.008)
-                place(extra, text_img(t, wt, H * sz, col), x + dx, yy, k, anchor="l")
-            d = ImageDraw.Draw(extra)
-            d.rectangle([x - H * 0.016 + dx, y - H * 0.012, x - H * 0.011 + dx, y + H * 0.115], fill=ORANGE + (int(255 * k),))
+        if not (f0 <= fr <= f1):
+            continue
+        t_in, t_out = fr - f0, f1 - fr
+        if t_out < 0:
             return
+        k_tile = ease_out(t_in / 8) * smooth(t_out / 6)
+        k_plate = ease_out((t_in - 4) / 12) * smooth((t_out - 2) / 8)
+        k_rule = ease_out((t_in - 10) / 14) * smooth(t_out / 8)
+        if k_tile <= 0:
+            return
+        x, y = W * 0.04, H * 0.06
+        th = H * 0.12                                   # tile = plate height
+        pw = W * 0.29
+        lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(lay)
+        # plate (crisp, translucent dark), wiped open from the tile
+        if k_plate > 0:
+            px0 = x + th
+            d.rectangle([px0, y, px0 + pw * k_plate, y + th], fill=(14, 17, 24, int(205 * min(1, k_plate * 1.5))))
+            txt = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            tx = px0 + H * 0.026
+            place(txt, text_img("USE CASE", "Bold", H * 0.019, ORANGE, tracking=0.22), tx, y + th * 0.22, 1.0, anchor="l")
+            place(txt, text_img(name, "SemiBold", H * 0.042, WHITE), tx, y + th * 0.52, 1.0, anchor="l")
+            place(txt, text_img(detail, "Medium", H * 0.024, (190, 196, 206)), tx, y + th * 0.8, 1.0, anchor="l")
+            m = Image.new("L", (W, H), 0)
+            ImageDraw.Draw(m).rectangle([px0, y, px0 + pw * k_plate, y + th], fill=255)
+            ta = np.asarray(txt).astype(np.float32)
+            ta[..., 3] *= np.asarray(m, np.float32) / 255 * smooth((t_in - 8) / 8)
+            lay.alpha_composite(Image.fromarray(ta.astype(np.uint8), "RGBA"))
+        # rule under the plate with a bright head
+        if k_rule > 0:
+            rx1 = x + (th + pw) * k_rule
+            d.rectangle([x, y + th + H * 0.008, rx1, y + th + H * 0.012], fill=ORANGE + (255,))
+            d.rectangle([rx1 - H * 0.012, y + th + H * 0.006, rx1, y + th + H * 0.014], fill=(255, 220, 180, 255))
+        # number tile (pops from 70% scale)
+        sc = lerp(0.7, 1.0, k_tile)
+        cx, cy = x + th / 2, y + th / 2
+        hs = th / 2 * sc
+        d.rectangle([cx - hs, cy - hs, cx + hs, cy + hs], fill=ORANGE + (int(255 * k_tile),))
+        place(lay, text_img(num, "Bold", H * 0.052 * sc, WHITE), cx, cy, k_tile)
+        extra.alpha_composite(lay)
+        return
 
 
 def pov_hud(L, extra, W, H, fr, rec):
@@ -397,7 +419,7 @@ def pov_hud(L, extra, W, H, fr, rec):
     v = rec.get("W:W_cell")
     if v and len(v) >= 5 and v[2] - v[0] > 4 * s:
         x0, y0, x1, y1 = v[:4]
-        k = smooth((fr - (ROBOT_DETECT - 14)) / 8)
+        k = smooth((fr - ROBOT_DETECT + 1) / 4)
         if k > 0:
             col = RED if hit else ORANGE
             bracket_box(L, (x0 - 4 * s, y0 - 4 * s, x1 + 4 * s, y1 + 4 * s), col + (int(255 * k),), s)
@@ -410,10 +432,25 @@ def pov_hud(L, extra, W, H, fr, rec):
 _LOGO = {}
 
 
+def dot_travel(fr, j):
+    """0..1 travel of site dot j toward its point on the arrow (staggered, all landed by LOGO_ARRIVE)."""
+    a = CONVERGE + 10 + j * 8
+    return smooth((fr - a) / max(1, LOGO_ARRIVE - 4 - a))
+
+
 def logo_geom(W, H):
+    """Logo placed so the WORDMARK is centred (the arrow hangs off its top right); arrow outline points for the
+    five site dots; per-pixel 'distance from the corner' along each arm for the fill."""
     key = (W, H)
     if key not in _LOGO:
         lg = Image.open(LOGO_WHITE).convert("RGBA")
+        a0 = np.asarray(lg).astype(np.float32)
+        org0 = (a0[..., 3] > 30) & (a0[..., 0] > 200) & (a0[..., 1] < 170) & (a0[..., 2] < 90)
+        ys, xs = np.where(org0)
+        ax0, ax1, ay0, ay1 = xs.min(), xs.max(), ys.min(), ys.max()
+        bar = (np.where(org0[:, ax0 + 10])[0].max() - ay0 + 1)               # bar thickness (png px)
+        wys, wxs = np.where((a0[..., 3] > 30) & ~org0)
+        wcx = (wxs.min() + wxs.max()) / 2
         k = W * 0.44 / lg.width
         lg = lg.resize((int(lg.width * k), int(lg.height * k)), Image.LANCZOS)
         a = np.asarray(lg).astype(np.float32)
@@ -421,34 +458,54 @@ def logo_geom(W, H):
         arrow, word = a.copy(), a.copy()
         arrow[..., 3] *= org
         word[..., 3] *= ~org
-        ox, oy = (W - lg.width) / 2, H * 0.43 - lg.height / 2
-        ys, xs = np.where(org & (a[..., 3] > 100))
-        _LOGO[key] = dict(arrow=arrow, word=word, o=(ox, oy), size=lg.size,
-                          arrow_c=(ox + (xs.min() + xs.max()) / 2, oy + (ys.min() + ys.max()) / 2), arrow_x0=xs.min())
+        ox, oy = W / 2 - wcx * k, H * 0.43 - lg.height / 2
+        # arm parameter: 0 at the corner, 1 at each tip
+        cx, cy = (ax1 - bar / 2) * k, (ay0 + bar / 2) * k
+        hh, ww = a.shape[:2]
+        yy, xx = np.mgrid[0:hh, 0:ww].astype(np.float32)
+        horiz = (yy < (ay0 + bar) * k) & (xx < (ax1 - bar) * k)
+        ph = (cx - xx) / max(1.0, cx - ax0 * k)
+        pv = (yy - cy) / max(1.0, ay1 * k - cy)
+        par = np.where(horiz, ph, np.where(yy >= (ay0 + bar) * k, pv, 0.0))
+        b = bar * k
+        tip_h, tip_v = (ax0 * k + b / 2, cy), (cx, ay1 * k - b / 2)
+        pts = [tip_h, ((tip_h[0] + cx) / 2, cy), (cx, cy), (cx, (cy + tip_v[1]) / 2), tip_v]
+        _LOGO[key] = dict(arrow=arrow, word=word, o=(ox, oy), size=lg.size, par=np.clip(par, 0, 1), bar=b,
+                          dots=[(ox + px, oy + py) for px, py in pts], dot_par=[1.0, 0.5, 0.0, 0.5, 1.0],
+                          arrow_x0=ax0 * k, word_cx=W / 2)
     return _LOGO[key]
 
 
 def logo_layer(W, H, fr):
-    """The five sites have fused into the orange arrow; the white wordmark wipes on leftwards from it; then the
-    tagline. Returns RGBA or None."""
-    if fr < LOGO_FORM - 2:
+    """Five orange dots sit on the arrow's outline -> the arrow fills outward from its corner and lands whole on
+    the bar-68 hit -> the white wordmark wipes on from it -> tagline centred under the wordmark."""
+    if fr < LOGO_ARRIVE:
         return None
     g = logo_geom(W, H)
     out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ox, oy = g["o"]
     lw, lh = g["size"]
-    ka = smooth((fr - LOGO_FORM + 2) / 6)
-    arr = g["arrow"].copy()
-    arr[..., 3] *= ka
-    ai = Image.fromarray(arr.astype(np.uint8), "RGBA")
-    flash = clamp(1 - (fr - LOGO_FORM) / 10)
-    if flash > 0:                                    # snap glow as the dots fuse
-        gl = ai.filter(ImageFilter.GaussianBlur(H * 0.02))
-        ga = np.asarray(gl).astype(np.float32)
-        ga[..., 3] *= 2.2 * flash
-        out.alpha_composite(Image.fromarray(np.clip(ga, 0, 255).astype(np.uint8), "RGBA"), (int(ox), int(oy)))
-    out.alpha_composite(ai, (int(ox), int(oy)))
-    u = clamp((fr - LOGO_WORD) / 22)
+    s = H / 720
+    fill = smooth((fr - (LOGO_FORM - 16)) / 16)                 # 0 -> 1 exactly at LOGO_FORM
+    L = SS(W, H)
+    for (dx, dy), dp in zip(g["dots"], g["dot_par"]):           # the landed dots, swallowed as the fill reaches them
+        if fill < dp + 0.02 and fr < LOGO_FORM + 2:
+            pul = 1 + 0.08 * math.sin((fr - LOGO_ARRIVE) / 3)
+            L.dot((dx, dy), g["bar"] / 2 * pul, ORANGE + (255,))
+    out.alpha_composite(L.result(glow=0.8))
+    if fill > 0:
+        arr = g["arrow"].copy()
+        edge = np.clip((fill * 1.05 - g["par"]) / 0.05, 0, 1)
+        arr[..., 3] *= edge
+        ai = Image.fromarray(arr.astype(np.uint8), "RGBA")
+        flash = clamp(1 - (fr - LOGO_FORM) / 12) * (fr >= LOGO_FORM - 2)
+        if flash > 0:                                           # the snap on the beat
+            gl = ai.filter(ImageFilter.GaussianBlur(H * 0.022))
+            ga = np.asarray(gl).astype(np.float32)
+            ga[..., 3] *= 2.4 * flash
+            out.alpha_composite(Image.fromarray(np.clip(ga, 0, 255).astype(np.uint8), "RGBA"), (int(ox), int(oy)))
+        out.alpha_composite(ai, (int(ox), int(oy)))
+    u = clamp((fr - LOGO_WORD) / 16)
     if u > 0:
         w = g["word"].copy()
         edge = lerp(g["arrow_x0"], -lw * 0.08, ease_out(u))       # reveal edge travels right -> left
@@ -458,12 +515,12 @@ def logo_layer(W, H, fr):
         sweep = np.exp(-((xs - edge - lw * 0.03) ** 2) / (2 * (lw * 0.02) ** 2)) * (1 - u)
         w[..., :3] = np.clip(w[..., :3] + sweep[..., None] * 120, 0, 255)
         out.alpha_composite(Image.fromarray(w.astype(np.uint8), "RGBA"), (int(ox), int(oy)))
-    k2 = ease_out((fr - HERO_HIT) / 20)
+    k2 = ease_out((fr - f_bar(69)) / 18)
     if k2 > 0:
-        place(out, text_img("See. Detect. Protect.", "Medium", H * 0.05, (255, 140, 60)), W / 2, oy + lh + H * 0.085, k2)
-    k3 = ease_out((fr - HERO_HIT - 30) / 20)
+        place(out, text_img("See. Detect. Protect.", "Medium", H * 0.05, (255, 140, 60)), g["word_cx"], oy + lh + H * 0.085, k2)
+    k3 = ease_out((fr - f_bar(69.5)) / 18)
     if k3 > 0:
-        place(out, text_img("RAMS AI Camera  ·  with Omnibox Edge", "Medium", H * 0.03, (205, 208, 215)), W / 2,
+        place(out, text_img("RAMS AI Camera  ·  with Omnibox Edge", "Medium", H * 0.03, (205, 208, 215)), g["word_cx"],
               oy + lh + H * 0.16, k3)
     return out
 
@@ -589,19 +646,23 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
     if sid == "s6_system":
         sites = (("fk_obx", "MHE · 360° AUTO-STOP"), ("cam_zone", "ZONE · INTRUSION"), ("cam_door", "DOOR · PEOPLE COUNTING"),
                  ("cam_fire", "WAREHOUSE · FIRE"), ("cam_cell", "CELL · ROBOT STOP"))
-        conv = smooth((fr - CONVERGE) / max(1, LOGO_FORM - CONVERGE))
-        ax, ay = logo_geom(W, H)["arrow_c"]
-        for i, (k, lab) in enumerate(sites):
-            p = A(rec, k)
-            if not p or fr >= LOGO_FORM + 2:
+        g = logo_geom(W, H)
+        live = [(i, k, lab, A(rec, k)) for i, (k, lab) in enumerate(sites)]
+        order = sorted([t for t in live if t[3]], key=lambda t: t[3][0])      # left-to-right -> along the arrow
+        slot = {t[0]: j for j, t in enumerate(order)}
+        for i, k, lab, p in live:
+            if not p or fr >= LOGO_ARRIVE:
                 continue
             al = smooth((fr - f_bar(58) - i * 14) / 12)
-            x, y = lerp(p[0], ax, conv), lerp(p[1], ay, conv)
+            j = slot.get(i, 0)
+            u = dot_travel(fr, j)
+            tx, ty = g["dots"][min(j, len(g["dots"]) - 1)]
+            x, y = lerp(p[0], tx, u), lerp(p[1], ty, u)
             if al > 0:
-                L.dot((x, y), (5 + 3 * conv) * s, ORANGE + (int(255 * al),))
-                L.arc((x, y), (12 + 10 * math.sin(fr / 6 + i)) * s, 0, 360, ORANGE + (int(120 * al * (1 - conv)),), 1.2 * s)
-                if conv < 0.12:          # gone before the converging sites crowd each other
-                    tag(extra, lab, x + 16 * s, y - 16 * s, WHITE, s, H, al * (1 - conv / 0.12), size=0.022, flip_x=x - 16 * s)
+                L.dot((x, y), lerp(5 * s, g["bar"] / 2, u), ORANGE + (int(255 * al),))
+                L.arc((x, y), (12 + 10 * math.sin(fr / 6 + i)) * s, 0, 360, ORANGE + (int(120 * al * (1 - u)),), 1.2 * s)
+                if u < 0.05:             # gone before the converging sites crowd each other
+                    tag(extra, lab, x + 16 * s, y - 16 * s, WHITE, s, H, al * (1 - u / 0.05), size=0.022, flip_x=x - 16 * s)
     arc_flare(L, W, H, fr, rec)
     use_case_badge(extra, W, H, fr)
     if ROBOT_POV <= fr < ROBOT_RELAY:
@@ -662,7 +723,7 @@ def frame(src, fr, size, rng, anchors):
     if fr <= 24:
         arr = arr * smooth(fr / 24)
     if sid == "s6_system" and fr > CONVERGE:
-        arr = arr * (1 - smooth((fr - CONVERGE) / max(1, LOGO_FORM - CONVERGE)))
+        arr = arr * (1 - smooth((fr - CONVERGE) / max(1, LOGO_ARRIVE - CONVERGE)))
     if ROBOT_POV <= fr < ROBOT_RELAY:               # camera feed look: cooler, flatter, vignetted, a little noise
         g_ = arr.mean(2, keepdims=True)
         arr = arr * 0.8 + g_ * 0.2

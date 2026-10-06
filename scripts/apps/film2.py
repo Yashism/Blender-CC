@@ -316,7 +316,7 @@ def build(args):
     klo.rotation_mode = "QUATERNION"
     klo.rotation_quaternion = (V((0.2, 0.0, 1.4)) - V(klo.location)).to_track_quat("-Z", "Y")
     for fr, v in ((1, 0.0), (S["s1a_crane"][0] - 1, 0.0), (S["s1a_crane"][0], 1400.0), (S["s1a_crane"][1], 1400.0),
-                  (S["s1b_cones"][0], 250.0), (S["s1b_cones"][1], 250.0), (S["s1b_cones"][1] + 1, 0.0)):
+                  (S["s1a_crane"][1] + 1, 0.0)):
         kl.energy = v
         kl.keyframe_insert("energy", frame=fr)
     # alert light bar on the rear of the guard + zone ring + five coverage fans
@@ -421,11 +421,14 @@ def build(args):
     cd0, cd1 = CELL["door_y"]
     cdy = (cd0 + cd1) / 2
     inside = (CELL["x0"] + 0.9, cdy - 0.35)
-    actors.walk(w4, [(CELL["x0"] - 5.0, cdy - 1.6), (CELL["x0"] - 1.2, cdy), inside], ROBOT_ENTER - 70, ROBOT_RELAY + 20,
-                speed=1.15, z=FLOOR)
+    # timed so the worker crosses the doorway (x0) exactly at ROBOT_DETECT and is still walking when the relay fires
+    p_a, p_b = V((CELL["x0"] - 9.0, cdy - 3.0, 0)), V((CELL["x0"] - 1.2, cdy, 0))
+    d_cross = (p_b - p_a).length + 1.2 * math.hypot(2.1, 0.35) / 2.1
+    w4_start = ROBOT_DETECT - int(round(d_cross / 1.15 * FPS))
+    actors.walk(w4, [tuple(p_a[:2]), tuple(p_b[:2]), inside], w4_start, ROBOT_RELAY + 20, speed=1.15, z=FLOOR)
     actors.walk(w4, [inside, (CELL["x0"] - 1.0, cdy), (CELL["x0"] - 4.0, cdy - 2.0)], ROBOT_CLEAR - 50, S["s6_system"][1],
                 speed=1.15, z=FLOOR, append=True)
-    actors.set_visible(w4, (S["s5_robot"][0], S["s6_system"][1]))
+    actors.set_visible(w4, (w4_start - 2, S["s6_system"][1]))
     # system-shot life: a forklift-free aisle walker + door walkers reuse; robot resumes
 
     # ---- robot

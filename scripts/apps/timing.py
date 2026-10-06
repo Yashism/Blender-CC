@@ -52,9 +52,10 @@ for i, (k, b0, b1) in enumerate(_SHOT_BARS):
 S = {k: (a, b) for k, a, b in SHOTS}
 SHOTS = [r for r in SHOTS if r[0] != "s7_hero"]   # no product hero at the end: the converging sites become the logo
 RENDER_END = S["s6_system"][1]
-N_POST = f_bar(72)                            # logo forms from the sites, holds, music fades (bars 70-72)
-LOGO_FORM = f_bar(65.5)                       # the sites have reached the arrow: it snaps into shape
-LOGO_WORD = f_bar(66)                         # white wordmark wipes on from the arrow
+N_POST = f_bar(73)                            # logo holds at full music; the bar-72 downbeat rings out to the end
+LOGO_ARRIVE = f_bar(67)                       # the five site dots have landed on the arrow's outline
+LOGO_FORM = f_bar(68)                         # the arrow fills in from the corner and snaps whole ON the bar-68 hit
+LOGO_WORD = f_bar(68) + 2                     # white wordmark wipes on from the arrow
 
 # ---- layout (world metres) ----
 RACK_ROWS = [(-8.6, 1), (-3.4, 2), (2.4, 2), (8.2, 2)]    # (y centre, depth in pallets)
@@ -81,9 +82,9 @@ FIRE_SMOKE = f_bar(34)
 FIRE_FLAME = f_bar(36)
 FIRE_DETECT = f_bar(36.5)
 ROBOT_ENTER = f_bar(49)
-ROBOT_DETECT = f_bar(51)
 ROBOT_POV = f_bar(49.75)                     # cut to the cell camera's own view until the relay
 ROBOT_RELAY = f_bar(52)                      # == the drop to silence
+ROBOT_DETECT = ROBOT_RELAY - 22              # the instant the worker crosses the cell doorway (walk is timed to it)
 ROBOT_CLEAR = f_bar(55)
 ROBOT_RESUME = f_bar(56)
 CONVERGE = f_bar(64)
