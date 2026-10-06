@@ -425,7 +425,7 @@ def pov_hud(L, extra, W, H, fr, rec):
             bracket_box(L, (x0 - 4 * s, y0 - 4 * s, x1 + 4 * s, y1 + 4 * s), col + (int(255 * k),), s)
             tag(extra, "PERSON 0.97", x0, y0 - 18 * s, col, s, H, k, size=0.026, weight="Bold")
     if fr >= ROBOT_RELAY - 14:
-        tag(extra, "RELAY → ROBOT STOP", W * 0.5, H * 0.19, RED, s, H, smooth((fr - ROBOT_RELAY + 14) / 4), size=0.026,
+        tag(extra, "RELAY → ROBOT STOP", W * 0.66, H * 0.19, RED, s, H, smooth((fr - ROBOT_RELAY + 14) / 4), size=0.026,
             anchor="c", weight="Bold")
 
 
@@ -581,9 +581,9 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
                 if fr < MHE_STOP:
                     tag(extra, "RELAY", c1[0] + 14 * s, c1[1] - 14 * s, RED, s, H, clamp((fr - MHE_RELAY + 3) / 6), size=0.022)
         if fr >= MHE_STOP and sid == "s1d_stop":
-            tag(extra, "MHE STOPPED", W * 0.5, H * 0.12, RED, s, H, smooth((fr - MHE_STOP) / 8), size=0.034, anchor="c", weight="Bold")
+            tag(extra, "MHE STOPPED", W * 0.66, H * 0.12, RED, s, H, smooth((fr - MHE_STOP) / 8), size=0.034, anchor="c", weight="Bold")
     if sid == "s1d_stop" and fr >= MHE_CLEAR:
-        tag(extra, "ZONE CLEAR · RESUME", W * 0.5, H * 0.12, GREEN, s, H, smooth((fr - MHE_CLEAR) / 8) * clamp((b - fr) / 6),
+        tag(extra, "ZONE CLEAR · RESUME", W * 0.66, H * 0.12, GREEN, s, H, smooth((fr - MHE_CLEAR) / 8) * clamp((b - fr) / 6),
             size=0.03, anchor="c", weight="Bold")
     # --- zone
     if sid == "s2_zone":
@@ -591,12 +591,12 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
         if c0 and c1 and ZONE_CROSS - 4 <= fr <= ZONE_CROSS + 14:
             pulse(L, c0[:2], c1[:2], (fr - ZONE_CROSS + 4) / 10, CYAN + (255,), s)
         if ZONE_CROSS <= fr < ZONE_CLEAR:
-            tag(extra, "INTRUSION · ZONE B", W * 0.5, H * 0.12, RED, s, H, smooth((fr - ZONE_CROSS) / 6), size=0.034, anchor="c",
+            tag(extra, "INTRUSION · ZONE B", W * 0.66, H * 0.12, RED, s, H, smooth((fr - ZONE_CROSS) / 6), size=0.034, anchor="c",
                 weight="Bold")
             if c1:
                 tag(extra, "LIGHT BAR · BUZZER", c1[0] + 14 * s, c1[1] + 14 * s, RED, s, H, smooth((fr - ZONE_CROSS - 6) / 8), size=0.02)
         if fr >= ZONE_CLEAR:
-            tag(extra, "ZONE CLEAR", W * 0.5, H * 0.12, GREEN, s, H, smooth((fr - ZONE_CLEAR) / 8) * clamp((b - fr) / 6), size=0.03,
+            tag(extra, "ZONE CLEAR", W * 0.66, H * 0.12, GREEN, s, H, smooth((fr - ZONE_CLEAR) / 8) * clamp((b - fr) / 6), size=0.03,
                 anchor="c", weight="Bold")
     # --- door counters
     if sid == "s3_door":
@@ -627,7 +627,7 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
             bx = (fp[0] - 50 * s, fp[1] - 110 * s, fp[0] + 50 * s, fp[1] + 24 * s)
             bracket_box(L, bx, RED + (240,), s)
             tag(extra, "FIRE 0.96", bx[0], bx[1] - 12 * s, RED, s, H, size=0.02)
-            tag(extra, "FIRE DETECTED · BAY 7", W * 0.5, H * 0.12, RED, s, H, smooth((fr - FIRE_DETECT) / 6), size=0.034,
+            tag(extra, "FIRE DETECTED · BAY 7", W * 0.66, H * 0.12, RED, s, H, smooth((fr - FIRE_DETECT) / 6), size=0.034,
                 anchor="c", weight="Bold")
             if c0 and c1 and fr <= FIRE_DETECT + 12:
                 pulse(L, c0[:2], c1[:2], (fr - FIRE_DETECT) / 10, CYAN + (255,), s)
@@ -635,12 +635,12 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
     if sid == "s5_robot":
         c0, c1 = A(rec, "cam_cell"), A(rec, "obx_cell")
         if ROBOT_DETECT <= fr < ROBOT_RELAY:
-            tag(extra, "PERSON IN CELL", W * 0.5, H * 0.12, ORANGE, s, H, smooth((fr - ROBOT_DETECT) / 6), size=0.034, anchor="c",
+            tag(extra, "PERSON IN CELL", W * 0.66, H * 0.12, ORANGE, s, H, smooth((fr - ROBOT_DETECT) / 6), size=0.034, anchor="c",
                 weight="Bold")
         if ROBOT_RELAY <= fr < ROBOT_CLEAR:
-            tag(extra, "ROBOT STOPPED", W * 0.5, H * 0.12, RED, s, H, 1.0, size=0.034, anchor="c", weight="Bold")
+            tag(extra, "ROBOT STOPPED", W * 0.66, H * 0.12, RED, s, H, 1.0, size=0.034, anchor="c", weight="Bold")
         if fr >= ROBOT_CLEAR:
-            tag(extra, "CELL CLEAR · RESUME", W * 0.5, H * 0.12, GREEN, s, H, smooth((fr - ROBOT_CLEAR) / 8) * clamp((b - fr) / 6),
+            tag(extra, "CELL CLEAR · RESUME", W * 0.66, H * 0.12, GREEN, s, H, smooth((fr - ROBOT_CLEAR) / 8) * clamp((b - fr) / 6),
                 size=0.03, anchor="c", weight="Bold")
     # --- system: site labels + convergence
     if sid == "s6_system":
