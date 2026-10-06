@@ -305,6 +305,20 @@ def build(args):
             for kp in fc.keyframe_points:
                 if int(round(kp.co.x)) == FK_JUMP - 1:
                     kp.interpolation = "CONSTANT"
+    # soft key that travels with the truck for the crane + top-down shots (the open floor read too dark)
+    kl = bpy.data.lights.new("FK_key", "AREA")
+    kl.shape, kl.size, kl.size_y = "RECTANGLE", 4.0, 3.0
+    kl.color = (1.0, 0.97, 0.92)
+    klo = bpy.data.objects.new("FK_key", kl)
+    fkc.objects.link(klo)
+    klo.parent = fk
+    klo.location = (-0.8, -2.2, 5.2)
+    klo.rotation_mode = "QUATERNION"
+    klo.rotation_quaternion = (V((0.2, 0.0, 1.4)) - V(klo.location)).to_track_quat("-Z", "Y")
+    for fr, v in ((1, 0.0), (S["s1a_crane"][0] - 1, 0.0), (S["s1a_crane"][0], 1400.0), (S["s1b_cones"][1], 1400.0),
+                  (S["s1b_cones"][1] + 1, 0.0)):
+        kl.energy = v
+        kl.keyframe_insert("energy", frame=fr)
     # alert light bar on the rear of the guard + zone ring + five coverage fans
     fk_bar, fk_bar_m = kit.light_bar("FK_bar", (FK["roof_hi"].x - 0.05, 0.0, FK["roof_top"] + 0.04), 0.32,
                                      rot_z=math.pi / 2, coll=fkc)

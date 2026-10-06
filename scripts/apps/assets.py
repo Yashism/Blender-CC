@@ -171,9 +171,29 @@ def forklift(coll, cam_coll, P):
     # the units sit ON the overhead guard (config positions clamped to the guard's edge), each on a small plate
     from lib import geo
     arm_m = bpy.data.materials.get("steel_dark")
+    bpy.context.view_layer.update()
+
+    def roof_z(x, y):
+        """Top of the guard at (x, y) (root space == world while building): ray down onto the roof meshes."""
+        best = None
+        for o in roof:
+            mi = o.matrix_world.inverted()
+            org = mi @ Vector((x, y, rhi.z + 1.0))
+            d = (mi.to_3x3() @ Vector((0, 0, -1))).normalized()
+            ok, loc, _, _ = o.ray_cast(org, d)
+            if ok:
+                z = (o.matrix_world @ loc).z
+                best = z if best is None else max(best, z)
+        return best
     for e in cams:
         p = Vector(e.location)
-        q = Vector((min(max(p.x, rlo.x - 0.02), rhi.x + 0.02), min(max(p.y, rlo.y - 0.02), rhi.y + 0.02), rhi.z + 0.006))
+        x = min(max(p.x, rlo.x - 0.02), rhi.x + 0.02)
+        y = min(max(p.y, rlo.y - 0.02), rhi.y + 0.02)
+        if e.name.endswith(("_fr", "_fl")):           # front corners of the guard, on the frame (not over the curved lip)
+            x = rlo.x + 0.13
+            y = min(max(p.y, rlo.y + 0.05), rhi.y - 0.05)
+        z = roof_z(x, y)
+        q = Vector((x, y, (z if z is not None else rhi.z) + 0.006))
         e.location = q
         th = e.rotation_euler.z - math.pi / 2
         plate = geo.box(f"{e.name}_plate", (0.085, 0.085, 0.01), mat=arm_m, coll=coll, bevel=0.002)
