@@ -22,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE))
 from apps.timing import (DOOR_NIGHT, FIRE_DETECT, FIRE_FLAME, FIRE_SMOKE, FPS, MHE_CLEAR, MHE_DETECT,  # noqa: E402
                          MHE_RELAY, MHE_STOP, N_POST, RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_RELAY,
-                         S, SHOTS, ZONE_CLEAR, ZONE_CROSS, CONVERGE, HERO_HIT, f_bar)
+                         S, SHOTS, ZONE_CLEAR, ZONE_CROSS, CONVERGE, HERO_HIT, LOGO_FORM, LOGO_WORD, ROBOT_POV, f_bar)
 from launch.post_film3 import INK, clamp, ease_out, lerp, place, text_img  # noqa: E402
 from launch.post_film5 import smooth  # noqa: E402
 from launch.post_film6 import SS, point_at, polyline_part  # noqa: E402
@@ -46,9 +46,15 @@ SCANS = [
     (ZONE_CROSS - 34, ZONE_CROSS + 46, False),
     (S["s3_door"][0] + 110, DOOR_NIGHT - 30, False),
     (FIRE_SMOKE + 40, FIRE_DETECT + 70, False),
-    (ROBOT_DETECT - 30, ROBOT_RELAY, True),
 ]
 SCAN_SPEED = 1.1          # metres per frame
+USE_CASES = [  # (first, last, number, name, detail) -- top-left use-case badge
+    (S["s1a_crane"][0] + 14, S["s1d_stop"][1], "01", "MHE / Forklift Safety", "360° collision avoidance"),
+    (S["s2_zone"][0], S["s2_zone"][1], "02", "Restricted Zone", "Intrusion alert"),
+    (S["s3_door"][0], S["s3_door"][1], "03", "Entry / Exit", "People counting"),
+    (S["s4_fire"][0], S["s4_fire"][1], "04", "Fire & Smoke", "Early detection"),
+    (S["s5_robot"][0], S["s5_robot"][1], "05", "Robotic Cell", "Automatic robot stop"),
+]
 TITLES = [  # (first, last, title, sub)
     (f_bar(5.2), f_bar(7.6), None, None),     # (big product titles are drawn by opening())
     (f_bar(17.2), S["s1d_stop"][1] - 2, "360° vision. Automatic stop.", "Five cameras. One Omnibox Edge."),
@@ -298,6 +304,136 @@ def door_counts(anchors):
 
 
 # ------------------------------------------------------------------------------------ overlay
+def use_case_badge(extra, W, H, fr):
+    """Top-left: which use case this is (number in orange, name in white, one-line detail)."""
+    for f0, f1, num, name, detail in USE_CASES:
+        if f0 <= fr <= f1:
+            k = ease_out((fr - f0) / 14) * clamp((f1 - fr) / 8)
+            if k <= 0:
+                return
+            x, y = W * 0.045, H * 0.085
+            dx = (1 - k) * -W * 0.01
+            pn = Image.new("RGBA", (W, H), (0, 0, 0, 0))     # soft dark backing so it reads on bright scenes
+            ImageDraw.Draw(pn).rounded_rectangle([x - H * 0.04, y - H * 0.04, x + W * 0.27, y + H * 0.15], H * 0.02,
+                                                 fill=(0, 0, 0, int(95 * k)))
+            extra.alpha_composite(pn.filter(ImageFilter.GaussianBlur(H * 0.025)))
+            sh = text_img("USE CASE " + num, "Bold", H * 0.022, (0, 0, 0), tracking=0.12)
+            place(extra, sh, x + dx, y + H * 0.002, 0.5 * k, anchor="l", blur=H * 0.005)
+            place(extra, text_img("USE CASE " + num, "Bold", H * 0.022, ORANGE, tracking=0.12), x + dx, y, k, anchor="l")
+            for t, sz, wt, yy, col in ((name, 0.046, "SemiBold", y + H * 0.05, WHITE),
+                                       (detail, 0.028, "Medium", y + H * 0.098, (210, 214, 222))):
+                shd = text_img(t, wt, H * sz, (0, 0, 0))
+                place(extra, shd, x + dx, yy + H * 0.003, 0.55 * k, anchor="l", blur=H * 0.008)
+                place(extra, text_img(t, wt, H * sz, col), x + dx, yy, k, anchor="l")
+            d = ImageDraw.Draw(extra)
+            d.rectangle([x - H * 0.016 + dx, y - H * 0.012, x - H * 0.011 + dx, y + H * 0.115], fill=ORANGE + (int(255 * k),))
+            return
+
+
+def pov_hud(L, extra, W, H, fr, rec):
+    """The cell camera's own feed: frame corners, REC, timestamp, robot danger zone and the person box."""
+    s = H / 720
+    d = ImageDraw.Draw(extra)
+    m = H * 0.04
+    ln = H * 0.07
+    for (px, py, dx, dy) in ((m, m, 1, 1), (W - m, m, -1, 1), (m, H - m, 1, -1), (W - m, H - m, -1, -1)):
+        L.line([(px + dx * ln, py), (px, py), (px, py + dy * ln)], (255, 255, 255, 200), 1.6 * s)
+    on = (fr // 12) % 2 == 0
+    if on:
+        d.ellipse([W - m - H * 0.205, m + H * 0.024, W - m - H * 0.185, m + H * 0.044], fill=(235, 40, 40, 255))
+    place(extra, text_img("REC", "Bold", H * 0.024, WHITE, tracking=0.1), W - m - H * 0.17, m + H * 0.034, 1.0, anchor="l")
+    secs = 14 * 3600 + 32 * 60 + 7 + (fr - ROBOT_POV) / FPS
+    ts = f"{int(secs // 3600):02d}:{int(secs // 60 % 60):02d}:{int(secs % 60):02d}"
+    place(extra, text_img(ts, "Medium", H * 0.024, WHITE, tracking=0.06), W - m - H * 0.17, m + H * 0.075, 0.9, anchor="l")
+    place(extra, text_img("CAM 05 · ROBOT CELL · LIVE", "SemiBold", H * 0.024, WHITE, tracking=0.08), m + H * 0.02,
+          H - m - H * 0.035, 0.95, anchor="l")
+    # danger zone on the floor (robot envelope): amber outline, red fill once a person is in it
+    pts = [A(rec, f"cellz_{k}") for k in ("x0y0", "x1y0", "x1y1", "x0y1")]
+    hit = fr >= ROBOT_DETECT
+    if all(pts):
+        poly = [(p[0], p[1]) for p in pts]
+        col = RED if hit else (255, 170, 40)
+        L.line(poly + [poly[0]], col + (230,), 2.2 * s)
+        if hit:
+            fl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            ImageDraw.Draw(fl).polygon(poly, fill=RED + (int(70 * (0.75 + 0.25 * math.sin(fr / 3))),))
+            extra.alpha_composite(fl)
+        lab = "ROBOT ZONE · OCCUPIED" if hit else "ROBOT ZONE · ARMED"
+        tag(extra, lab, poly[3][0] + 8 * s, poly[3][1] - 14 * s, col, s, H, 1.0, size=0.02)
+    v = rec.get("W:W_cell")
+    if v and len(v) >= 5 and v[2] - v[0] > 4 * s:
+        x0, y0, x1, y1 = v[:4]
+        k = smooth((fr - (ROBOT_DETECT - 14)) / 8)
+        if k > 0:
+            col = RED if hit else ORANGE
+            bracket_box(L, (x0 - 4 * s, y0 - 4 * s, x1 + 4 * s, y1 + 4 * s), col + (int(255 * k),), s)
+            tag(extra, "PERSON 0.97", x0, y0 - 16 * s, col, s, H, k, size=0.02)
+    if fr >= ROBOT_RELAY - 14:
+        tag(extra, "RELAY → ROBOT STOP", W * 0.5, H * 0.19, RED, s, H, smooth((fr - ROBOT_RELAY + 14) / 4), size=0.026,
+            anchor="c", weight="Bold")
+
+
+_LOGO = {}
+
+
+def logo_geom(W, H):
+    key = (W, H)
+    if key not in _LOGO:
+        lg = Image.open(LOGO_WHITE).convert("RGBA")
+        k = W * 0.44 / lg.width
+        lg = lg.resize((int(lg.width * k), int(lg.height * k)), Image.LANCZOS)
+        a = np.asarray(lg).astype(np.float32)
+        org = (a[..., 0] > 200) & (a[..., 1] < 170) & (a[..., 2] < 90)
+        arrow, word = a.copy(), a.copy()
+        arrow[..., 3] *= org
+        word[..., 3] *= ~org
+        ox, oy = (W - lg.width) / 2, H * 0.43 - lg.height / 2
+        ys, xs = np.where(org & (a[..., 3] > 100))
+        _LOGO[key] = dict(arrow=arrow, word=word, o=(ox, oy), size=lg.size,
+                          arrow_c=(ox + (xs.min() + xs.max()) / 2, oy + (ys.min() + ys.max()) / 2), arrow_x0=xs.min())
+    return _LOGO[key]
+
+
+def logo_layer(W, H, fr):
+    """The five sites have fused into the orange arrow; the white wordmark wipes on leftwards from it; then the
+    tagline. Returns RGBA or None."""
+    if fr < LOGO_FORM - 2:
+        return None
+    g = logo_geom(W, H)
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ox, oy = g["o"]
+    lw, lh = g["size"]
+    ka = smooth((fr - LOGO_FORM + 2) / 6)
+    arr = g["arrow"].copy()
+    arr[..., 3] *= ka
+    ai = Image.fromarray(arr.astype(np.uint8), "RGBA")
+    flash = clamp(1 - (fr - LOGO_FORM) / 10)
+    if flash > 0:                                    # snap glow as the dots fuse
+        gl = ai.filter(ImageFilter.GaussianBlur(H * 0.02))
+        ga = np.asarray(gl).astype(np.float32)
+        ga[..., 3] *= 2.2 * flash
+        out.alpha_composite(Image.fromarray(np.clip(ga, 0, 255).astype(np.uint8), "RGBA"), (int(ox), int(oy)))
+    out.alpha_composite(ai, (int(ox), int(oy)))
+    u = clamp((fr - LOGO_WORD) / 22)
+    if u > 0:
+        w = g["word"].copy()
+        edge = lerp(g["arrow_x0"], -lw * 0.08, ease_out(u))       # reveal edge travels right -> left
+        xs = np.arange(lw, dtype=np.float32)[None, :]
+        m = np.clip((xs - edge) / (lw * 0.06), 0, 1)
+        w[..., 3] *= m
+        sweep = np.exp(-((xs - edge - lw * 0.03) ** 2) / (2 * (lw * 0.02) ** 2)) * (1 - u)
+        w[..., :3] = np.clip(w[..., :3] + sweep[..., None] * 120, 0, 255)
+        out.alpha_composite(Image.fromarray(w.astype(np.uint8), "RGBA"), (int(ox), int(oy)))
+    k2 = ease_out((fr - HERO_HIT) / 20)
+    if k2 > 0:
+        place(out, text_img("See. Detect. Protect.", "Medium", H * 0.05, (255, 140, 60)), W / 2, oy + lh + H * 0.085, k2)
+    k3 = ease_out((fr - HERO_HIT - 30) / 20)
+    if k3 > 0:
+        place(out, text_img("RAMS AI Camera  ·  with Omnibox Edge", "Medium", H * 0.03, (205, 208, 215)), W / 2,
+              oy + lh + H * 0.16, k3)
+    return out
+
+
 def overlay(W, H, fr, rec, anchors, scan_amt):
     s = H / 720
     sid, a, b = shot_of(fr)
@@ -407,8 +543,6 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
     # --- robot
     if sid == "s5_robot":
         c0, c1 = A(rec, "cam_cell"), A(rec, "obx_cell")
-        if c0 and c1 and ROBOT_DETECT <= fr <= ROBOT_RELAY:
-            pulse(L, c0[:2], c1[:2], (fr - ROBOT_DETECT) / max(1, ROBOT_RELAY - ROBOT_DETECT - 4), CYAN + (255,), s)
         if ROBOT_DETECT <= fr < ROBOT_RELAY:
             tag(extra, "PERSON IN CELL", W * 0.5, H * 0.12, ORANGE, s, H, smooth((fr - ROBOT_DETECT) / 6), size=0.034, anchor="c",
                 weight="Bold")
@@ -421,20 +555,22 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
     if sid == "s6_system":
         sites = (("fk_obx", "MHE · 360° AUTO-STOP"), ("cam_zone", "ZONE · INTRUSION"), ("cam_door", "DOOR · PEOPLE COUNTING"),
                  ("cam_fire", "WAREHOUSE · FIRE"), ("cam_cell", "CELL · ROBOT STOP"))
-        conv = smooth((fr - CONVERGE) / max(1, b - CONVERGE))
+        conv = smooth((fr - CONVERGE) / max(1, LOGO_FORM - CONVERGE))
+        ax, ay = logo_geom(W, H)["arrow_c"]
         for i, (k, lab) in enumerate(sites):
             p = A(rec, k)
-            if not p:
+            if not p or fr >= LOGO_FORM + 2:
                 continue
             al = smooth((fr - f_bar(58) - i * 14) / 12)
-            x, y = lerp(p[0], W / 2, conv), lerp(p[1], H / 2, conv)
+            x, y = lerp(p[0], ax, conv), lerp(p[1], ay, conv)
             if al > 0:
-                L.dot((x, y), (5 + 4 * conv) * s, ORANGE + (int(255 * al),))
+                L.dot((x, y), (5 + 3 * conv) * s, ORANGE + (int(255 * al),))
                 L.arc((x, y), (12 + 10 * math.sin(fr / 6 + i)) * s, 0, 360, ORANGE + (int(120 * al * (1 - conv)),), 1.2 * s)
                 if conv < 0.12:          # gone before the converging sites crowd each other
                     tag(extra, lab, x + 16 * s, y - 16 * s, WHITE, s, H, al * (1 - conv / 0.12), size=0.022, flip_x=x - 16 * s)
-        if conv > 0.6:
-            L.dot((W / 2, H / 2), lerp(4, 22, (conv - 0.6) / 0.4) * s, (255, 245, 235, int(255 * (conv - 0.6) / 0.4)))
+    use_case_badge(extra, W, H, fr)
+    if ROBOT_POV <= fr < ROBOT_RELAY:
+        pov_hud(L, extra, W, H, fr, rec)
     img = L.result(glow=0.9)
     img = Image.alpha_composite(img, extra)
     return img
@@ -457,34 +593,19 @@ def titles(W, H, fr, im):
     if f_bar(5.6) <= fr <= f_bar(7.0):
         k = ease_out((fr - f_bar(5.6)) / 20)
         out = clamp((f_bar(6.9) - fr) / 8)
-        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.06, WHITE, tracking=lerp(0.4, 0.18, k)), W * 0.24, H * 0.46, k * out)
+        place(L, text_img("RAMS AI Camera", "Bold", H * 0.095, WHITE, tracking=lerp(0.05, 0.0, k)), W * 0.065, H * 0.45, k * out,
+              anchor="l")
         k2 = ease_out((fr - f_bar(6.0)) / 16)
-        place(L, text_img("One camera. Every safety scenario.", "Medium", H * 0.038, (215, 218, 224)), W * 0.24, H * 0.54, k2 * out)
-    # hero
-    if fr >= HERO_HIT:
-        k = ease_out((fr - HERO_HIT - 6) / 24)
-        out = clamp((RENDER_END - fr) / 12)
-        place(L, text_img("RAMS AI CAMERA", "Bold", H * 0.055, WHITE, tracking=lerp(0.35, 0.16, k)), W * 0.22, H * 0.40, k * out)
-        k2 = ease_out((fr - HERO_HIT - 40) / 24)
-        place(L, text_img("See. Detect. Protect.", "Medium", H * 0.042, (255, 140, 60)), W * 0.22, H * 0.49, k2 * out)
-        k3 = ease_out((fr - HERO_HIT - 80) / 24)
-        place(L, text_img("with Omnibox Edge", "Medium", H * 0.036, (215, 218, 225)), W * 0.22, H * 0.565, k3 * out)
+        place(L, text_img("One camera. Every safety scenario.", "Medium", H * 0.042, (215, 218, 224)), W * 0.068, H * 0.565,
+              k2 * out, anchor="l")
     return L
 
 
 def end_card(W, H, fr):
-    lg = Image.open(LOGO_WHITE).convert("RGBA")
-    sc = W * 0.34 / lg.width
-    lg = lg.resize((int(lg.width * sc), int(lg.height * sc)), Image.LANCZOS)
-    t = fr - RENDER_END
-    k = smooth(t / 30)
     out = Image.new("RGBA", (W, H), (0, 0, 0, 255))
-    a = np.asarray(lg, np.float32)
-    xs = np.arange(lg.width, dtype=np.float32)[None, :] / lg.width
-    sweep = np.exp(-((xs - lerp(-0.3, 1.3, clamp((t - 10) / 50))) ** 2) / 0.01)
-    a[..., :3] = np.clip(a[..., :3] * (0.85 + 0.15 * k) + sweep[..., None] * 70, 0, 255)
-    a[..., 3] *= k
-    out.alpha_composite(Image.fromarray(a.astype(np.uint8), "RGBA"), ((W - lg.width) // 2, (H - lg.height) // 2))
+    lg = logo_layer(W, H, fr)
+    if lg is not None:
+        out.alpha_composite(lg)
     fade = clamp((N - fr) / 30)
     return Image.fromarray((np.asarray(out.convert("RGB"), np.float32) * fade).astype(np.uint8))
 
@@ -505,14 +626,22 @@ def frame(src, fr, size, rng, anchors):
         arr = arr * smooth(abs(fr - c + 0.5) / 14)
     if fr <= 24:
         arr = arr * smooth(fr / 24)
-    h0 = S["s7_hero"][0]
-    if h0 <= fr < h0 + 18:                       # the converged point opens into the hero
-        arr = arr * smooth((fr - h0) / 18)
     if sid == "s6_system" and fr > CONVERGE:
-        arr = arr * (1 - 0.85 * smooth((fr - CONVERGE) / max(1, b - CONVERGE)))
+        arr = arr * (1 - smooth((fr - CONVERGE) / max(1, LOGO_FORM - CONVERGE)))
+    if ROBOT_POV <= fr < ROBOT_RELAY:               # camera feed look: cooler, flatter, vignetted, a little noise
+        g_ = arr.mean(2, keepdims=True)
+        arr = arr * 0.8 + g_ * 0.2
+        arr = arr * np.array([0.96, 1.0, 1.04], np.float32)
+        hh, ww = arr.shape[:2]
+        yy, xx = np.mgrid[0:hh, 0:ww].astype(np.float32)
+        r2 = ((xx / ww - 0.5) ** 2 + (yy / hh - 0.5) ** 2) / 0.5
+        arr = arr * (1 - 0.35 * r2[..., None]) + rng.standard_normal(arr.shape[:2])[..., None].astype(np.float32) * 0.012
     out = Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8)).convert("RGBA")
     rec = anchors.get(str(fr)) or anchors.get(str(fr - 1)) or {}
     out = Image.alpha_composite(out, overlay(W, H, fr, rec, anchors, amt))
+    lg = logo_layer(W, H, fr)
+    if lg is not None:
+        out = Image.alpha_composite(out, lg)
     out = Image.alpha_composite(out, titles(W, H, fr, out))
     return out.convert("RGB")
 

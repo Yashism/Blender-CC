@@ -21,8 +21,8 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE))
 from apps import actors, assets, kit, world  # noqa: E402
 from apps.timing import (CELL, CONVERGE, CROSS_AISLE, DOOR, DOOR_NIGHT, FIRE, FIRE_DETECT, FIRE_FLAME,  # noqa: E402
-                         FIRE_SMOKE, FLOOR, FPS, HERO_HIT, MHE_AISLE_Y, MHE_CLEAR, MHE_DETECT, MHE_RELAY, MHE_STOP,
-                         RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_RELAY, ROBOT_RESUME, S, SHOTS,
+                         FIRE_SMOKE, FLOOR, FPS, HERO_HIT, MHE_AISLE_Y, MHE_CLEAR, MHE_DETECT, MHE_RELAY, MHE_REVERSE, MHE_STOP,
+                         RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_POV, ROBOT_RELAY, ROBOT_RESUME, S, SHOTS,
                          ZONE, ZONE_CLEAR, ZONE_CROSS, f_bar)
 from launch.film import backdrop  # noqa: E402
 from lib import geo, studio  # noqa: E402
@@ -268,7 +268,7 @@ def build(args):
         "zone": ((zc_[0] + 0.16 + 0.05, zc_[1], FLOOR + 1.7), 0.0),
         "fire": ((fc_[0] + 0.16 + 0.05, fc_[1], FLOOR + 1.7), 0.0),
         "door": ((DOOR["x"] + 1.1, -12.62 + 0.05, FLOOR + 1.7), math.pi / 2),
-        "cell": ((CELL["x0"] - 0.05, CELL["door_y"][1] + 0.7, FLOOR + 1.7), math.pi),
+        "cell": ((CELL["x0"] - 0.05, CELL["door_y"][0] - 0.7, FLOOR + 1.7), math.pi),
     }
     for key, (loc, yaw) in mounts_.items():
         e = obx_instance(f"obx_{key}", loc, yaw + math.pi / 2)
@@ -312,9 +312,30 @@ def build(args):
     ring_m, ring_em = fan_material("zone_ring_m", WHITE, 3.0, falloff=1e6)
     ring_m.node_tree.nodes["Map Range"].inputs["To Min"].default_value = 0.85
     L = FK["length"]
-    ring = ring_strip("FK_zone_ring", L + 3.0, 1.3 + 3.0, 1.2, 0.09, fkc, ring_m)
+    RL, RW = L + 3.8, 1.3 + 3.0                       # the zone reaches further behind the truck (direction of travel)
+    ring = ring_strip("FK_zone_ring", RL, RW, 1.2, 0.09, fkc, ring_m)
     ring.parent = fk
-    ring.location = ((FK["front_x"] + FK["rear_x"]) / 2 + 0.25, 0, 0.012)
+    ring.location = ((FK["front_x"] + FK["rear_x"]) / 2 + 0.65, 0, 0.012)
+    # translucent red fill: the danger area reads as an area while reversing, full red on detection
+    import bmesh
+    bm = bmesh.new()
+    bm.faces.new([bm.verts.new((p_[0], p_[1], 0)) for p_ in geo.rounded_rect(RL - 0.1, RW - 0.1, 1.15, 8)])
+    zf_me = bpy.data.meshes.new("FK_zone_fill")
+    bm.to_mesh(zf_me)
+    bm.free()
+    zfill_m, zfill_em = fan_material("fk_zone_fill_m", RED, 1.0, falloff=1e6)
+    zf_me.materials.append(zfill_m)
+    zfill = bpy.data.objects.new("FK_zone_fill", zf_me)
+    fkc.objects.link(zfill)
+    zfill.parent = fk
+    zfill.location = (ring.location.x, 0, 0.009)
+    zf_tm2 = zfill_m.node_tree.nodes["Map Range"].inputs["To Min"]
+    for fr, v, e in [(1, 0.0, 0.0), (MHE_REVERSE[0] - 12, 0.0, 0.0), (MHE_REVERSE[0] + 6, 0.16, 0.8), (MHE_DETECT, 0.16, 0.8),
+                     (MHE_DETECT + 3, 0.34, 2.2), (MHE_CLEAR, 0.34, 2.2), (MHE_CLEAR + 10, 0.0, 0.0)]:
+        zf_tm2.default_value = v
+        zf_tm2.keyframe_insert("default_value", frame=fr)
+        zfill_em.inputs["Strength"].default_value = e
+        zfill_em.inputs["Strength"].keyframe_insert("default_value", frame=fr)
     fans = []
     fan_m, fan_em = fan_material("fov_fan_m", (0.75, 0.88, 1.0), 0.9, falloff=3.4)
     for i, c in enumerate(FK["cams"]):
@@ -330,6 +351,7 @@ def build(args):
         fans.append(f)
     vis(fans, [(f_bar(11.2), S["s1c_detect"][1])])
     vis([ring], [(f_bar(12.6), S["s1d_stop"][1])])
+    vis([zfill], [(MHE_REVERSE[0] - 14, S["s1d_stop"][1])])
     for f in fans:
         for fc in _fcurves(f.animation_data.action):
             if fc.data_path == "scale":
@@ -345,7 +367,7 @@ def build(args):
 
     # ---- workers
     w1 = actors.worker("W_mhe", act, variant=0)
-    wx = -7.7
+    wx = -8.9                                          # through the cross aisle, into the reversing zone
     look1 = lambda fr: math.radians(55) * smooth((fr - MHE_RELAY) / 10) * (1 - smooth((fr - MHE_CLEAR + 20) / 14))
     actors.walk(w1, [(wx, -0.6), (wx, -4.4), (wx, -5.5)], 646, MHE_CLEAR - 32, speed=1.35, z=FLOOR, tfn=tau, look=look1)
     actors.walk(w1, [(wx, -5.5), (wx - 0.1, -10.6), (wx - 2.0, -11.6)], MHE_CLEAR - 31, S["s1d_stop"][1] + 2, speed=1.35,
@@ -384,7 +406,7 @@ def build(args):
     w4 = actors.worker("W_cell", act, variant=3)
     cd0, cd1 = CELL["door_y"]
     cdy = (cd0 + cd1) / 2
-    inside = (CELL["x0"] + 1.3, cdy - 0.2)
+    inside = (CELL["x0"] + 0.9, cdy - 0.35)
     actors.walk(w4, [(CELL["x0"] - 5.0, cdy - 1.6), (CELL["x0"] - 1.2, cdy), inside], ROBOT_ENTER - 70, ROBOT_RELAY + 20,
                 speed=1.15, z=FLOOR)
     actors.walk(w4, [inside, (CELL["x0"] - 1.0, cdy), (CELL["x0"] - 4.0, cdy - 2.0)], ROBOT_CLEAR - 50, S["s6_system"][1],
@@ -397,7 +419,9 @@ def build(args):
     R = actors.robot(rc, (CELL["robot"][0], CELL["robot"][1], FLOOR), P)
     for o in R["objs"]:
         o.pass_index = 5
-    st = actors.robot_program(R, S["s5_robot"][0] - 30, S["s6_system"][1], ROBOT_RELAY, ROBOT_RESUME)
+    st = actors.weld_program(R, (CELL["robot"][0], CELL["robot"][1], FLOOR), W["cell"]["seam"], S["s5_robot"][0] - 30,
+                             S["s6_system"][1], ROBOT_RELAY, ROBOT_RESUME)
+    actors.weld_bead(rc, W["cell"]["seam"], st)
     actors.sparks(R, rc, st)
     kit.key_emission(W["cell"]["lamp_m"], [(1, 6.0)], [(1, GREEN), (ROBOT_RELAY, RED), (ROBOT_CLEAR, GREEN)], "CONSTANT")
     kit.key_emission(W["cell"]["bar_m"], [(1, 6.0)], [(1, GREEN), (ROBOT_DETECT, ORANGE), (ROBOT_RELAY, RED), (ROBOT_CLEAR, GREEN)],
@@ -585,7 +609,8 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
             d_ = V((math.sin(ang), -math.cos(ang), 0.0))
             loc = loc.lerp(lens_now + d_ * 0.011, u3)
             tgt = tgt.lerp(lens_now, u3)
-        return loc, tgt, (lens_c if fr < f_bar(4.5) else (body_c if fr < f_bar(7.2) else lens_now)), hermite([(f, l) for f, _, _, l in K], fr)
+        glass = lens_c + V((0.0, -0.009, 0.0))               # focus on the front glass/rim, not inside the barrel
+        return loc, tgt, (glass if fr < f_bar(4.5) else (body_c if fr < f_bar(7.2) else lens_now)), hermite([(f, l) for f, _, _, l in K], fr)
 
     def s1a(fr, t):
         tp = T(fr)
@@ -658,17 +683,25 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         tgt = hermite([(f, p) for f, _, p, _ in K], fr)
         return loc, tgt, src + V((0, 0, 0.6)), hermite([(f, l) for f, _, _, l in K], fr)
 
-    S5_END = (V((15.5, CELL["y0"] + 0.7, FLOOR + 2.4)), V((15.6, -3.1, FLOOR + 0.9)))
+    S5_END = (V((CELL["x0"] + 0.35, CELL["y0"] + 0.35, FLOOR + 2.5)), V((16.9, -2.5, FLOOR + 0.85)))
+    cam_cell = W["cell"]["cam"]
+    _ce = cam_cell.rotation_euler
+    _yaw = _ce.z - math.pi / 2
+    _p = math.radians(30)
+    CELL_DIR = V((math.cos(_yaw) * math.cos(_p), math.sin(_yaw) * math.cos(_p), -math.sin(_p)))
 
     def s5(fr, t):
         a, b = S["s5_robot"]
+        if ROBOT_POV <= fr < ROBOT_RELAY:              # the RAMS camera's own view (feed HUD added in post)
+            eye = ccam + V((0, 0, 0.02)) + CELL_DIR * 0.07
+            return eye, eye + CELL_DIR * 3.0, eye + CELL_DIR * 3.0, 15.0
         dc = V((CELL["x0"] + 0.4, (CELL["door_y"][0] + CELL["door_y"][1]) / 2, FLOOR + 1.2))
         k = [(a, V((CELL["x0"] - 2.6, CELL["y1"] + 2.4, FLOOR + 5.4)), rob, 28),           # over the weld screens
              (a + 120, V((CELL["x1"] - 1.2, CELL["y1"] + 2.0, FLOOR + 4.8)), rob, 30),
              (ROBOT_ENTER - 60, V((ccam.x - 0.2, ccam.y + 3.0, ccam.z + 2.0)), dc.lerp(rob, 0.5), 26),   # behind the cell camera
              (ROBOT_RELAY, V((ccam.x - 0.5, ccam.y + 2.7, ccam.z + 1.8)), dc.lerp(rob, 0.5), 26),
-             (ROBOT_RELAY + 1, S5_END[0] + V((0.3, -0.2, 0.2)), S5_END[1], 21),        # worker + halted robot, both in frame
-             (b, S5_END[0], S5_END[1], 21)]
+             (ROBOT_RELAY + 1, S5_END[0] + V((0.25, 0.15, 0.15)), S5_END[1], 19),      # worker + halted robot, both in frame
+             (b, S5_END[0], S5_END[1], 19)]
         if fr <= ROBOT_RELAY:
             kk = k[:4]
         else:
@@ -686,7 +719,7 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         p2 = V((-28.0, -48.0, 46.0))
         loc = vl(p0, p1, smooth(u / 0.35)).lerp(p2, smooth((u - 0.25) / 0.75))
         tgt = vl(S5_END[1], V((0.0, 0.0, FLOOR)), smooth((u - 0.1) / 0.6))
-        return loc, tgt, tgt, lerp(21, 28, smooth(u))
+        return loc, tgt, tgt, lerp(19, 28, smooth(u))
 
     def s7(fr, t):
         u = smooth(t)
@@ -694,7 +727,7 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
         tgt = body_c + V((-0.005, 0.05, -0.005))
         return loc, tgt, body_c, 50
 
-    FN = {"s0_open": (s0, 8.0), "s1a_crane": (s1a, 8.0), "s1b_cones": (s1b, 11.0), "s1c_detect": (s1c, 5.6),
+    FN = {"s0_open": (s0, 40.0), "s1a_crane": (s1a, 8.0), "s1b_cones": (s1b, 11.0), "s1c_detect": (s1c, 5.6),
           "s1d_stop": (s1d, 8.0), "s2_zone": (s2, 8.0), "s3_door": (s3, 11.0), "s4_fire": (s4, 5.6),
           "s5_robot": (s5, 8.0), "s6_system": (s6, 16.0), "s7_hero": (s7, 8.0)}
     out = {}
@@ -777,6 +810,9 @@ def anchor_track(s, frames, W_, H_, ctx):
         for k_ in ("x0", "x1"):
             for kk in ("y0", "y1"):
                 put(f"zone_{k_}{kk}", V((ZONE[k_], ZONE[kk], FLOOR)))
+        for k_, xv in (("x0", CELL["x0"] + 0.5), ("x1", CELL["x1"] - 0.2)):
+            for kk, yv in (("y0", CELL["y0"] + 0.2), ("y1", CELL["y1"] - 0.2)):
+                put(f"cellz_{k_}{kk}", V((xv, yv, FLOOR + 0.01)))
         for i, (b_, m_, p_) in enumerate(W["fire"]["bars"]):
             put(f"firebar{i}", b_.matrix_world.translation)
         for J in ctx["workers"]:

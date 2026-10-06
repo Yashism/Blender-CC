@@ -105,15 +105,12 @@ def main():
         put(L, tone(880 if k % 2 == 0 else 660, 0.24, "square", r=0.02), x, 0.07)
         x += 0.25
         k += 1
-    # welding crackle (program time pauses while frozen; weld passes are 30 frames in every 44)
-    f0 = S["s5_robot"][0] - 30
-    pt = 0
+    # welding crackle: exactly when the robot's arc is lit (shared program clock; pauses while frozen)
+    from apps.timing import weld_clock, weld_plan
+    plan = weld_plan()
     crack = np.zeros_like(L)
-    for fr in range(f0, S["s6_system"][1] + 1):
-        if not (ROBOT_RELAY <= fr < ROBOT_RESUME):
-            pt += 1
-        welding = (pt % 44) < 30 and not (ROBOT_RELAY <= fr < ROBOT_RESUME)
-        if not welding:
+    for fr, idx, _, frozen in weld_clock(S["s5_robot"][0] - 30, S["s6_system"][1], ROBOT_RELAY, ROBOT_RESUME):
+        if frozen or plan[idx][0] != "weld":
             continue
         i0 = int(t(fr) * SR)
         n = int(SR / FPS)

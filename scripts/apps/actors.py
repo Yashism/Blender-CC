@@ -226,125 +226,278 @@ def robot(coll, loc, P):
     return R
 
 
-def robot_program(R, f0, f1, freeze, resume, seed=3):
-    """Weld cycle keyed per frame: fast moves between seam points, slow weld passes. Holds still while frozen.
-    Returns list of (frame, welding?) for sparks/light."""
-    rng = random.Random(seed)
-    poses = []
-    for k in range(42):                           # enough weld passes for the whole cell sequence (30 + 14 frames each)
-        a1 = math.radians(rng.uniform(-150, -110) if k % 2 else rng.uniform(-205, -165))
-        poses.append((a1, math.radians(rng.uniform(20, 38)), math.radians(rng.uniform(30, 55)),
-                      math.radians(rng.uniform(25, 50))))
-    # timeline (in "program time" that pauses while frozen)
-    segs = []                                     # (duration frames, pose_a, pose_b, welding)
-    for k in range(len(poses) - 1):
-        a, b = poses[k], poses[k + 1]
-        weld_end = (a[0] + math.radians(12), a[1] + math.radians(3), a[2] - math.radians(4), a[3])
-        segs.append((30, a, weld_end, True))
-        segs.append((14, weld_end, b, False))
-    states = []
-    pt = 0.0
-    for fr in range(f0, f1 + 1):
-        if freeze <= fr < resume:
-            pass
+# ---- weld cell: inverse kinematics along a real seam -------------------------------------------------------------
+# chain (robot local, see robot()): j1 yaw at base+0.45; j2 pitch at (0.12, 0, 0.42); lower link 1.05 along +Z;
+# j3 pitch; upper link (0.92, 0.08); j5 pitch; torch tip at (0.31, 0, -0.29); nozzle axis (0.04, 0, -0.12).
+_L1 = 1.05
+_U = (0.92, 0.08)
+_TIP = (0.31, -0.29)
+_NOZ = math.atan2(-0.12, 0.04)
+
+
+def _rz(a, x, z):
+    """Pitch about local Y (Blender): (x, z) -> (x cos a + z sin a, -x sin a + z cos a)."""
+    return x * math.cos(a) + z * math.sin(a), -x * math.sin(a) + z * math.cos(a)
+
+
+def ik(base, target, work_deg=45.0):
+    """Joint angles (q0..q3) putting the torch tip on `target` with the nozzle pointing away from the robot and
+    down at `work_deg` below horizontal (fillet weld into the corner)."""
+    bx, by, bz = base
+    tx, ty, tz = target
+    q0 = math.atan2(ty - by, tx - bx)
+    r_t = math.hypot(tx - bx, ty - by)
+    z_t = tz - (bz + 0.45 + 0.42)
+    a3 = _NOZ + math.radians(work_deg)             # world nozzle angle = _NOZ - a3  ->  -work_deg
+    tr, tz_ = _rz(a3, *_TIP)
+    wr, wz = r_t - 0.12 - tr, z_t - tz_            # wrist (j5) in the j2 plane
+    L2 = math.hypot(*_U)
+    d = max(1e-6, math.hypot(wr, wz))
+    c = max(-1.0, min(1.0, (_L1 ** 2 + d * d - L2 ** 2) / (2 * _L1 * d)))
+    th1 = math.atan2(wz, wr) + math.acos(c)        # elbow up
+    er, ez = wr - _L1 * math.cos(th1), wz - _L1 * math.sin(th1)
+    th2 = math.atan2(ez, er)
+    q1 = math.pi / 2 - th1
+    a2 = math.atan2(_U[1], _U[0]) - th2
+    return q0, q1, a2 - q1, a3 - a2
+
+
+def weld_program(R, base, seam, f0, f1, freeze, resume):
+    """Stitch-weld the seam (timing.weld_plan: re-strike where the last stitch ended), go home, repeat as further
+    passes; holds still while frozen. Returns per frame: frame, welding, tip (world), u (0..1 along seam), passes."""
+    import mathutils
+    from apps.timing import weld_clock, weld_plan
+    plan = weld_plan()
+    n = max(k for kind, _, k in plan if kind == "weld") + 1
+    s0, s1 = mathutils.Vector(seam[0]), mathutils.Vector(seam[1])
+    up = mathutils.Vector((0.0, 0.0, 0.06))
+    back = mathutils.Vector((0.07, 0.0, 0.0))      # lift-off: up and away from the web
+    home = (s0 + s1) / 2 + mathutils.Vector((0.25, 0.0, 0.38))
+    ends = []                                       # (start, end, u_a, u_b) of every step
+    prev = home
+    for kind, d, k in plan:
+        ua = ub = None
+        if kind == "in":
+            end = s0 + up + back
+        elif kind == "approach":
+            end = s0.lerp(s1, k / n)
+        elif kind == "weld":
+            ua, ub = k / n, (k + 1) / n
+            end = s0.lerp(s1, ub)
+        elif kind == "lift":
+            end = s0.lerp(s1, (k + 1) / n) + up + back
+        elif kind == "out":
+            end = home
         else:
-            pt += 1.0
-        acc = 0.0
-        cur = segs[-1]
-        u = 1.0
-        for sg in segs:
-            if pt < acc + sg[0]:
-                cur, u = sg, (pt - acc) / sg[0]
-                break
-            acc += sg[0]
-        dur, a, b, weld = cur
-        e = u if weld else u * u * (3 - 2 * u)
-        q = [a[i] + (b[i] - a[i]) * e for i in range(4)]
+            end = home
+        ends.append((prev, end, ua, ub))
+        prev = end
+    out = []
+    for fr, idx, u, frozen in weld_clock(f0, f1, freeze, resume):
+        kind = plan[idx][0]
+        pa, pb, ua, ub = ends[idx]
+        w = kind == "weld"
+        e = u if w else u * u * (3 - 2 * u)
+        tip = pa.lerp(pb, e)
+        q = ik(base, tip)
         R["j1"].rotation_euler = (0, 0, q[0])
         R["j2"].rotation_euler = (0, q[1], 0)
         R["j3"].rotation_euler = (0, q[2], 0)
         R["j5"].rotation_euler = (0, q[3], 0)
-        for j in ("j1", "j2", "j3", "j5"):
-            R[j].keyframe_insert("rotation_euler", frame=fr)
-        states.append((fr, weld and not (freeze <= fr < resume)))
-    return states
+        for jn in ("j1", "j2", "j3", "j5"):
+            R[jn].keyframe_insert("rotation_euler", frame=fr)
+        passes = sum(1 for kd, _, _ in plan[:idx] if kd == "wait")
+        out.append(dict(frame=fr, welding=w and not frozen, tip=tip.copy(), u=(ua + (ub - ua) * u) if w else None,
+                        passes=passes))
+    return out
+
+
+def weld_bead(coll, seam, states, name="weld_bead"):
+    """Fillet bead along the seam: grows behind the torch on the first pass, glows orange where fresh and cools
+    to dark steel; later passes re-heat it."""
+    import mathutils
+    s0, s1 = mathutils.Vector(seam[0]), mathutils.Vector(seam[1])
+    L = (s1 - s0).length
+    me = bpy.data.meshes.new(name)
+    import bmesh
+    bm = bmesh.new()
+    seg = 48
+    ring = 8
+    r = 0.0075
+    rows = []
+    for i in range(seg + 1):
+        y = L * i / seg
+        row = []
+        for k in range(ring + 1):                  # a quarter-ish round filling the corner (+x, +z)
+            a = math.radians(-10 + 110 * k / ring)
+            row.append(bm.verts.new((r * math.cos(a), y, r * math.sin(a))))
+        rows.append(row)
+    for i in range(seg):
+        for k in range(ring):
+            bm.faces.new((rows[i][k], rows[i + 1][k], rows[i + 1][k + 1], rows[i][k + 1]))
+    bm.to_mesh(me)
+    bm.free()
+    for poly in me.polygons:
+        poly.use_smooth = True
+    ob = bpy.data.objects.new(name, me)
+    coll.objects.link(ob)
+    ob.location = s0
+    ob.rotation_euler.z = math.atan2(s1.y - s0.y, s1.x - s0.x) - math.pi / 2
+    m = bpy.data.materials.new(name + "_m")
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = (0.16, 0.15, 0.14, 1)
+    bsdf.inputs["Metallic"].default_value = 0.85
+    bsdf.inputs["Roughness"].default_value = 0.42
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(tc.outputs["Generated"], sep.inputs[0])
+    v_rev = nt.nodes.new("ShaderNodeValue")         # revealed length (0..1)
+    v_hot = nt.nodes.new("ShaderNodeValue")         # torch position (0..1)
+    v_amt = nt.nodes.new("ShaderNodeValue")         # glow amount (welding)
+
+    def M(op, a=None, b=None):
+        n = nt.nodes.new("ShaderNodeMath")
+        n.operation = op
+        if a is not None:
+            n.inputs[0].default_value = a
+        if b is not None:
+            n.inputs[1].default_value = b
+        return n
+    # visible where y < reveal
+    vis = M("LESS_THAN")
+    nt.links.new(sep.outputs[1], vis.inputs[0])
+    nt.links.new(v_rev.outputs[0], vis.inputs[1])
+    # heat: just behind the torch, decaying over ~12 cm
+    dd = M("SUBTRACT")
+    nt.links.new(v_hot.outputs[0], dd.inputs[0])
+    nt.links.new(sep.outputs[1], dd.inputs[1])
+    beh = M("GREATER_THAN", None, -0.004)
+    nt.links.new(dd.outputs[0], beh.inputs[0])
+    sc = M("MULTIPLY", None, -L / 0.06)
+    nt.links.new(dd.outputs[0], sc.inputs[0])
+    ex = M("EXPONENT")
+    nt.links.new(sc.outputs[0], ex.inputs[0])
+    mn = M("MINIMUM", None, 1.0)
+    nt.links.new(ex.outputs[0], mn.inputs[0])
+    h1 = M("MULTIPLY")
+    nt.links.new(mn.outputs[0], h1.inputs[0])
+    nt.links.new(beh.outputs[0], h1.inputs[1])
+    h2 = M("MULTIPLY")
+    nt.links.new(h1.outputs[0], h2.inputs[0])
+    nt.links.new(v_amt.outputs[0], h2.inputs[1])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    cr = ramp.color_ramp
+    cr.elements[0].color = (0.6, 0.06, 0.0, 1)
+    cr.elements[1].color = (1.0, 0.85, 0.5, 1)
+    nt.links.new(h2.outputs[0], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs[0], bsdf.inputs["Emission Color"])
+    st = M("MULTIPLY", None, 30.0)
+    nt.links.new(h2.outputs[0], st.inputs[0])
+    nt.links.new(st.outputs[0], bsdf.inputs["Emission Strength"])
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    out = nt.nodes["Material Output"]
+    nt.links.new(vis.outputs[0], mix.inputs["Fac"])
+    nt.links.new(tr.outputs[0], mix.inputs[1])
+    nt.links.new(bsdf.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs["Surface"])
+    me.materials.append(m)
+    rev = 0.0
+    hot = 0.0
+    amt = 0.0
+    for stt in states:
+        if stt["u"] is not None:
+            hot = stt["u"]
+            if stt["passes"] == 0:
+                rev = max(rev, stt["u"])
+        if stt["passes"] > 0:
+            rev = 1.0
+        amt = amt * 0.88 + (0.12 if stt["welding"] else 0.0) if not stt["welding"] else 1.0
+        for node, v in ((v_rev, rev), (v_hot, hot), (v_amt, amt)):
+            node.outputs[0].default_value = v
+            node.outputs[0].keyframe_insert("default_value", frame=stt["frame"])
+    return ob
 
 
 def sparks(R, coll, states):
-    """Weld sparks (particles from the torch tip) + arc light, visible only while welding."""
+    """Arc + weld spatter at the torch tip: a small blue-white arc core, flickering arc light, and short-lived
+    sparks thrown up and back off the plate (emitted only while welding)."""
+    import mathutils
     em = bpy.data.meshes.new("spark_emitter")
     import bmesh
     bm = bmesh.new()
-    bmesh.ops.create_icosphere(bm, subdivisions=1, radius=0.01)
+    bmesh.ops.create_icosphere(bm, subdivisions=1, radius=0.004)
     bm.to_mesh(em)
     bm.free()
     emo = bpy.data.objects.new("spark_emitter", em)
     coll.objects.link(emo)
-    emo.parent = R["tip"]
-    sm = kit.emissive("spark_hot", (1.0, 0.62, 0.22), 40.0)
-    spark = geo.box("spark_inst", (0.012, 0.003, 0.003), mat=sm, coll=coll, bevel=0)
+    sm = kit.emissive("spark_hot", (1.0, 0.6, 0.2), 30.0)
+    spark = geo.box("spark_inst", (0.016, 0.0025, 0.0025), mat=sm, coll=coll, bevel=0)
     spark.hide_render = spark.hide_viewport = True
     ps = emo.modifiers.new("sparks", "PARTICLE_SYSTEM").particle_system
     st = ps.settings
-    st.count = 6000
-    st.frame_start = states[0][0]
-    st.frame_end = states[-1][0]
-    st.lifetime = 9
-    st.lifetime_random = 0.6
+    st.count = 9000
+    st.frame_start = states[0]["frame"]
+    st.frame_end = states[-1]["frame"]
+    st.lifetime = 10
+    st.lifetime_random = 0.7
     st.emit_from = "VERT"
-    st.normal_factor = 2.2
-    st.factor_random = 2.0
+    st.normal_factor = 0.0
+    st.object_align_factor = (0.9, 0.0, 1.3)        # off the web (+x) and up
+    st.factor_random = 1.4
     st.render_type = "OBJECT"
     st.instance_object = spark
     st.particle_size = 1.0
-    st.size_random = 0.6
+    st.size_random = 0.7
     st.use_rotations = True
     st.rotation_mode = "VEL"
+    st.effector_weights.gravity = 1.0
     emo.show_instancer_for_render = False
-    # visibility of sparks + arc light follow the welding state (material strength + light energy)
-    b = sm.node_tree.nodes["Principled BSDF"]
-    mix_keys = []
+    hidden = mathutils.Vector((0.0, 0.0, -60.0))
+    for stt in states:                              # the emitter sits at the arc while welding, underground otherwise
+        emo.location = stt["tip"] if stt["welding"] else hidden
+        emo.keyframe_insert("location", frame=stt["frame"])
+    from lib.rig import _fcurves
+    for fc in _fcurves(emo.animation_data.action):
+        for kp in fc.keyframe_points:
+            kp.interpolation = "CONSTANT"
+    # arc core (tiny, intense) + arc light, both flicker while welding
+    core_m = kit.emissive("arc_core", (0.75, 0.88, 1.0), 400.0)
+    core = geo.uv_sphere("arc_core", 0.008, mat=core_m, coll=coll) if hasattr(geo, "uv_sphere") else None
+    if core is None:
+        cm = bpy.data.meshes.new("arc_core")
+        bm = bmesh.new()
+        bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.012)
+        bm.to_mesh(cm)
+        bm.free()
+        cm.materials.append(core_m)
+        core = bpy.data.objects.new("arc_core", cm)
+        coll.objects.link(core)
+    core.parent = R["tip"]
     arc = bpy.data.lights.new("arc_L", "POINT")
-    arc.color = (0.55, 0.75, 1.0)
-    arc.shadow_soft_size = 0.02
+    arc.color = (0.6, 0.78, 1.0)
+    arc.shadow_soft_size = 0.01
     arc_o = bpy.data.objects.new("arc_L", arc)
     coll.objects.link(arc_o)
     arc_o.parent = R["tip"]
+    arc_o.location = (0.03, 0, 0.03)
     rng = random.Random(5)
-    prev = None
-    for fr, w in states:
-        v = 40.0 if w else 0.0
-        if w != prev:
-            b.inputs["Emission Strength"].default_value = v
-            b.inputs["Emission Strength"].keyframe_insert("default_value", frame=fr)
-        prev = w
-        arc.energy = (rng.uniform(25, 70) if w else 0.0)
-        arc.keyframe_insert("energy", frame=fr)
-    from lib.rig import _fcurves
-    for fc in _fcurves(sm.node_tree.animation_data.action):
-        for kp in fc.keyframe_points:
-            kp.interpolation = "CONSTANT"
-    # hide spark particles while not welding: alpha through a mix with transparent
-    nt = sm.node_tree
-    out = next(n for n in nt.nodes if n.type == "OUTPUT_MATERIAL")
-    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
-    mix = nt.nodes.new("ShaderNodeMixShader")
-    nt.links.new(b.outputs[0], mix.inputs[2])
-    nt.links.new(tr.outputs[0], mix.inputs[1])
-    nt.links.new(mix.outputs[0], out.inputs["Surface"])
-    prev = None
-    for fr, w in states:
-        if w != prev:
-            mix.inputs["Fac"].default_value = 1.0 if w else 0.0
-            mix.inputs["Fac"].keyframe_insert("default_value", frame=fr)
-        prev = w
-    for fc in _fcurves(nt.animation_data.action):
-        for kp in fc.keyframe_points:
-            kp.interpolation = "CONSTANT"
+    for stt in states:
+        w = stt["welding"]
+        k = rng.uniform(0.7, 1.3) if w else 0.0
+        core.scale = (k, k, k)
+        core.keyframe_insert("scale", frame=stt["frame"])
+        arc.energy = rng.uniform(60, 140) if w else 0.0
+        arc.keyframe_insert("energy", frame=stt["frame"])
+    for ob in (core,):
+        for fc in _fcurves(ob.animation_data.action):
+            for kp in fc.keyframe_points:
+                kp.interpolation = "CONSTANT"
     return emo, arc_o
 
 
-# ------------------------------------------------------------------------------------ fire
 def _volume_mat(name, kind):
     m = bpy.data.materials.new(name)
     m.use_nodes = True

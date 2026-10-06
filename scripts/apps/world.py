@@ -223,20 +223,33 @@ def robot_cell(coll, P, cam_src):
     wall("cell_e", (x1, y0), (x1, y1))
     wall("cell_s", (x0, y0), (x1, y0))
     wall("cell_n", (x0, y1), (x1, y1))
-    # fixture table (yellow jig like the reference)
-    rx, ry = C["robot"]
-    geo.box("cell_fixture", (2.4, 1.6, 0.75), loc=(rx - 1.9, ry, z + 0.375), mat=P["fixture"], coll=coll, bevel=0.02)
-    geo.box("cell_part", (1.6, 0.9, 0.12), loc=(rx - 1.9, ry, z + 0.81), mat=P["galv"], coll=coll, bevel=0.01)
+    # weld jig + T-joint part (base plate + upright web, clamped); the seam runs along the web's robot-side root
+    fx_, fy_ = C["fixture"]
+    geo.box("cell_fixture", (0.9, 1.5, 0.75), loc=(fx_, fy_, z + 0.375), mat=P["fixture"], coll=coll, bevel=0.02)
+    geo.box("cell_fixture_top", (0.94, 1.54, 0.03), loc=(fx_, fy_, z + 0.765), mat=P["steel_dark"], coll=coll, bevel=0.005)
+    pz = z + 0.78
+    geo.box("cell_part_base", (0.6, 1.1, 0.016), loc=(fx_, fy_, pz + 0.008), mat=P["galv"], coll=coll, bevel=0.002)
+    web_x = fx_ - 0.05
+    geo.box("cell_part_web", (0.014, 1.0, 0.2), loc=(web_x, fy_, pz + 0.016 + 0.1), mat=P["galv"], coll=coll, bevel=0.002)
+    for gy in (-0.36, 0.0, 0.36):                    # gussets on the far side (already welded)
+        geo.box(f"cell_part_gusset{gy}", (0.16, 0.012, 0.12), loc=(web_x - 0.087, fy_ + gy, pz + 0.076), mat=P["galv"],
+                coll=coll, bevel=0.002)
+    for cy_ in (-0.52, 0.52):                        # toggle clamps
+        geo.box(f"cell_clamp{cy_}", (0.1, 0.06, 0.08), loc=(fx_ + 0.2, fy_ + cy_, pz + 0.05), mat=P["machine_dark"], coll=coll,
+                bevel=0.01)
+        geo.box(f"cell_clamp_arm{cy_}", (0.22, 0.03, 0.03), loc=(fx_ + 0.12, fy_ + cy_, pz + 0.1), mat=P["fixture"], coll=coll,
+                bevel=0.005)
+    seam = ((web_x + 0.007, fy_ - 0.46, pz + 0.016), (web_x + 0.007, fy_ + 0.46, pz + 0.016))
     geo.box("cell_floorplate", (x1 - x0 - 0.2, y1 - y0 - 0.2, 0.012), loc=((x0 + x1) / 2, (y0 + y1) / 2, z + 0.006),
             mat=kit.pbr("checker_plate", (0.22, 0.23, 0.24), 0.35, 0.8), coll=coll, bevel=0)
-    cam = assets.camera_instance("cam_cell", cam_src, coll, (x1 - 0.35, (d0 + d1) / 2, z + H + 0.55), (-1, 0), pitch_deg=26)
+    cam = assets.camera_instance("cam_cell", cam_src, coll, (x1 - 0.3, C["cam_y"], z + H + 0.5), (-1, 0.18), pitch_deg=30)
     lamp_m = kit.emissive("cell_lamp_em", (0.1, 1.0, 0.25), 6.0)
     geo.cylinder("cell_lamp_pole", 0.03, 0.5, loc=(x0 - 0.1, d1 + 0.25, z + H + 0.25), mat=P["steel"], coll=coll)
     for i, (col, hh) in enumerate((((1, 0.05, 0.02), 0.0), ((0.1, 1.0, 0.25), 0.12))):
         pass
     lamp = geo.cylinder("cell_lamp", 0.07, 0.24, loc=(x0 - 0.1, d1 + 0.25, z + H + 0.62), mat=lamp_m, coll=coll)
     bar, bar_m = kit.light_bar("cell_bar", (x0 - 0.06, (d0 + d1) / 2, z + H + 0.18), 0.9, rot_z=math.pi / 2, coll=coll)
-    return dict(cam=cam, lamp_m=lamp_m, bar_m=bar_m, door=((x0, d0), (x0, d1)))
+    return dict(cam=cam, lamp_m=lamp_m, bar_m=bar_m, door=((x0, d0), (x0, d1)), seam=seam)
 
 
 def high_bays(coll):

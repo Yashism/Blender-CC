@@ -50,8 +50,11 @@ for i, (k, b0, b1) in enumerate(_SHOT_BARS):
     a = 1 if i == 0 else f_bar(b0)
     SHOTS.append((k, a, f_bar(b1) - 1))
 S = {k: (a, b) for k, a, b in SHOTS}
-RENDER_END = SHOTS[-1][2]
-N_POST = f_bar(78)                            # logo end card + music fade, post-only
+SHOTS = [r for r in SHOTS if r[0] != "s7_hero"]   # no product hero at the end: the converging sites become the logo
+RENDER_END = S["s6_system"][1]
+N_POST = f_bar(72)                            # logo forms from the sites, holds, music fades (bars 70-72)
+LOGO_FORM = f_bar(65.5)                       # the sites have reached the arrow: it snaps into shape
+LOGO_WORD = f_bar(66)                         # white wordmark wipes on from the arrow
 
 # ---- layout (world metres) ----
 RACK_ROWS = [(-8.6, 1), (-3.4, 2), (2.4, 2), (8.2, 2)]    # (y centre, depth in pallets)
@@ -61,7 +64,8 @@ MHE_AISLE_Y = -6.0
 ZONE = dict(x0=0.8, x1=6.2, y0=5.4, y1=10.2, col=(0.3, 4.6))         # restricted machine bay
 DOOR = dict(x=15.0, w=1.2, h=2.2)          # personnel door office -> warehouse, between dock doors 5 and 6
 FIRE = dict(src=(13.6, 11.0), cam=(8.4, 4.0, 6.0))                   # charging bay, column camera
-CELL = dict(x0=12.8, x1=20.6, y0=-7.4, y1=1.4, door_y=(-3.9, -2.1), robot=(17.6, -3.0))
+CELL = dict(x0=14.6, x1=20.4, y0=-6.0, y1=-0.4, door_y=(-2.0, -0.9), robot=(18.0, -3.4), cam_y=-2.7,
+            fixture=(16.75, -3.4))                    # compact weld cell: robot, jig with a T-joint part, door NW
 
 # ---- events (frames) ----
 MHE_REVERSE = (f_bar(13.5), f_bar(17))       # forklift reversing along +X
@@ -78,6 +82,7 @@ FIRE_FLAME = f_bar(36)
 FIRE_DETECT = f_bar(36.5)
 ROBOT_ENTER = f_bar(49)
 ROBOT_DETECT = f_bar(51)
+ROBOT_POV = f_bar(49.75)                     # cut to the cell camera's own view until the relay
 ROBOT_RELAY = f_bar(52)                      # == the drop to silence
 ROBOT_CLEAR = f_bar(55)
 ROBOT_RESUME = f_bar(56)
@@ -87,3 +92,33 @@ HERO_HIT = f_bar(68)
 # ---- music edit (source seconds) ----
 MUSIC_CUT_FILM_BAR = 26
 MUSIC_SKIP_BARS = 24
+
+
+# ---- weld cell program (shared by the robot animation and the sound design) ----
+def weld_plan(n_stitch=5, weld_f=40, hop_f=14, home_f=40, passes=8):
+    """[(kind, frames, stitch)] -- kind: in (home -> seam start), approach, weld, lift, out (-> home), wait."""
+    plan = []
+    for _ in range(passes):
+        plan.append(("in", home_f, None))
+        for k in range(n_stitch):
+            plan += [("approach", 8, k), ("weld", weld_f, k), ("lift", hop_f, k)]
+        plan += [("out", home_f, None), ("wait", 18, None)]
+    return plan
+
+
+def weld_clock(f0, f1, freeze, resume):
+    """Per frame: (frame, plan index, u within that step, frozen). Program time pauses while frozen."""
+    plan = weld_plan()
+    out, pt = [], 0.0
+    for fr in range(f0, f1 + 1):
+        frozen = freeze <= fr < resume
+        if not frozen:
+            pt += 1.0
+        acc, idx, u = 0.0, len(plan) - 1, 1.0
+        for i, (_, d, _) in enumerate(plan):
+            if pt < acc + d:
+                idx, u = i, (pt - acc) / d
+                break
+            acc += d
+        out.append((fr, idx, u, frozen))
+    return out
