@@ -785,6 +785,8 @@ def main():
                       "-t", f"{dur}"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(a.crf), "-preset", "slow", "-movflags", "+faststart", a.out]
     subprocess.run(cmd, check=True)
+    import shutil
+    shutil.rmtree(dst, ignore_errors=True)          # thousands of full-size PNGs: don't leave them in /tmp
     print("post_f2 ->", a.out)
     if a.clips:
         export_clips(a.out, os.path.join(os.path.dirname(a.out), "clips"))
