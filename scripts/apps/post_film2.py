@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE))
 from apps.timing import (DOOR_NIGHT, FIRE_DETECT, FIRE_FLAME, FIRE_SMOKE, FPS, MHE_CLEAR, MHE_DETECT,  # noqa: E402
-                         MHE_RELAY, MHE_STOP, N_POST, RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_RELAY,
+                         MHE_RELAY, MHE_STOP, N_POST, RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_RELAY, ROBOT_RESUME,
                          S, SHOTS, ZONE_CLEAR, ZONE_CROSS, CONVERGE, HERO_HIT, LOGO_FORM, LOGO_WORD, ROBOT_POV, f_bar)
 from launch.post_film3 import INK, clamp, ease_out, lerp, place, text_img  # noqa: E402
 from launch.post_film5 import smooth  # noqa: E402
@@ -304,6 +304,40 @@ def door_counts(anchors):
 
 
 # ------------------------------------------------------------------------------------ overlay
+_WELD = {}
+
+
+def welding_at(fr):
+    if not _WELD:
+        from apps.timing import weld_clock, weld_plan
+        plan = weld_plan()
+        for f, idx, _, frozen in weld_clock(S["s5_robot"][0] - 30, S["s6_system"][1], ROBOT_RELAY, ROBOT_RESUME):
+            _WELD[f] = (not frozen) and plan[idx][0] == "weld"
+    return _WELD.get(fr, False)
+
+
+def arc_flare(L, W, H, fr, rec):
+    """Weld arc: a small blue-white flare at the torch tip while welding, only where the tip is not hidden."""
+    if not welding_at(fr) or shot_of(fr)[0] not in ("s5_robot", "s6_system"):
+        return
+    p = A(rec, "robot_tip")
+    if not p or not (0 <= p[0] < W and 0 <= p[1] < H):
+        return
+    d = load_pass(_W.get("src", ""), "d", fr, (W, H), bits16=True) if _W.get("src") else None
+    if d is not None:
+        yy, xx = int(min(H - 1, p[1])), int(min(W - 1, p[0]))
+        r = max(2, int(H * 0.006))
+        dz = d[max(0, yy - r):yy + r + 1, max(0, xx - r):xx + r + 1].max() * DEPTH_MAX
+        if dz < p[2] - 0.25:
+            return
+    s = H / 720
+    fl = 0.75 + 0.25 * math.sin(fr * 2.3) * math.sin(fr * 0.7)
+    sz = max(1.0, 1.2 * s * (6.0 / max(1.0, p[2])))
+    L.dot(p[:2], 9 * sz * fl, (255, 150, 60, 90))
+    L.dot(p[:2], 4.5 * sz * fl, (200, 225, 255, 230))
+    L.dot(p[:2], 2.0 * sz, (255, 255, 255, 255))
+
+
 def use_case_badge(extra, W, H, fr):
     """Top-left: which use case this is (number in orange, name in white, one-line detail)."""
     for f0, f1, num, name, detail in USE_CASES:
@@ -359,7 +393,7 @@ def pov_hud(L, extra, W, H, fr, rec):
             ImageDraw.Draw(fl).polygon(poly, fill=RED + (int(70 * (0.75 + 0.25 * math.sin(fr / 3))),))
             extra.alpha_composite(fl)
         lab = "ROBOT ZONE · OCCUPIED" if hit else "ROBOT ZONE · ARMED"
-        tag(extra, lab, poly[3][0] + 8 * s, poly[3][1] - 14 * s, col, s, H, 1.0, size=0.02)
+        tag(extra, lab, poly[3][0] + 8 * s, poly[3][1] - 16 * s, col, s, H, 1.0, size=0.024, weight="Bold")
     v = rec.get("W:W_cell")
     if v and len(v) >= 5 and v[2] - v[0] > 4 * s:
         x0, y0, x1, y1 = v[:4]
@@ -367,7 +401,7 @@ def pov_hud(L, extra, W, H, fr, rec):
         if k > 0:
             col = RED if hit else ORANGE
             bracket_box(L, (x0 - 4 * s, y0 - 4 * s, x1 + 4 * s, y1 + 4 * s), col + (int(255 * k),), s)
-            tag(extra, "PERSON 0.97", x0, y0 - 16 * s, col, s, H, k, size=0.02)
+            tag(extra, "PERSON 0.97", x0, y0 - 18 * s, col, s, H, k, size=0.026, weight="Bold")
     if fr >= ROBOT_RELAY - 14:
         tag(extra, "RELAY → ROBOT STOP", W * 0.5, H * 0.19, RED, s, H, smooth((fr - ROBOT_RELAY + 14) / 4), size=0.026,
             anchor="c", weight="Bold")
@@ -568,6 +602,7 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
                 L.arc((x, y), (12 + 10 * math.sin(fr / 6 + i)) * s, 0, 360, ORANGE + (int(120 * al * (1 - conv)),), 1.2 * s)
                 if conv < 0.12:          # gone before the converging sites crowd each other
                     tag(extra, lab, x + 16 * s, y - 16 * s, WHITE, s, H, al * (1 - conv / 0.12), size=0.022, flip_x=x - 16 * s)
+    arc_flare(L, W, H, fr, rec)
     use_case_badge(extra, W, H, fr)
     if ROBOT_POV <= fr < ROBOT_RELAY:
         pov_hud(L, extra, W, H, fr, rec)
