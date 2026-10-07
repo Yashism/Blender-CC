@@ -18,30 +18,30 @@ Notebook: `kaggle/film2_render.ipynb`. It runs everything on Kaggle's free GPUs:
 4. **Only if the GitHub repo is private:** go to **Add-ons > Secrets** and add `GITHUB_TOKEN`, a GitHub token with
    read access.
 
-## Preview first
-
-1. In the first cell, keep `MODE = "preview"`. That renders at 960×540 with 24 samples and takes about 3–5 h
-   on 2× T4.
-2. Choose **Save Version > Save & Run All (Commit)**. You can close the browser while it runs.
-3. When it's done, open the version's **Output** tab, then `film2/`:
-   - `RAMS_AI_Camera_film2_preview.mp4`: the film with music;
-   - `clips/01_…mp4 … 12_end_logo.mp4` and `film2_clips.zip`: one clip per shot, to point at what to change.
-
 ## Final 1080p
 
-1. Set `MODE = "final"` (1920×1080, 64 samples). It will likely need **two sessions**, because Kaggle stops a
-   session at 12 h. The notebook stops rendering at 10.8 h so it can save cleanly.
-2. Run it: **Save & Run All (Commit)**.
+The notebook is set to `MODE = "final"`: 1920×1080, 64 samples (adaptive, denoised), OptiX on both T4s.
+The film is 2:21 (3,160 rendered frames; the logo ending is drawn in post).
+
+1. Choose **Save Version > Save & Run All (Commit)**. You can close the browser while it runs.
+2. Kaggle stops a session at 12 h, so the full render usually takes **two sessions**. The notebook stops
+   rendering at 10.8 h so it can save cleanly; the log shows `frames done / 3160` every 5 minutes.
 3. When it stops early:
    1. Open the notebook again.
    2. Choose **Add Input > Your Work** and pick this notebook's **latest version** (its output holds the
       finished frames).
    3. **Save & Run All** again. Finished frames are reused, and only the rest are rendered.
-4. When every frame exists, the post runs automatically and writes `film2/RAMS_AI_Camera_film2_final.mp4`
-   plus the clips.
+4. When every frame exists, the sound design, the AI-vision post and the music run automatically. The version's
+   **Output** tab, `film2/`, then has:
+   - `RAMS_AI_Camera_film2_final.mp4`: the film with music and sound effects;
+   - `clips/01_…mp4 … 11_end_logo.mp4` and `film2_clips.zip`: one clip per shot.
 
-**Space:** the frames are saved as JPEG, and the AI-vision passes at half resolution, so a full 1080p set fits
-in Kaggle's 20 GB output (about 6 GB).
+**Space:** frames are saved as JPEG and the AI-vision passes at half resolution: about 1.3 MB per frame,
+roughly 4–5 GB in total, well inside Kaggle's 20 GB output.
+
+**GPU quota:** Kaggle gives about 30 GPU hours a week; the final uses most of two 12 h sessions.
+
+`MODE = "preview"` (960×540, 24 samples, about 3–5 h) is still there for quick checks.
 
 ## Rendering on your own PC instead (RTX 5060)
 
