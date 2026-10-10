@@ -1,35 +1,34 @@
 # Film 3: "Inside the Camera" (working title: *Faster Than a Blink*)
 
-A 60 s technical film: what happens inside the RAMS AI Camera and the Omnibox Edge between "a person steps
-behind a forklift" and "the forklift stops". It is built entirely from the client's real CAD: every part named
-below exists in `assets/cad/AI_Camera.3mf.zip` or `assets/apps_film/omnibox_edge.glb`.
+A ~60 s technical film: what happens inside the RAMS AI Camera and the Omnibox Edge between "a person steps
+behind a forklift" and "the forklift stops". Built from the client's real CAD: every part shown exists in
+`assets/cad/AI_Camera.3mf.zip` or `assets/apps_film/omnibox_edge.glb`.
 
-**Audience:** engineers, safety managers and buyers who saw film 2 and ask "how does it actually work?".
-**Tone:** precise, calm, premium. Black studio, a single cool key light, orange accents, macro lenses.
-**Music (to license):** Kiasmos "Looped" (first choice: minimal, clockwork pulse that suits a
-signal-chain story) or Rival Consoles "Recovery". The cuts land on the pulse like film 2.
+**Audience:** engineers, safety managers and buyers. **Tone:** precise, calm, premium: black studio, cool key
+light, orange accents, macro lenses. **Music (to license):** Kiasmos "Looped" (first choice) or Rival Consoles
+"Recovery".
 
-## Beat sheet
+## Confirmed facts (from RAMS)
+- The **camera** detects the person on-board and sends a stop signal to the **Omnibox Edge** (processor box).
+- Camera ↔ Omnibox link: **Wi-Fi** (no cable).
+- The Omnibox is wired into the forklift's **brake line** and stops the truck by **cutting power** on it.
+  **No connection to the truck controller**, so the forklift warranty is not affected.
+- Camera: **130° field of view**, **5 V** supply.
+- Timing: show the **order** of the stages only, no numbers.
+- Show the **mounting positions** on the forklift (five cameras, Omnibox on the guard).
 
-| # | Time | Picture | On screen |
-|---|------|---------|-----------|
-| 1 | 0–5 s | Darkness. A thin line of light travels across the frame and dives into the RAMS lens in macro. | *What happens in the blink of an eye?* |
-| 2 | 5–18 s | The camera floats in a black studio and **slowly explodes** along its real assembly axis: the white RAMS cover slides forward, then the lens module, the AMB82 board, the fan, the buck converter and the XT30 connector; the ribbed black housing stays. Thin leader lines label each part as it separates. | Labels: *Lens module* · *AI vision processor (Realtek AMB82)* · *Active cooling* · *Power regulation* · *XT30 power input* · *Status LED* |
-| 3 | 18–30 s | **Ride the light.** The camera dives through the lens elements onto the sensor. The warehouse picture assembles from pixels (the film-2 aisle seen through the lens), then flows into the AI processor: glowing layers of a neural network transform it, and a person silhouette lights up with a box. | *See.* → `PERSON 0.97` |
-| 4 | 30–40 s | **The signal leaves the camera.** A pulse runs down the cable to the Omnibox Edge, which explodes in turn: Raspberry Pi 5, relay board, audio amp, cooling, power, ports. The pulse reaches the Pi 5 (decision), then the relay board: the relay **clicks** closed on the beat; the audio amp fires the alarm; the status LED turns red. | *Detect.* · labels: *Raspberry Pi 5 (decision)* · *Safety relay* · *Audio alarm* |
-| 5 | 40–50 s | **Back in the world.** Cut to the film-2 aisle: the forklift's brake lights flare, it stops short of the worker. A slim timeline across the bottom shows each stage lighting up in order, from capture to detection to relay to stop, with its time. | *Protect.* + stage timeline |
-| 6 | 50–60 s | Every part flies back together in reverse, camera and Omnibox side by side, a slow turn. The five-dot → arrow → wordmark logo build from film 2 closes it. | *All on the edge. No cloud. No delay.* → RAMS Digital logo |
+## Clips (built and approved one at a time, then merged)
 
-## What we reuse
-- Camera CAD with its built-in `explode` control, materials and status LED (`scripts/launch/real_cam.py`).
-- Omnibox Edge model, already darkened to its real matte black (`scripts/apps/assets.py`).
-- Film-2 warehouse, forklift, worker, AI-view look and the logo build (`scripts/apps/`).
-- Same pipeline: Blender scripts → post (labels, timeline, logo) → Kaggle render.
+| Clip | Time | Picture | On screen |
+|------|------|---------|-----------|
+| **A. Open + exploded camera** | 0–18 s | Darkness; a thin line of light dives into the lens (macro). Pull back to the whole camera, which comes apart along its real assembly: screws back out, cover, bezel, AMB82 board, then fan, power regulator, XT30 and LED strip spread out; housing slides back. Labels draw on. | *What happens in the blink of an eye?* · labels: lens (130°), AI vision processor (Realtek AMB82, on-device detection), active cooling, 5 V power regulation, XT30 power input, status LEDs |
+| **B. Where it mounts** | 18–28 s | The camera reassembles and flies onto the forklift guard; the truck turns on a black stage; all five units light up at Front L/R, Left, Right, Rear with their 130° fans locking into a full ring; the Omnibox Edge on the guard. | *Five cameras. 360° coverage.* |
+| **C. See** | 28–36 s | Through the lens onto the sensor: the aisle forms from pixels, flows through glowing neural-network layers, the worker lights up with a box. | *See.* `PERSON 0.97` |
+| **D. Detect → Omnibox** | 36–46 s | Wi-Fi rings leave the camera and reach the Omnibox Edge, which opens up (Raspberry Pi 5, relay board, audio amp, cooling, power). The relay clicks on the beat; the alarm sounds; status LED red. | *Detect.* · *Wireless link* · *Safety relay* |
+| **E. Protect: brake-line cut** | 46–54 s | A clean line diagram over the truck: Omnibox → brake line; the relay opens and power to the brake line is cut; cut to the aisle, the forklift stops short of the worker. Stage strip at the bottom lights in order: capture → detect → signal → relay → stop. | *Protect.* · *Cuts power on the brake line. No controller wiring, no warranty issues.* |
+| **F. Close** | 54–62 s | Parts fly back together; camera and Omnibox side by side; the dots → arrow → wordmark logo build from film 2. | *All on the edge. No cloud. No delay.* → RAMS Digital |
 
-## Facts to confirm before animating
-The film must be technically true, so these come from RAMS, not from guesses:
-1. **Where detection runs:** on the camera's AMB82 (it sends "person detected") or on the Pi 5 (camera streams video)?
-2. **Camera → Omnibox link:** cable type (Ethernet / USB / RS-485 / Wi-Fi)?
-3. **Timing:** end-to-end time from capture to relay switching (and, if known, each stage), or leave numbers out.
-4. **What the relay does on a forklift:** cuts traction/drive enable, applies the brake, or signals the truck controller?
-5. Any specs worth showing: frame rate, field of view, IP rating, operating voltage range.
+## Pipeline
+`scripts/inside/` builds each clip in Blender from the shared assets (`scripts/launch/real_cam.py`,
+`scripts/apps/assets.py`, film-2 warehouse for C/E); `scripts/inside/post_inside.py` adds labels, titles and the
+logo; clips are previewed one by one, then cut to the music and rendered at 1080p on Kaggle.
