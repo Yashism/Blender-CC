@@ -1,7 +1,7 @@
 """Film 3 "Inside the Camera", clip B (10 s): where the cameras mount on the forklift.
 
-Opens tight on the front-right RAMS unit on the overhead guard (real mount positions from the client's
-rams-mount-config.js), rises and pulls back over the truck on a black stage; the five 130° coverage fans open
+Opens tight on the front-right RAMS unit on the overhead guard's frame (mount positions from the client's
+rams-mount-config.js, seated on the guard rails / rear bar), rises and pulls back over the truck on a black stage; the five 130° coverage fans open
 one by one around the truck and lock into a full 360° ring; the Omnibox Edge sits on the guard.
 
     blender -b --factory-startup -P scripts/inside/clip_b.py -- --stills DIR --frames 1,120,240 [--res 960x540]
@@ -53,9 +53,16 @@ def build(args):
     OB = assets.omnibox(obx_coll)
     OB["root"].location = V((0.0, 95.0, 0.0))
     obx_coll.instance_offset = OB["root"].location
+    for o in OB["objs"]:                    # matte black plastic: on the black stage the 0.55 sheen read as silver
+        if o.type == "MESH" and not o.name.startswith("Status LED"):
+            for sl in o.material_slots:
+                bn = sl.material.node_tree.nodes.get("Principled BSDF") if sl.material else None
+                if bn:
+                    bn.inputs["Roughness"].default_value = 0.8
+                    bn.inputs["Specular IOR Level"].default_value = 0.25
     # forklift with the five mounted units (real positions, clamped onto the guard)
     fkc = geo.collection("Forklift")
-    FK = assets.forklift(fkc, cam_coll, P)
+    FK = assets.forklift(fkc, cam_coll, P, on_frame=True)
     fk = FK["root"]
     obx = bpy.data.objects.new("FK_omnibox", None)
     obx.instance_type = "COLLECTION"
@@ -90,18 +97,23 @@ def build(args):
     sl = geo.collection("Lights")
     key = area("key", sl, 3.0, temp=5600)
     aim(key, V((-3.0, -3.5, 6.0)), V((0, 0, 1.0)))
-    key.data.energy = 140.0
+    key.data.energy = 45.0
     rim = area("rim", sl, 0.4, 3.0, temp=7000)
     aim(rim, V((4.0, 3.5, 3.0)), V((0, 0, 1.2)))
-    rim.data.energy = 260.0
+    rim.data.energy = 110.0
     rim2 = area("rim2", sl, 0.4, 3.0, temp=6500)
     aim(rim2, V((-4.0, 3.0, 2.5)), V((0, 0, 1.2)))
-    rim2.data.energy = 160.0
+    rim2.data.energy = 70.0
     top = area("top", sl, 2.5, temp=6000)
     aim(top, V((0.0, 0.0, 7.0)), V((0, 0, 0)))
-    top.data.energy = 50.0
-    for L_, sp in ((key, 38), (top, 30), (rim, 60), (rim2, 60)):      # narrow beams: light the truck, not the stage
+    top.data.energy = 12.0
+    for L_, sp in ((key, 38), (top, 30), (rim, 60), (rim2, 60)):      # narrow beams: light the truck, not the stage (spread concentrates the power: keep energies low)
         L_.data.spread = math.radians(sp)
+    for L_ in (rim, rim2, top):              # low in the macro (rim2 sits behind the close-up camera), full for the wide
+        e_ = L_.data.energy
+        for fr, k_ in ((1, 0.12), (T_PULL[0] + 10, 0.12), (T_PULL[0] + 55, 1.0)):
+            L_.data.energy = e_ * k_
+            L_.data.keyframe_insert("energy", frame=fr)
     # a small soft light on the close-up unit so the opening macro reads
     near = area("near", sl, 0.25, temp=5600)
     u = cams["fr"]
@@ -123,23 +135,31 @@ def build(args):
     yaw = u.rotation_euler.z - math.pi / 2                       # the unit's facing direction
     fwd = V((math.cos(yaw), math.sin(yaw), 0.0))
     side = V((-fwd.y, fwd.x, 0.0))
-    lens_pt = up + fwd * 0.03 + V((0, 0, 0.02))
-    K = [(1, lens_pt + fwd * 0.55 + side * 0.18 + V((0, 0, -0.10)), lens_pt, 70.0),
-         (T_PULL[0], lens_pt + fwd * 0.62 + side * 0.22 + V((0, 0, -0.06)), lens_pt, 66.0),
+    if side.y * up.y < 0:                                         # the truck's outside, clear of the mast
+        side = -side
+    lens_pt = up + fwd * 0.03 + V((0, 0, 0.03))
+    K = [(1, lens_pt + fwd * 0.50 + side * 0.16 + V((0, 0, 0.01)), lens_pt, 70.0),
+         (T_PULL[0], lens_pt + fwd * 0.60 + side * 0.24 + V((0, 0, 0.05)), lens_pt, 66.0),
          (110, V((-4.8, 3.6, 3.6)), V((0.0, 0.0, 1.2)), 35.0),
          (T_PULL[1], V((-4.6, 5.4, 6.8)), V((0.0, 0.0, 0.6)), 30.0),
          (END, V((-1.6, 3.2, 10.5)), V((0.0, 0.3, 0.0)), 30.0)]
     cam.rotation_mode = "QUATERNION"
     prev = None
     for fr in range(1, END + 2):
-        loc = hermite([(f, p) for f, p, _, _ in K], fr)
-        tgt = hermite([(f, p) for f, _, p, _ in K], fr)
+        if fr <= T_PULL[0]:                     # slow ease along the unit (straight, never closer than the start)
+            u_ = smooth((fr - 1) / (T_PULL[0] - 1))
+            ev = lambda i: K[0][i].lerp(K[1][i], u_) if i < 3 else K[0][i] + (K[1][i] - K[0][i]) * u_  # noqa: E731
+        else:                                   # then the rise: spline from the hold, eased in (no overshoot)
+            t = (fr - T_PULL[0]) / (K[2][0] - T_PULL[0])
+            fe = T_PULL[0] + (K[2][0] - T_PULL[0]) * (2 * t * t - t ** 3) if t < 1 else fr
+            ev = lambda i: hermite([(k[0], k[i]) for k in K[1:]], fe)  # noqa: E731
+        loc, tgt = ev(1), ev(2)
         q = (tgt - loc).to_track_quat("-Z", "Y")
         if prev is not None and prev.dot(q) < 0:
             q.negate()
         prev = q
         cam.location, cam.rotation_quaternion = loc, q
-        cd.lens = hermite([(f, l) for f, _, _, l in K], fr)
+        cd.lens = ev(3)
         cd.dof.focus_distance = max(0.05, (tgt - loc).length)
         cd.dof.aperture_fstop = 8.0 if fr < T_PULL[0] + 20 else 16.0
         for path in ("location", "rotation_quaternion"):

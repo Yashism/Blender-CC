@@ -108,7 +108,9 @@ def camera_instance(name, src_coll, coll, loc, yaw_dir, pitch_deg=25.0, scale=1.
 
 
 # ------------------------------------------------------------------------------------ forklift
-def forklift(coll, cam_coll, P):
+def forklift(coll, cam_coll, P, on_frame=False):
+    """on_frame: mount the units on the overhead guard's outer frame (rails / rear bar) at the config positions,
+    lens at the frame edge, on level brackets. Default keeps film 2's placement (clamped onto the slat panel)."""
     new = _import_glb(os.path.join(A, "forklift.glb"), coll)
     root, fit, k = _fit(new, "FK", coll, height=FORK_H)
     meshes = [o for o in new if o.type == "MESH"]
@@ -185,6 +187,9 @@ def forklift(coll, cam_coll, P):
                 z = (o.matrix_world @ loc).z
                 best = z if best is None else max(best, z)
         return best
+    if on_frame:
+        _frame_mounts(cams, meshes, coll, root, arm_m)
+        cams = []
     for e in cams:
         p = Vector(e.location)
         x = min(max(p.x, rlo.x - 0.02), rhi.x + 0.02)
@@ -200,9 +205,78 @@ def forklift(coll, cam_coll, P):
         plate.parent = root
         plate.location = q + Vector((-math.cos(th), -math.sin(th), 0)) * 0.012 + Vector((0, 0, -0.004))
         plate.rotation_euler.z = th
+    cams = [o for o in coll.objects if o.name.startswith("FKcam_") and not o.name.endswith(("_plate", "_bracket"))]
     return dict(root=root, fit=fit, k=k, meshes=meshes, wheels=wheels, brake=brake, cams=cams,
                 roof_top=rhi.z, roof_lo=rlo, roof_hi=rhi, roof_c=Vector(((rlo.x + rhi.x) / 2, (rlo.y + rhi.y) / 2)), length=hi.x - lo.x,
                 rear_x=hi.x, front_x=lo.x)
+
+
+def _frame_mounts(cams, meshes, coll, root, plate_m):
+    """Seat each unit on the guard's outer frame (root space == world while building).
+
+    The guard is two side rails, a front and a rear cross bar and the slat panel between them. Front L/R sit on
+    the rails' front corners where the rail levels out of the post bend; sides sit on the rails with the lens at
+    the outer edge; the rear unit sits on the rear bar with the lens at its back edge. Each unit stands on a
+    level plate; where the frame slopes away under it, a block bracket fills down to the frame."""
+    from lib import geo
+    plate_m = bpy.data.materials.get("mount_black") or bpy.data.materials.new("mount_black")   # powder-coated
+    plate_m.use_nodes = True
+    bn = plate_m.node_tree.nodes["Principled BSDF"]
+    bn.inputs["Base Color"].default_value = (0.03, 0.031, 0.034, 1)
+    bn.inputs["Roughness"].default_value = 0.6
+    guard = [o for o in meshes if _bbox([o])[1].z > 2.0 and _bbox([o])[0].x > -0.3]
+    boxes = {o.name: _bbox([o]) for o in guard}
+    rails = [o for o in guard if boxes[o.name][1].x - boxes[o.name][0].x > 1.0 and not o.name.startswith("roof")]
+    bars = [o for o in guard if boxes[o.name][1].y - boxes[o.name][0].y > 0.8 and not o.name.startswith("roof")]
+    edge_y = max(max(abs(boxes[o.name][0].y), abs(boxes[o.name][1].y)) for o in rails)
+    rail_y = sum((boxes[o.name][0].y + boxes[o.name][1].y) / 2 for o in rails if boxes[o.name][0].y > 0) / max(
+        1, sum(1 for o in rails if boxes[o.name][0].y > 0))
+    rear_x = max(boxes[o.name][1].x for o in bars)
+    LENS_IN = 0.028                                        # unit origin -> lens face
+
+    def hit(x, y):
+        best = None
+        for o in guard:
+            mi = o.matrix_world.inverted()
+            ok, loc, n, _ = o.ray_cast(mi @ Vector((x, y, 3.0)), (mi.to_3x3() @ Vector((0, 0, -1))).normalized())
+            if ok:
+                z = (o.matrix_world @ loc).z
+                if best is None or z > best[0]:
+                    best = (z, (o.matrix_world.to_3x3() @ n).normalized())
+        return best
+    for e in cams:
+        k = e.name.split("_")[-1]
+        p = Vector(e.location)
+        if k in ("fr", "fl"):
+            y = math.copysign(rail_y, p.y)
+            x = p.x
+            while x < p.x + 0.3:                           # out of the post bend: frame slope under ~20°
+                h = hit(x, y)
+                if h and h[1].z > 0.935:
+                    break
+                x += 0.01
+        elif k in ("sl", "sr"):
+            x, y = p.x, math.copysign(edge_y - LENS_IN, p.y)
+        else:
+            x, y = rear_x - LENS_IN, p.y
+        th = e.rotation_euler.z - math.pi / 2
+        f = Vector((math.cos(th), math.sin(th), 0))
+        pc = Vector((x, y, 0)) - f * 0.012                  # plate centre (a little behind the lens)
+        sd = Vector((-f.y, f.x, 0))
+        zs = [h[0] for h in (hit(*(pc + f * a + sd * b).xy) for a in (-0.04, 0, 0.04) for b in (-0.04, 0, 0.04)) if h]
+        top, low = max(zs), min(zs)
+        e.location = (x, y, top + 0.012)
+        plate = geo.box(f"{e.name}_plate", (0.085, 0.085, 0.01), mat=plate_m, coll=coll, bevel=0.002)
+        plate.parent = root
+        plate.location = (pc.x, pc.y, top + 0.007)
+        plate.rotation_euler.z = th
+        if top - low > 0.004:                              # bracket block down to the sloping frame
+            hgt = top - low + 0.004
+            b = geo.box(f"{e.name}_bracket", (0.07, 0.07, hgt), mat=plate_m, coll=coll, bevel=0.002)
+            b.parent = root
+            b.location = (pc.x, pc.y, top + 0.002 - hgt / 2)
+            b.rotation_euler.z = th
+        e["mount"] = (x, y, top)
 
 
 def roll_wheels(fk, frames_x):
