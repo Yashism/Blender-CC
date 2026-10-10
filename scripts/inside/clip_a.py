@@ -102,6 +102,31 @@ def uniform_led():
             f.driver.expression = "led*0.02"
 
 
+def unscrew_about_shaft(root, objs):
+    """Each screw turns about its own shaft (the lens axis, world Y) while it backs out; no tumbling.
+    real_cam drives the spin about the mesh's longest local axis, which for these CAD screws is not the shaft."""
+    from mathutils import Quaternion
+    bpy.context.view_layer.update()
+    for o in objs:
+        sc = o.get("screw_prop")
+        if not sc:
+            continue
+        ad = o.animation_data
+        for fc in list(ad.drivers):
+            if fc.data_path == "delta_rotation_euler":
+                ad.drivers.remove(fc)
+        o.delta_rotation_euler = (0.0, 0.0, 0.0)
+        axis = V((0.0, 1.0, 0.0))     # delta rotation acts in the parent (root) frame: the shaft is world Y
+        q0 = o.rotation_euler.to_quaternion()
+        o.rotation_mode = "QUATERNION"
+        o.rotation_quaternion = q0
+        a = T_SCREWS + real_cam.SCREWS.index(sc) * 5
+        for fr in range(a - 1, a + 20):
+            u = smooth((fr - a) / 18)
+            o.delta_rotation_quaternion = Quaternion(axis, -2 * math.pi * 3 * u)    # 3 full turns, counter-clockwise
+            o.keyframe_insert("delta_rotation_quaternion", frame=fr)
+
+
 def build(args):
     studio.reset_scene()
     s = studio.render_settings(res=tuple(int(v) for v in args.res.split("x")), samples=args.samples)
@@ -123,6 +148,7 @@ def build(args):
         for fr, v in ((1, 1.0), (a, 1.0), (a + 18, 0.0)):
             root[sc] = v
             root.keyframe_insert(f'["{sc}"]', frame=fr)
+    unscrew_about_shaft(root, objs)
     for fr, v in ((1, 0.0), (T_SPREAD[0], 0.0), (T_SPREAD[1], 1.0)):
         root["ex_inner"] = v                           # inner group's own axis offset is 0; key it anyway
         root.keyframe_insert('["ex_inner"]', frame=fr)
