@@ -37,7 +37,16 @@ LABELS_A = {
     "housing": ("Ribbed housing", "", (-0.10, -0.05), 360),
     "cover": ("RAMS cover", "", (-0.07, -0.19), 370),
 }
-CLIPS = {"a": dict(end=432, labels=LABELS_A, title=("What happens in the blink of an eye?", 6, 50))}
+# clip B: a leader label on the close-up unit, then a tag at the far end of each 130° fan as it opens
+LABELS_B = {
+    "fr": ("RAMS AI Camera", "on the overhead guard", (0.16, 0.10), 8, 62),
+    "obx": ("Omnibox Edge", "processor box, on the guard", (0.24, -0.10), 132, 186),
+}
+FANS_B = {k: (n, 104 + 9 * i + 6) for i, (k, n) in
+          enumerate((("fl", "FRONT LEFT"), ("fr", "FRONT RIGHT"), ("sl", "LEFT"), ("sr", "RIGHT"), ("rr", "REAR")))}
+CLIPS = {"a": dict(end=432, labels=LABELS_A, title=("What happens in the blink of an eye?", 6, 50), fade=(42, 26)),
+         "b": dict(end=240, labels=LABELS_B, fans=FANS_B, fade=(-30, 10),
+                   card=("Five cameras. 360° coverage.", "130° each · one Omnibox Edge", 182, 999))}
 
 
 def load(src, fr, size):
@@ -83,26 +92,60 @@ def label(L, lay, W, H, p, name, detail, d, k):
             place(lay, sub, sx, ey + H * 0.018, kt, anchor="l")
 
 
+def tag(lay, W, H, p, name, k):
+    """A coverage-zone tag at the far end of a fan: name over a small '130°'."""
+    if k <= 0 or p is None or p[2] <= 0:
+        return
+    kt = ease_out(k)
+    im = text_img(name, "SemiBold", H * 0.026, WHITE)
+    sub = text_img("130°", "Medium", H * 0.02, (150, 200, 255))
+    x, y = min(max(p[0], W * 0.06), W * 0.94), min(max(p[1], H * 0.08), H * 0.92)
+    place(lay, im, x, y - H * 0.012 + (1 - kt) * H * 0.01, kt)
+    place(lay, sub, x, y + H * 0.02 + (1 - kt) * H * 0.01, kt)
+
+
+def card(lay, W, H, title, sub, k):
+    """Top-left title: orange rule, title, one line of detail."""
+    if k <= 0:
+        return
+    kt = ease_out(k)
+    x0, y0 = W * 0.06, H * 0.14
+    d = ImageDraw.Draw(lay)
+    d.rectangle([x0, y0 - H * 0.055, x0 + H * 0.06 * kt, y0 - H * 0.051], fill=ORANGE + (int(255 * kt),))
+    place(lay, text_img(title, "SemiBold", H * 0.05, WHITE), x0 + (1 - kt) * H * 0.02, y0, kt, anchor="l")
+    place(lay, text_img(sub, "Medium", H * 0.026, GREY), x0 + (1 - kt) * H * 0.02, y0 + H * 0.055, kt, anchor="l")
+
+
 def frame(clip, src, fr, size, anchors):
     W, H = size
     c = CLIPS[clip]
     im = load(src, fr, size)
     a = np.asarray(im, np.float32) / 255
-    a = a * smooth((fr - 42) / 26)                        # the question on black first, then the macro fades up
+    fd0, fdn = c["fade"]
+    a = a * smooth((fr - fd0) / fdn)                      # clip A: the question on black first, then the macro fades up
     out = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)).convert("RGBA")
     L = SS(W, H)
     lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     rec = anchors.get(str(fr), {})
     sx = W / anchors.get("_w", W)
-    for part, (name, detail, d, f0) in c["labels"].items():
-        p = rec.get(part)
-        if p:
-            p = (p[0] * sx, p[1] * sx, p[2])
-        label(L, lay, W, H, p, name, detail, d, (fr - f0) / 22)
-    t, f0, f1 = c["title"]
-    kt = ease_out((fr - f0) / 18) * clamp((f1 - fr) / 10)
-    if kt > 0:
-        place(lay, text_img(t, "SemiBold", H * 0.058, WHITE), W / 2, H * 0.5 + (1 - kt) * H * 0.012, kt)
+    def at(k):
+        p = rec.get(k)
+        return (p[0] * sx, p[1] * sx, p[2]) if p else None
+    for part, (name, detail, d, f0, *f1) in c["labels"].items():
+        k = (fr - f0) / 22
+        if f1:
+            k = min(k, (f1[0] - fr) / 8)                  # labels with an end frame fade out
+        label(L, lay, W, H, at(part), name, detail, d, k)
+    for part, (name, f0) in c.get("fans", {}).items():
+        tag(lay, W, H, at("fan_" + part), name, (fr - f0) / 12)
+    if "title" in c:
+        t, f0, f1 = c["title"]
+        kt = ease_out((fr - f0) / 18) * clamp((f1 - fr) / 10)
+        if kt > 0:
+            place(lay, text_img(t, "SemiBold", H * 0.058, WHITE), W / 2, H * 0.5 + (1 - kt) * H * 0.012, kt)
+    if "card" in c:
+        t, sub, f0, f1 = c["card"]
+        card(lay, W, H, t, sub, min((fr - f0) / 18, (f1 - fr) / 10))
     out = Image.alpha_composite(out, L.result(glow=0.6))
     out = Image.alpha_composite(out, lay)
     return out.convert("RGB")
