@@ -33,7 +33,7 @@ T_SCREWS = 180                              # screws back out (staggered)
 T_EX = {"ex_cover": (200, 245), "ex_bezel": (222, 262), "ex_board": (242, 285), "ex_housing": (255, 300)}
 T_SPREAD = (275, 330)                       # fan / power / XT30 / LEDs move off the axis
 # sideways spread of the small internals (x, z in metres; the y axis is driven by the explode)
-SPREAD = {"fan": (0.0, -0.05), "power": (0.0, 0.05), "xt30": (0.03, 0.075), "led": (0.05, 0.0)}
+SPREAD = {"fan": (0.0, -0.04), "power": (0.0, 0.032), "xt30": (0.022, 0.048), "led": (0.045, 0.0)}
 
 
 def smooth(t):
