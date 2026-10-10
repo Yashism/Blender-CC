@@ -37,7 +37,7 @@ LABELS_A = {
     "housing": ("Ribbed housing", "", (-0.10, -0.05), 360),
     "cover": ("RAMS cover", "", (-0.07, -0.19), 370),
 }
-CLIPS = {"a": dict(end=432, labels=LABELS_A, title=("What happens in the blink of an eye?", 30, 100))}
+CLIPS = {"a": dict(end=432, labels=LABELS_A, title=("What happens in the blink of an eye?", 6, 50))}
 
 
 def load(src, fr, size):
@@ -88,7 +88,7 @@ def frame(clip, src, fr, size, anchors):
     c = CLIPS[clip]
     im = load(src, fr, size)
     a = np.asarray(im, np.float32) / 255
-    a = a * smooth(fr / 20)                               # fade up from black
+    a = a * smooth((fr - 42) / 26)                        # the question on black first, then the macro fades up
     out = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8)).convert("RGBA")
     L = SS(W, H)
     lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -102,7 +102,7 @@ def frame(clip, src, fr, size, anchors):
     t, f0, f1 = c["title"]
     kt = ease_out((fr - f0) / 18) * clamp((f1 - fr) / 10)
     if kt > 0:
-        place(lay, text_img(t, "Medium", H * 0.045, WHITE), W / 2, H * 0.83 + (1 - kt) * H * 0.01, kt)
+        place(lay, text_img(t, "SemiBold", H * 0.058, WHITE), W / 2, H * 0.5 + (1 - kt) * H * 0.012, kt)
     out = Image.alpha_composite(out, L.result(glow=0.6))
     out = Image.alpha_composite(out, lay)
     return out.convert("RGB")
