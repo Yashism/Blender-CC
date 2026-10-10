@@ -39,7 +39,7 @@ LABELS_A = {
 }
 # clip B: a leader label on the close-up unit, then a tag at the far end of each 130° fan as it opens
 LABELS_B = {
-    "fr": ("RAMS AI Camera", "on the overhead guard", (0.16, 0.10), 8, 62),
+    "fr": ("RAMS AI Camera", "on the overhead guard", (-0.34, 0.07), 8, 62),
     "obx": ("Omnibox Edge", "processor box, on the guard", (0.24, -0.10), 132, 186),
 }
 FANS_B = {k: (n, 104 + 9 * i + 6) for i, (k, n) in
