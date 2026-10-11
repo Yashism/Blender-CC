@@ -19,7 +19,7 @@ from mathutils import Vector as V
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from apps import actors, assets, kit, world  # noqa: E402
+from apps import assets, kit, people, world  # noqa: E402
 from apps.timing import FLOOR, MHE_AISLE_Y  # noqa: E402
 from clip_a import hermite, uniform_led  # noqa: E402
 from lib import geo, studio  # noqa: E402
@@ -70,8 +70,8 @@ def build(args):
     assets.roll_wheels(FK, [(fr, fx(fr)) for fr in range(1, END + 2)])
     kit.key_emission(FK["brake"], [(1, 0.3), (T_BRAKE, 0.3), (T_BRAKE + 1, 9.0)], interp="CONSTANT")
     # the worker, standing in the lane facing the truck
-    J = actors.worker("W_see", geo.collection("Actors"), variant=1)
-    actors.stand(J, (WORKER[0], WORKER[1], 0), 0.12, range(1, END + 2), z=FLOOR)
+    J = people.worker("W_see", geo.collection("Actors"))   # realistic worker (Rocketbox, mocap idle)
+    people.stand(J, (WORKER[0], WORKER[1], 0), 0.12, range(1, END + 2), z=FLOOR)
     # camera: low, behind the worker's left shoulder, looking up the aisle at the truck; eases in after the stop
     cd = bpy.data.cameras.new("cam")
     cam = bpy.data.objects.new("cam", cd)

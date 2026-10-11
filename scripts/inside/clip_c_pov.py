@@ -19,7 +19,7 @@ from mathutils import Vector as V
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from apps import actors, assets, kit, world  # noqa: E402
+from apps import assets, kit, people, world  # noqa: E402
 from apps.timing import FLOOR, MHE_AISLE_Y  # noqa: E402
 from clip_a import LENS, uniform_led  # noqa: E402
 from lib import geo, studio  # noqa: E402
@@ -61,9 +61,9 @@ def build(args):
         fk.keyframe_insert("location", frame=fr)
     # the worker: behind the rack row, steps out through the cross aisle and walks across the truck's path
     act = geo.collection("Actors")
-    J = actors.worker("W_see", act, variant=1)
+    J = people.worker("W_see", act)                       # realistic worker (Rocketbox, mocap walk)
     # (stays right of the mast in the camera's view: out of the gap, then angles into the lane ahead)
-    actors.walk(J, [(WORKER_X, WORKER_Y0), (WORKER_X, -4.8), (WORKER_X + 1.2, -5.15)], 1, END + 1, speed=WORKER_V, z=FLOOR)
+    people.walk(J, [(WORKER_X, WORKER_Y0), (WORKER_X, -4.8), (WORKER_X + 1.2, -5.15)], 1, END + 1, speed=WORKER_V, z=FLOOR)
     # POV camera on the front-right unit's lens
     unit = next(c for c in FK["cams"] if c.name.endswith("_fr"))
     cd = bpy.data.cameras.new("pov")
@@ -100,13 +100,18 @@ def anchors(s, ctx, frames):
     objs = [o for o in ctx["J"]["objs"] if o.type == "MESH"]
     for fr in frames:
         s.frame_set(fr)
+        dg = bpy.context.evaluated_depsgraph_get()
         xs, ys, vis = [], [], 0
-        for o in objs:
-            for c in o.bound_box:
-                x, y, ok = project(s, ctx["cam"], o.matrix_world @ V(c))
+        for o in objs:                                     # the deformed body (the rig's rest pose is a T-pose)
+            ev = o.evaluated_get(dg)
+            me = ev.to_mesh()
+            vs, mw = me.vertices, ev.matrix_world
+            for i in range(0, len(vs), 9):
+                x, y, ok = project(s, ctx["cam"], mw @ vs[i].co)
                 xs.append(x)
                 ys.append(y)
                 vis += ok
+            ev.to_mesh_clear()
         out[fr] = dict(box=[round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)],
                        vis=vis / max(1, len(xs)))
     return out
