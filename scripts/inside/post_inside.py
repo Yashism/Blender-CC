@@ -60,7 +60,7 @@ LABELS_D = {
     "relay": ("Safety relay", "cuts power on the brake line", (0.26, -0.15), 158, 999),
     "amp": ("Audio amp", "audible alert", (0.22, 0.15), 178, 999),
 }
-CLIPS["d"] = dict(end=240, labels=LABELS_D, fade=(-30, 10), chapter=("Detect.", 6, 52), flash=(97, 7),
+CLIPS["d"] = dict(end=240, labels=LABELS_D, fade=(-30, 10), chapter=("Detect.", 6, 52), flash=(97, 4),
                   rings=[("relay", 170, (255, 140, 60)), ("relay", 176, (255, 140, 60))], alarm=("amp", 176),
                   card=("Signal received.", "Camera → Wi-Fi → Omnibox Edge → safety relay", 200, 999))
 # clip C: live view 1-64 (POV 1-64) -> the network (NN 1-86) -> live again with the box (POV 65-106)
@@ -313,7 +313,7 @@ def frame(clip, src, fr, size, anchors):
                     L.arc((p[0], p[1]), r, a0, a0 + 80, (255, 120, 40, int(220 * (1 - u))), 2.0 * H / 720)
     if "flash" in c:
         f0, n = c["flash"]
-        k = 0.6 * (1 - smooth((fr - f0) / n)) if fr >= f0 else 0.0
+        k = 0.4 * (1 - smooth((fr - f0) / n)) if fr >= f0 else 0.0
         if k > 0:
             out = Image.blend(out, Image.new("RGBA", (W, H), (255, 255, 255, 255)), k)
     out = Image.alpha_composite(out, L.result(glow=0.6))
