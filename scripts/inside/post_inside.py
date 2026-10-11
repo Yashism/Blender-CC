@@ -67,7 +67,12 @@ CLIPS["d"] = dict(end=240, labels=LABELS_D, fade=(-30, 10), chapter=("Detect.", 
 C_NN0, C_LIVE2 = 65, 151
 NN_LABELS = {"L0": ("Camera frame", 1, 30), "L1": ("Edges", 20, 50), "L2": ("Shapes", 34, 66), "L3": ("Parts", 48, 78),
              "L4": ("Features", 62, 99)}
+SRC2 = {}                                                 # clip e: the second render
 NN = {}                                                   # set in main: src / anchors of the network render
+# clip E: stage shot 1-104 (diagram over the truck), aisle 105-192 (stops short of the worker)
+CLIPS["e"] = dict(end=192)
+E_AISLE, E_CUT, E_STOP_LOCAL = 105, 62, 37
+E_STAGES = ("CAPTURE", "DETECT", "SIGNAL", "RELAY", "STOP")
 
 
 def load(src, fr, size):
@@ -259,10 +264,141 @@ def frame_c(src, fr, size, anchors):
     return out.convert("RGB")
 
 
+def polyline_at(pts, u):
+    """Points of a polyline drawn on to fraction u of its length; also returns the point at u."""
+    seg = [math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:])]
+    tot = sum(seg) or 1.0
+    d, out = u * tot, [pts[0]]
+    for (a, b), l in zip(zip(pts, pts[1:]), seg):
+        if d >= l:
+            out.append(b)
+            d -= l
+        else:
+            t = d / max(l, 1e-6)
+            out.append((lerp(a[0], b[0], t), lerp(a[1], b[1], t)))
+            break
+    return out, out[-1]
+
+
+def frame_e(src, fr, size, anchors):
+    W, H = size
+    s = H / 720
+    L = SS(W, H)
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    RED = (255, 60, 40)
+    if fr < E_AISLE:
+        base = load(src, fr, size)
+        rec = anchors.get(str(fr), {})
+        sx = W / anchors.get("_w", W)
+        P = {k: (v[0] * sx, v[1] * sx) for k, v in rec.items() if v[2] > 0}
+        out = base.convert("RGBA")
+        k = ease_out((fr - 6) / 14) * clamp((50 - fr) / 8)
+        if k > 0:
+            place(lay, text_img("Protect.", "SemiBold", H * 0.11, WHITE), W * 0.66 - (1 - k) * H * 0.02, H * 0.2, k, anchor="l")
+        cut = fr >= E_CUT
+        path = [P[q] for q in ("relay", "p1", "p2", "p3", "brake") if q in P]
+        if len(path) == 5:
+            u = smooth((fr - 12) / 26)
+            drawn, tip = polyline_at(path, u)
+            if u > 0:
+                col = (120, 124, 132, 220) if cut else ORANGE + (255,)
+                L.line(drawn, col, 3.0 * s)
+                if not cut:                               # power flowing to the brake
+                    for j in range(14):
+                        uu = ((fr / 40.0) + j / 14) % 1.0
+                        if uu < u:
+                            _, q = polyline_at(path, uu)
+                            L.dot(q, 3.4 * s, (255, 220, 160, 255))
+            # the relay: a switch at the Omnibox, closed -> open at the cut
+            if u > 0.02:
+                r0 = path[0]
+                c0, c1 = (r0[0] - 9 * s, r0[1]), (r0[0] + 9 * s, r0[1])
+                ang = math.radians(-34 * smooth((fr - E_CUT) / 3)) if cut else 0.0
+                lv = (c0[0] + 18 * s * math.cos(ang), c0[1] + 18 * s * math.sin(ang))
+                L.dot(c0, 3.2 * s, WHITE + (255,))
+                L.dot(c1, 3.2 * s, WHITE + (255,))
+                L.line([c0, lv], (RED if cut else WHITE) + (255,), 2.4 * s)
+            label(L, lay, W, H, (path[0][0], path[0][1], 1), "Safety relay", "in the Omnibox Edge", (0.16, -0.06),
+                  (fr - 18) / 22)
+            label(L, lay, W, H, (path[4][0], path[4][1], 1), "Brake line", "power cut: the truck stops" if cut else "",
+                  (0.17, 0.05), (fr - 34) / 22)
+            if cut:
+                kc = ease_out((fr - E_CUT) / 6)
+                mx, my = path[0][0] - H * 0.2, path[0][1] + H * 0.02         # beside the relay that cut it
+                tg = text_img("POWER CUT", "Bold", H * 0.026, WHITE, tracking=0.1)
+                plate = Image.new("RGBA", (tg.width + int(H * 0.014), tg.height), RED + (int(235 * kc),))
+                place(lay, plate, mx - tg.width / 2, my - H * 0.04, 1.0, anchor="l")
+                place(lay, tg, mx - tg.width / 2 + H * 0.007, my - H * 0.04, kc, anchor="l")
+                ur = (fr - E_CUT) / 16
+                if ur <= 1:
+                    L.arc(path[4], H * (0.02 + 0.08 * ease_out(ur)), 0, 360, RED + (int(230 * (1 - ur)),), 2.4 * s)
+        # the truck controller: boxed, dashed, not connected
+        if "ctrl_a" in P and "ctrl_b" in P:
+            kk = ease_out((fr - 40) / 10)
+            if kk > 0:
+                (ax, ay), (bx, by) = P["ctrl_a"], P["ctrl_b"]
+                x0, x1, y0, y1 = min(ax, bx), max(ax, bx), min(ay, by), max(ay, by)
+                n = 9
+                for i in range(n):
+                    for (pa, pb) in ((((lerp(x0, x1, i / n), y0)), (lerp(x0, x1, (i + 0.5) / n), y0)),
+                                     ((lerp(x0, x1, i / n), y1), (lerp(x0, x1, (i + 0.5) / n), y1)),
+                                     ((x0, lerp(y0, y1, i / n)), (x0, lerp(y0, y1, (i + 0.5) / n))),
+                                     ((x1, lerp(y0, y1, i / n)), (x1, lerp(y0, y1, (i + 0.5) / n)))):
+                        L.line([pa, pb], WHITE + (int(220 * kk),), 1.6 * s)
+                label(L, lay, W, H, (x0, y0, 1), "Truck controller", "not connected: warranty unaffected",
+                      (-0.14, -0.16), (fr - 44) / 22)
+        kb = ease_out((fr - 72) / 12) * clamp((E_AISLE + 2 - fr) / 6)
+        if kb > 0:
+            place(lay, text_img("Cuts power on the brake line.  No controller wiring, no warranty issues.", "SemiBold",
+                                H * 0.032, WHITE), W / 2, H * 0.92, kb)
+    else:
+        lf = fr - E_AISLE + 1
+        base = load(SRC2["src"], lf, size)
+        out = base.convert("RGBA")
+        a2 = SRC2["anchors"].get(str(lf), {})
+        sx = W / SRC2["anchors"].get("_w", W)
+        # the order, lighting up: capture -> detect -> signal -> relay -> stop
+        n = len(E_STAGES)
+        bw, gap = H * 0.2, H * 0.05
+        x0 = W / 2 - (n * bw + (n - 1) * gap) / 2
+        y = H * 0.085                                     # top: the floor below carries the stop marker
+        ks = ease_out((lf - 2) / 8)
+        for i, nm in enumerate(E_STAGES):
+            on = clamp((lf - (6 + i * 7)) / 3) if i < n - 1 else clamp((lf - E_STOP_LOCAL) / 3)
+            bx = x0 + i * (bw + gap)
+            col = ORANGE if i < n - 1 else (255, 60, 40)
+            fill = tuple(int(lerp(16, c, 0.9 * on)) for c in col) + (int(200 * ks),)
+            d.rounded_rectangle([bx, y - H * 0.028, bx + bw, y + H * 0.028], radius=H * 0.028, fill=fill,
+                                outline=(255, 255, 255, int(120 * ks)), width=max(1, int(1.2 * s)))
+            place(lay, text_img(nm, "Bold", H * 0.022, WHITE, tracking=0.12), bx + bw / 2, y, ks * (0.45 + 0.55 * on))
+            if i < n - 1:
+                ax = bx + bw + gap * 0.25
+                L.line([(ax, y), (ax + gap * 0.5, y)], WHITE + (int(160 * ks),), 1.6 * s)
+                L.line([(ax + gap * 0.3, y - gap * 0.15), (ax + gap * 0.5, y), (ax + gap * 0.3, y + gap * 0.15)],
+                       WHITE + (int(160 * ks),), 1.6 * s)
+        tp, wk = a2.get("tips"), a2.get("worker")
+        km = ease_out((lf - E_STOP_LOCAL - 4) / 10)
+        if km > 0 and tp and wk and tp[2] > 0 and wk[2] > 0:
+            (ax, ay), (bx2, by2) = (tp[0] * sx, tp[1] * sx), (wk[0] * sx, wk[1] * sx)
+            mx = lerp(ax, bx2, km)
+            my = lerp(ay, by2, km)
+            L.line([(ax, ay), (mx, my)], WHITE + (230,), 2.0 * s)
+            for (px, py) in ((ax, ay), (mx, my)):
+                L.line([(px, py - 8 * s), (px, py + 8 * s)], WHITE + (230,), 2.0 * s)
+            place(lay, text_img("Stopped short", "SemiBold", H * 0.03, WHITE), (ax + bx2) / 2, (ay + by2) / 2 - H * 0.045,
+                  clamp((km - 0.5) * 2))
+    out = Image.alpha_composite(out, L.result(glow=0.7))
+    out = Image.alpha_composite(out, lay)
+    return out.convert("RGB")
+
+
 def frame(clip, src, fr, size, anchors):
     W, H = size
     if clip == "c":
         return frame_c(src, fr, size, anchors)
+    if clip == "e":
+        return frame_e(src, fr, size, anchors)
     c = CLIPS[clip]
     im = load(src, fr, size)
     a = np.asarray(im, np.float32) / 255
@@ -329,9 +465,12 @@ def main():
     ap.add_argument("--size", default="960x540")
     ap.add_argument("--stills", default="")
     ap.add_argument("--nn", default="", help="clip c: the network flythrough render")
+    ap.add_argument("--src2", default="", help="clip e: the aisle render")
     a = ap.parse_args()
     if a.nn:
         NN.update(src=a.nn, anchors=json.load(open(os.path.join(a.nn, "anchors.json"))))
+    if a.src2:
+        SRC2.update(src=a.src2, anchors=json.load(open(os.path.join(a.src2, "anchors.json"))))
     size = tuple(int(v) for v in a.size.split("x"))
     anchors = json.load(open(os.path.join(a.src, "anchors.json")))
     f1 = sorted(glob.glob(os.path.join(a.src, "f_*.*")))
