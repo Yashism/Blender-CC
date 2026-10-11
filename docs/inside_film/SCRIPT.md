@@ -26,7 +26,7 @@ light, orange accents, macro lenses. **Music (to license):** Kiasmos "Looped" (f
 | **C. See** | 28–36 s | Through the lens onto the sensor: the aisle forms from pixels, flows through glowing neural-network layers, the worker lights up with a box. | *See.* `PERSON 0.97` |
 | **D. Detect → Omnibox** | 36–46 s | Wi-Fi rings leave the camera and reach the Omnibox Edge, which opens up (Raspberry Pi 5, relay board, audio amp, cooling, power). The relay clicks on the beat; the alarm sounds; status LED red. | *Detect.* · *Wireless link* · *Safety relay* |
 | **E. Protect: brake-line cut** | 46–54 s | A clean line diagram over the truck: Omnibox → brake line; the relay opens and power to the brake line is cut; cut to the aisle, the forklift stops short of the worker. Stage strip at the bottom lights in order: capture → detect → signal → relay → stop. | *Protect.* · *Cuts power on the brake line. No controller wiring, no warranty issues.* |
-| **F. Close** | 54–66 s | Starts on clip A's exploded framing and plays the assembly back (screws spin home); the Omnibox Edge slides in beside the camera, both LEDs green; fade to black; five orange dots (the five cameras) glide onto the arrow, it fills, the wordmark wipes on (film 2's build). | *All on the edge. No cloud. No delay.* → RAMS Digital |
+| **F. Close** | 54–66 s | Starts on clip A's exploded framing and plays the assembly back (screws spin home); the Omnibox Edge slides in beside the camera, both LEDs green; fade to black; the logo fades up out of a soft blur and settles, then See. Detect. Protect. | *All on the edge. No cloud. No delay.* → RAMS Digital |
 
 ## Pipeline
 `scripts/inside/` builds each clip in Blender from the shared assets (`scripts/launch/real_cam.py`,

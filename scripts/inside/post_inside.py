@@ -76,13 +76,13 @@ E_AISLE, E_CUT, E_STOP_LOCAL = 105, 62, 37
 E_STAGES = ("CAPTURE", "DETECT", "SIGNAL", "RELAY", "STOP")
 
 
-# clip F: the pair side by side (render 1-176), tagline, fade to black, then the logo builds (post only)
+# clip F: the pair side by side (render 1-176), tagline, fade to black, then the logo reveal (post only)
 CLIPS["f"] = dict(end=288)
 F_TAG = (("All on the edge.", 100), ("No cloud.", 114), ("No delay.", 128))
 F_NAMES = (("cam_low", "RAMS AI Camera", "sees and decides on the device", 112),
            ("obx_low", "Omnibox Edge", "stops the truck", 120))
 F_FADE = (150, 22)                                        # picture to black
-F_DOTS, F_TRAVEL, F_FORM, F_WORD, F_LINE = 176, (190, 210), 222, 226, 240
+F_LOGO, F_LINE = 180, 218                              # logo reveal, then its lines
 
 
 def load(src, fr, size):
@@ -404,43 +404,24 @@ def frame_e(src, fr, size, anchors):
 
 
 def logo_f(W, H, fr):
-    """Film 2's close: five orange dots (the five cameras) line up, glide onto the arrow's outline, the arrow fills
-    out from its corner and snaps, the wordmark wipes on, then the line."""
+    """A clean reveal: the whole logo fades up out of a soft blur and settles a touch, then the two lines."""
     from apps.post_film2 import logo_geom
     g = logo_geom(W, H)
     out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ox, oy = g["o"]
     lw, lh = g["size"]
-    fill = smooth((fr - (F_FORM - 14)) / 14)
-    L = SS(W, H)
-    n = len(g["dots"])
-    for j, ((tx, ty), dp) in enumerate(zip(g["dots"], g["dot_par"])):
-        k = ease_out((fr - F_DOTS - j * 3) / 8)
-        if k <= 0 or (fill >= dp + 0.02 or fr >= F_FORM + 2):
-            continue
-        sx, sy = g["word_cx"] + (j - (n - 1) / 2) * H * 0.07, H * 0.5
-        u = smooth((fr - F_TRAVEL[0] - j * 2) / (F_TRAVEL[1] - F_TRAVEL[0]))
-        L.dot((lerp(sx, tx, u), lerp(sy, ty, u)), g["bar"] / 2 * k * (1 + 0.08 * math.sin(fr / 3)), ORANGE + (255,))
-    out.alpha_composite(L.result(glow=0.8))
-    if fill > 0:
-        arr = g["arrow"].copy()
-        arr[..., 3] *= np.clip((fill * 1.05 - g["par"]) / 0.05, 0, 1)
-        ai = Image.fromarray(arr.astype(np.uint8), "RGBA")
-        flash = clamp(1 - (fr - F_FORM) / 12) * (fr >= F_FORM - 2)
-        if flash > 0:                                     # the snap
-            ga = np.asarray(ai.filter(ImageFilter.GaussianBlur(H * 0.022))).astype(np.float32)
-            ga[..., 3] *= 2.4 * flash
-            out.alpha_composite(Image.fromarray(np.clip(ga, 0, 255).astype(np.uint8), "RGBA"), (int(ox), int(oy)))
-        out.alpha_composite(ai, (int(ox), int(oy)))
-    u = clamp((fr - F_WORD) / 16)
-    if u > 0:                                             # the wordmark wipes on right -> left from the arrow
-        w = g["word"].copy()
-        edge = lerp(g["arrow_x0"], -lw * 0.08, ease_out(u))
-        xs = np.arange(lw, dtype=np.float32)[None, :]
-        w[..., 3] *= np.clip((xs - edge) / (lw * 0.06), 0, 1)
-        sweep = np.exp(-((xs - edge - lw * 0.03) ** 2) / (2 * (lw * 0.02) ** 2)) * (1 - u)
-        w[..., :3] = np.clip(w[..., :3] + sweep[..., None] * 120, 0, 255)
-        out.alpha_composite(Image.fromarray(w.astype(np.uint8), "RGBA"), (int(ox), int(oy)))
+    k = ease_out((fr - F_LOGO) / 34)
+    if k > 0:
+        full = Image.alpha_composite(Image.fromarray(g["arrow"].astype(np.uint8), "RGBA"),
+                                     Image.fromarray(g["word"].astype(np.uint8), "RGBA"))
+        sc = 1.025 - 0.025 * k
+        im = full.resize((int(lw * sc), int(lh * sc)), Image.LANCZOS)
+        if k < 1:
+            im = im.filter(ImageFilter.GaussianBlur(H * 0.01 * (1 - k)))
+        a = np.asarray(im).astype(np.float32)
+        a[..., 3] *= k
+        out.alpha_composite(Image.fromarray(a.astype(np.uint8), "RGBA"),
+                            (int(ox + lw / 2 - im.width / 2), int(oy + lh / 2 - im.height / 2)))
     k2 = ease_out((fr - F_LINE) / 18)
     if k2 > 0:
         place(out, text_img("See. Detect. Protect.", "Medium", H * 0.05, (255, 140, 60)), g["word_cx"],
@@ -485,7 +466,7 @@ def frame_f(src, fr, size, anchors):
         place(lay, text_img(name, "SemiBold", H * 0.03, WHITE), px, py + (1 - k) * 6 * s, k)
         place(lay, text_img(detail, "Medium", H * 0.021, GREY), px, py + H * 0.036 + (1 - k) * 6 * s, k)
     out = Image.alpha_composite(out, lay)
-    lg = logo_f(W, H, fr) if fr >= F_DOTS else None
+    lg = logo_f(W, H, fr) if fr >= F_LOGO else None
     if lg is not None:
         out = Image.alpha_composite(out, lg)
     return out.convert("RGB")
