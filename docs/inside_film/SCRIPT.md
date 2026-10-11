@@ -6,7 +6,8 @@ behind a forklift" and "the forklift stops". Built from the client's real CAD: e
 
 **Audience:** engineers, safety managers and buyers. **Tone:** precise, calm, premium: black studio, cool key
 light, orange accents, macro lenses. **Music (to license):** Kiasmos "Looped" (first choice) or Rival Consoles
-"Recovery".
+"Recovery". **Temp bed in the preview cut:** "Descent" by Scott Buckley (CC BY 4.0), from 5.85 s of the
+source so its swell lands on the A -> B cut (`scripts/inside/cut_film3.py`).
 
 ## Confirmed facts (from RAMS)
 - The **camera** detects the person on-board and sends a stop signal to the **Omnibox Edge** (processor box).
