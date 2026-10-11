@@ -50,6 +50,19 @@ CLIPS = {"a": dict(end=432, labels=LABELS_A, title=("What happens in the blink o
          "b": dict(end=240, labels=LABELS_B, fans=FANS_B, fade=(-30, 10),
                    card=("Five cameras. 360° coverage.", "130° each · one Omnibox Edge", 182, 999)),
          "c": dict(end=192)}
+# clip D: shot 1 on the guard (unit / Wi-Fi / Omnibox), shot 2 the Omnibox opened (part labels)
+LABELS_D = {
+    "unit": ("RAMS AI Camera", "person detected: sends the stop signal", (0.24, -0.06), 8, 34),
+    "mid": ("Wi-Fi link", "no cable between camera and Omnibox", (0.22, -0.07), 30, 56),
+    "obx": ("Omnibox Edge", "stop signal received", (0.24, -0.12), 58, 92),
+    "cooling": ("Active cooling", "", (-0.20, -0.04), 140, 999),
+    "pi": ("Raspberry Pi 5", "runs the Omnibox", (-0.17, 0.12), 146, 999),
+    "relay": ("Safety relay", "cuts power on the brake line", (0.30, -0.02), 158, 999),
+    "amp": ("Audio amp", "audible alert", (0.22, 0.15), 178, 999),
+}
+CLIPS["d"] = dict(end=240, labels=LABELS_D, fade=(-30, 10), chapter=("Detect.", 6, 52), flash=(97, 7),
+                  rings=[("relay", 170, (255, 140, 60)), ("relay", 176, (255, 140, 60))], alarm=("amp", 176),
+                  card=("Signal received.", "Camera → Wi-Fi → Omnibox Edge → safety relay", 200, 999))
 # clip C: live view 1-64 (POV 1-64) -> the network (NN 1-86) -> live again with the box (POV 65-106)
 C_NN0, C_LIVE2 = 65, 151
 NN_LABELS = {"L0": ("Camera frame", 1, 30), "L1": ("Edges", 20, 50), "L2": ("Shapes", 34, 66), "L3": ("Parts", 48, 78),
@@ -278,6 +291,31 @@ def frame(clip, src, fr, size, anchors):
     if "card" in c:
         t, sub, f0, f1 = c["card"]
         card(lay, W, H, t, sub, min((fr - f0) / 18, (f1 - fr) / 10))
+    if "chapter" in c:                                    # the chapter word, as "See." in clip C
+        t, f0, f1 = c["chapter"]
+        k = ease_out((fr - f0) / 14) * clamp((f1 - fr) / 8)
+        if k > 0:
+            place(lay, text_img(t, "SemiBold", H * 0.13, WHITE), W * 0.075 - (1 - k) * H * 0.02, H * 0.42, k, anchor="l")
+    for key, f0, col in c.get("rings", []):               # a switching pulse
+        p = at(key)
+        u = (fr - f0) / 14
+        if p and p[2] > 0 and 0 <= u <= 1:
+            r = H * (0.02 + 0.12 * ease_out(u))
+            L.arc((p[0], p[1]), r, 0, 360, col + (int(230 * (1 - u)),), 2.2 * H / 720)
+    if "alarm" in c:                                      # sound waves from the amp
+        key, f0 = c["alarm"]
+        p = at(key)
+        if p and p[2] > 0 and fr >= f0:
+            for j in range(3):
+                u = ((fr - f0) / 18 + j / 3) % 1.0
+                r = H * (0.03 + 0.09 * u)
+                for a0 in (-40, 140):
+                    L.arc((p[0], p[1]), r, a0, a0 + 80, (255, 120, 40, int(220 * (1 - u))), 2.0 * H / 720)
+    if "flash" in c:
+        f0, n = c["flash"]
+        k = 0.6 * (1 - smooth((fr - f0) / n)) if fr >= f0 else 0.0
+        if k > 0:
+            out = Image.blend(out, Image.new("RGBA", (W, H), (255, 255, 255, 255)), k)
     out = Image.alpha_composite(out, L.result(glow=0.6))
     out = Image.alpha_composite(out, lay)
     return out.convert("RGB")
