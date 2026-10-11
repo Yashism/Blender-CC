@@ -195,7 +195,7 @@ def frame_c(src, fr, size, anchors):
             place(lay, text_img("See.", "SemiBold", H * 0.13, WHITE), W * 0.075 - (1 - k) * H * 0.02, H * 0.42, k, anchor="l")
     else:
         if fr < C_LIVE2:
-            k = ease_out((fr - C_NN0 - 6) / 12) * clamp((C_LIVE2 - 4 - fr) / 8)
+            k = ease_out((fr - C_NN0 - 6) / 12) * clamp((C_NN0 + 56 - fr) / 8)   # gone before the outputs fill the frame
             if k > 0:
                 place(lay, text_img("On-device neural network", "SemiBold", H * 0.036, WHITE), W * 0.06, H * 0.09, k, anchor="l")
                 place(lay, text_img("runs on the camera's Realtek AMB82, no cloud", "Medium", H * 0.024, GREY),
