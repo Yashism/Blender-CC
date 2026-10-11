@@ -316,7 +316,8 @@ def build(args):
     t2 = area("s_top", sl, 0.4, temp=6000)
     aim(t2, st_c + V((0.05, 0.0, 0.7)), st_c)
     t2.data.energy = 2.5
-    floor_m = kit.pbr("studio_floor", (0.006, 0.0065, 0.008), 0.6)
+    floor_m = kit.pbr("studio_floor", (0.006, 0.0065, 0.008), 0.85)
+    floor_m.node_tree.nodes["Principled BSDF"].inputs["Specular IOR Level"].default_value = 0.15   # dark: labels sit on it
     geo.box("studio_floor", (4, 4, 0.01), loc=(st_c.x, st_c.y, -0.006), mat=floor_m, coll=sl, bevel=0)
     # anchors for post: shot 1 points (world) and shot 2 part centres (studio, moving with the explode)
     rest = {}

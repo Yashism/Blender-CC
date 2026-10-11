@@ -57,7 +57,7 @@ LABELS_D = {
     "obx": ("Omnibox Edge", "stop signal received", (0.24, -0.12), 58, 92),
     "cooling": ("Active cooling", "", (-0.20, -0.04), 140, 999),
     "pi": ("Raspberry Pi 5", "runs the Omnibox", (-0.17, 0.12), 146, 999),
-    "relay": ("Safety relay", "cuts power on the brake line", (0.30, -0.02), 158, 999),
+    "relay": ("Safety relay", "cuts power on the brake line", (0.26, -0.15), 158, 999),
     "amp": ("Audio amp", "audible alert", (0.22, 0.15), 178, 999),
 }
 CLIPS["d"] = dict(end=240, labels=LABELS_D, fade=(-30, 10), chapter=("Detect.", 6, 52), flash=(97, 7),
