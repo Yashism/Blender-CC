@@ -9,21 +9,19 @@ over the logo hold.
 import argparse
 import os
 import subprocess
+import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+from post_inside import CLIPS as POST, FPS  # noqa: E402
+
 FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 CLIPS = ("a", "b", "c", "d", "e", "f")
 MUSIC = os.path.join(ROOT, "assets", "music", "ScottBuckley_Descent.mp3")
 SWELL, CUT_AB = 23.85, 18.0                 # source swell -> the A -> B cut
 FADE_OUT = 2.5                              # over the logo hold
-
-
-def dur(p):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p],
-                         capture_output=True, text=True, check=True).stdout
-    return float(out)
 
 
 def main():
@@ -33,10 +31,13 @@ def main():
     ap.add_argument("--music", default=MUSIC)
     a = ap.parse_args()
     paths = [os.path.join(a.dir, f"clip_{c}.mp4") for c in CLIPS]
-    total = sum(dur(p) for p in paths)
+    missing = [p for p in paths if not os.path.exists(p)]
+    if missing:
+        sys.exit("missing clips: " + ", ".join(missing))
+    total = sum(POST[c]["end"] for c in CLIPS) / FPS     # each clip is exactly its post length
     lst = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
     for p in paths:
-        lst.write(f"file '{os.path.abspath(p)}'\n")
+        lst.write("file '{}'\n".format(os.path.abspath(p).replace("\\", "/")))
     lst.close()
     start = SWELL - CUT_AB
     flt = (f"[1:a]atrim={start:.3f}:{start + total:.3f},asetpts=PTS-STARTPTS,"

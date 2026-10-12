@@ -568,7 +568,7 @@ def main():
     tmp = tempfile.mkdtemp(prefix="inside_")
     for fr in range(1, end + 1):
         frame(a.clip, a.src, fr, size, anchors).save(os.path.join(tmp, f"p_{fr:04d}.png"))
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(tmp, "p_%04d.png"),
+    subprocess.run([os.environ.get("FFMPEG", "ffmpeg"), "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", os.path.join(tmp, "p_%04d.png"),
                     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-movflags", "+faststart", a.out], check=True)
     import shutil
     shutil.rmtree(tmp, ignore_errors=True)

@@ -13,6 +13,7 @@ import json
 import math
 import os
 import sys
+import time
 
 import bmesh
 import bpy
@@ -385,9 +386,12 @@ def main():
         if a.render and os.path.exists(p):
             continue
         s.frame_set(fr)
-        s.render.filepath = p
+        t0 = time.time()
+        tmp = p[:-4] + ".part" + p[-4:]                # an interrupted write never leaves a half frame behind
+        s.render.filepath = tmp
         bpy.ops.render.render(write_still=True)
-        print(f"[inside] frame {fr}", flush=True)
+        os.replace(tmp, p)
+        print(f"[inside] frame {fr} {time.time() - t0:.1f}s", flush=True)
 
 
 if __name__ == "__main__":
