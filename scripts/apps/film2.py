@@ -19,7 +19,7 @@ from mathutils import Vector
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE))
-from apps import actors, assets, kit, world  # noqa: E402
+from apps import actors, assets, kit, people, world  # noqa: E402
 from apps.timing import (CELL, CONVERGE, CROSS_AISLE, DOOR, DOOR_NIGHT, FIRE, FIRE_DETECT, FIRE_FLAME,  # noqa: E402
                          FIRE_SMOKE, FLOOR, FPS, HERO_HIT, MHE_AISLE_Y, MHE_CLEAR, MHE_DETECT, MHE_RELAY, MHE_REVERSE, MHE_STOP,
                          RENDER_END, ROBOT_CLEAR, ROBOT_DETECT, ROBOT_ENTER, ROBOT_POV, ROBOT_RELAY, ROBOT_RESUME, S, SHOTS,
@@ -380,20 +380,20 @@ def build(args):
                                              (ROBOT_RELAY - 3, RED), (ROBOT_CLEAR, GREEN)], "CONSTANT")
 
     # ---- workers
-    w1 = actors.worker("W_mhe", act, variant=0)
+    w1 = people.worker("W_mhe", act, variant=0)
     wx = -8.9                                          # through the cross aisle, into the reversing zone
     look1 = lambda fr: math.radians(55) * smooth((fr - MHE_RELAY) / 10) * (1 - smooth((fr - MHE_CLEAR + 20) / 14))
-    actors.walk(w1, [(wx, -0.6), (wx, -4.4), (wx, -5.5)], 646, MHE_CLEAR - 32, speed=1.35, z=FLOOR, tfn=tau, look=look1)
-    actors.walk(w1, [(wx, -5.5), (wx - 0.1, -10.6), (wx - 2.0, -11.6)], MHE_CLEAR - 31, S["s1d_stop"][1] + 2, speed=1.35,
+    people.walk(w1, [(wx, -0.6), (wx, -4.4), (wx, -5.5)], 646, MHE_CLEAR - 32, speed=1.35, z=FLOOR, tfn=tau, look=look1)
+    people.walk(w1, [(wx, -5.5), (wx - 0.1, -10.6), (wx - 2.0, -11.6)], MHE_CLEAR - 31, S["s1d_stop"][1] + 2, speed=1.35,
                 z=FLOOR, append=True)
     actors.set_visible(w1, (S["s1a_crane"][0], S["s1d_stop"][1]))
-    w2 = actors.worker("W_zone", act, variant=1)
+    w2 = people.worker("W_zone", act, variant=1)
     zx = (ZONE["x0"] + ZONE["x1"]) / 2
     zone_in = (zx - 0.3, ZONE["y0"] + 1.3)
     t_walk = (ZONE_CROSS - S["s2_zone"][0])
-    actors.walk(w2, [(-2.4, 0.6), (zx - 0.6, 1.2), (zx - 0.6, ZONE["y0"] - 0.2), zone_in], S["s2_zone"][0] + 20, ZONE_CROSS + 40,
+    people.walk(w2, [(-2.4, 0.6), (zx - 0.6, 1.2), (zx - 0.6, ZONE["y0"] - 0.2), zone_in], S["s2_zone"][0] + 20, ZONE_CROSS + 40,
                 speed=1.25, z=FLOOR)
-    actors.walk(w2, [zone_in, (zone_in[0] - 0.4, ZONE["y0"] - 1.4), (-3.5, 0.0)], ZONE_CLEAR - 30, S["s2_zone"][1] + 2, speed=1.25,
+    people.walk(w2, [zone_in, (zone_in[0] - 0.4, ZONE["y0"] - 1.4), (-3.5, 0.0)], ZONE_CLEAR - 30, S["s2_zone"][1] + 2, speed=1.25,
                 z=FLOOR, append=True)
     actors.set_visible(w2, (S["s2_zone"][0], S["s2_zone"][1]))
     # door crowd (time-lapse: 2x walking speed)
@@ -403,7 +403,7 @@ def build(args):
     d0, d1 = S["s3_door"]
     yin = -12.6
     for i in range(14):
-        J = actors.worker(f"W_door{i}", act, variant=i + 2, height=rng.uniform(1.66, 1.86))
+        J = people.worker(f"W_door{i}", act, variant=i + 2, height=rng.uniform(1.66, 1.86))
         start = d0 + 10 + i * 13 + rng.randint(0, 6)
         lane = rng.uniform(-0.3, 0.3)
         side = rng.choice((-1, 1))
@@ -413,11 +413,11 @@ def build(args):
         else:               # going out
             path = [(DOOR["x"] + side * 7.0, -10.2 + lane), (DOOR["x"] + side * 1.0, -10.6), (DOOR["x"] - lane * 0.4, yin + 0.8),
                     (DOOR["x"] - lane * 0.4, -15.5)]
-        actors.walk(J, path, start, d1 + 2, speed=2.7, z=FLOOR)
+        people.walk(J, path, start, d1 + 2, speed=2.7, z=FLOOR)
         actors.set_visible(J, (d0, d1))
         crowd.append(J)
     # robot cell worker
-    w4 = actors.worker("W_cell", act, variant=3)
+    w4 = people.worker("W_cell", act, variant=3)
     cd0, cd1 = CELL["door_y"]
     cdy = (cd0 + cd1) / 2
     inside = (CELL["x0"] + 0.9, cdy - 0.35)
@@ -425,8 +425,8 @@ def build(args):
     p_a, p_b = V((CELL["x0"] - 9.0, cdy - 3.0, 0)), V((CELL["x0"] - 1.2, cdy, 0))
     d_cross = (p_b - p_a).length + 1.2 * math.hypot(2.1, 0.35) / 2.1
     w4_start = ROBOT_DETECT - int(round(d_cross / 1.15 * FPS))
-    actors.walk(w4, [tuple(p_a[:2]), tuple(p_b[:2]), inside], w4_start, ROBOT_RELAY + 20, speed=1.15, z=FLOOR)
-    actors.walk(w4, [inside, (CELL["x0"] - 1.0, cdy), (CELL["x0"] - 4.0, cdy - 2.0)], ROBOT_CLEAR - 50, S["s6_system"][1],
+    people.walk(w4, [tuple(p_a[:2]), tuple(p_b[:2]), inside], w4_start, ROBOT_RELAY + 20, speed=1.15, z=FLOOR)
+    people.walk(w4, [inside, (CELL["x0"] - 1.0, cdy), (CELL["x0"] - 4.0, cdy - 2.0)], ROBOT_CLEAR - 50, S["s6_system"][1],
                 speed=1.15, z=FLOOR, append=True)
     actors.set_visible(w4, (w4_start - 2, S["s6_system"][1]))
     # system-shot life: a forklift-free aisle walker + door walkers reuse; robot resumes
@@ -807,7 +807,10 @@ def anchor_track(s, frames, W_, H_, ctx):
             obs = [o for o in J["objs"] if o.type == "MESH" and not o.hide_render]
             if not obs:
                 continue
-            pts = [o.matrix_world @ V(c) for o in obs for c in o.bound_box]
+            if J.get("rbx"):                               # realistic people: the deformed body (rest pose is a T-pose)
+                pts = people.points(J, bpy.context.evaluated_depsgraph_get(), 12)
+            else:
+                pts = [o.matrix_world @ V(c) for o in obs for c in o.bound_box]
             xs, ys, zs = [], [], []
             for p in pts:
                 q = world_to_camera_view(s, cam, p)
