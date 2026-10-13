@@ -10,7 +10,7 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-INCLUDE = ("scripts/", "assets/apps_film/", "assets/cad/", "assets/fonts/", "assets/logo/", "docs/apps_film/",
+INCLUDE = ("scripts/", "assets/apps_film/", "assets/people/", "assets/cad/", "assets/fonts/", "assets/logo/", "docs/apps_film/",
            "render_film2.ps1")
 EXTRA = ("assets/music/In_Motion.mp3",)                   # untracked: the client's own track
 README = "docs/apps_film/RENDER_FILM2_ON_YOUR_PC.md"
