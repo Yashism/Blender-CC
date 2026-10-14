@@ -390,8 +390,10 @@ def build(args):
     w2 = people.worker("W_zone", act, variant=1)
     zx = (ZONE["x0"] + ZONE["x1"]) / 2
     zone_in = (zx - 0.3, ZONE["y0"] + 1.3)
-    t_walk = (ZONE_CROSS - S["s2_zone"][0])
-    people.walk(w2, [(-2.4, 0.6), (zx - 0.6, 1.2), (zx - 0.6, ZONE["y0"] - 0.2), zone_in], S["s2_zone"][0] + 20, ZONE_CROSS + 40,
+    # start so he steps over the zone's near edge (y0) exactly at ZONE_CROSS, when the alert fires
+    d_edge = math.hypot(zx - 0.6 + 2.4, 1.2 - 0.6) + (ZONE["y0"] - 1.2)
+    z_start = ZONE_CROSS - int(round(d_edge / 1.25 * FPS))
+    people.walk(w2, [(-2.4, 0.6), (zx - 0.6, 1.2), (zx - 0.6, ZONE["y0"] - 0.2), zone_in], z_start, ZONE_CROSS + 40,
                 speed=1.25, z=FLOOR)
     people.walk(w2, [zone_in, (zone_in[0] - 0.4, ZONE["y0"] - 1.4), (-3.5, 0.0)], ZONE_CLEAR - 30, S["s2_zone"][1] + 2, speed=1.25,
                 z=FLOOR, append=True)
@@ -664,8 +666,10 @@ def make_cameras(s, W, FK, OB, R, F, crowd):
             u = smooth((fr - a) / (cut - a))
             loc = unit + d * lerp(0.50, 0.40, u) + side * lerp(0.14, 0.08, u) + V((0, 0, -0.04))
             return loc, unit, unit, lerp(52.0, 56.0, u)
-        K = [(cut, unit + d * 0.6 + side * 0.9 + V((0, 0, 0.9)), zc + V((0, 0.3, 0.5)), 30.0),
-             (b, V((zc.x + 1.4, zc.y - 7.4, FLOOR + 4.8)), zc + V((0, 0.4, 0.5)), 30.0)]
+        # aimed at the zone's near edge so the worker is in frame as he crosses it (the alert fires on the crossing)
+        K = [(cut, unit + d * 0.6 + side * 0.9 + V((0, 0, 0.9)), zc + V((0, -2.3, 0.0)), 30.0),
+             (ZONE_CROSS + 30, unit + d * 0.2 + side * 1.0 + V((0, 0, 1.8)), zc + V((0, -1.6, 0.2)), 30.0),
+             (b, V((zc.x + 1.4, zc.y - 7.4, FLOOR + 4.8)), zc + V((0, -0.6, 0.3)), 30.0)]
         loc = hermite([(f, p) for f, p, _, _ in K], fr)
         tgt = hermite([(f, p) for f, _, p, _ in K], fr)
         return loc, tgt, zc + V((0, 0.3, 0.6)), 30.0

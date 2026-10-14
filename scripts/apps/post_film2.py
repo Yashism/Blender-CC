@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import zlib
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -255,13 +256,21 @@ def bracket_box(L, box, col, s, k=1.0):
         L.line([(px + dx * ln, py), (px, py), (px, py + dy * ln)], col, 2.0 * s)
 
 
-def tag(extra, text, x, y, col, s, H, alpha=1.0, size=0.024, anchor="l", weight="SemiBold", flip_x=None):
-    """flip_x: if the text would run off the right edge, end it at flip_x instead (label on the other side)."""
+def tag(extra, text, x, y, col, s, H, alpha=1.0, size=0.024, anchor="l", weight="SemiBold", flip_x=None, plate=False):
+    """flip_x: if the text would run off the right edge, end it at flip_x instead (label on the other side).
+    plate: a dark rounded backing so the text reads on any background (the big alerts)."""
     size *= 1.32
     t = text_img(text, weight, H * size, col, tracking=0.08)
     sh = text_img(text, weight, H * size, (0, 0, 0), tracking=0.08)
     if flip_x is not None and anchor == "l" and x + t.width > extra.width - H * 0.02:
         x = flip_x - t.width + t.height * 0.33
+    if plate and alpha > 0:
+        x0 = x - t.width / 2 if anchor == "c" else x - t.height * 0.33
+        px, py = t.height * 0.55, t.height * 0.18
+        pl = Image.new("RGBA", extra.size, (0, 0, 0, 0))
+        ImageDraw.Draw(pl).rounded_rectangle([x0 - px, y - t.height / 2 - py, x0 + t.width + px, y + t.height / 2 + py],
+                                             radius=t.height * 0.28, fill=(8, 10, 14, int(175 * alpha)))
+        extra.alpha_composite(pl)
     place(extra, sh, x, y + H * 0.002, 0.6 * alpha, anchor=anchor, blur=H * 0.006)
     place(extra, t, x, y, alpha, anchor=anchor)
 
@@ -533,6 +542,7 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
     sc = in_scan(fr)
     # --- detection boxes on people while perceiving
     if sc:
+        placed = []                                       # door-crowd ID labels already on screen
         for k, v in rec.items():
             if not k.startswith("W:") or len(v) < 5:
                 continue
@@ -548,9 +558,21 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
                 col = RED
             bracket_box(L, box, col + (235,), s)
             lab = "PERSON 0.97"
+            ty = box[1] - 12 * s
             if sid == "s3_door":
-                lab = f"ID {int(abs(hash(k)) % 900 + 100)}"
-            tag(extra, lab, box[0], box[1] - 12 * s, col, s, H, size=0.02)
+                if box[1] < H * 0.03:                      # still outside the doorway, half off frame: box only
+                    continue
+                lab = f"ID {zlib.crc32(k.encode()) % 900 + 100}"        # stable across processes (hash() is salted per run)
+                lw, lh = len(lab) * H * 0.0175, H * 0.034          # label footprint (size 0.02 type)
+                for cand in (ty, box[3] + 12 * s, ty - lh, box[3] + 12 * s + lh, ty - 2 * lh, ty - 3 * lh):
+                    r = (box[0] - lh * 0.33, cand - lh / 2, box[0] + lw, cand + lh / 2)
+                    if r[1] < H * 0.01 or r[3] > H * 0.99:          # keep it inside the frame
+                        continue
+                    if not any(r[0] < q[2] and q[0] < r[2] and r[1] < q[3] and q[1] < r[3] for q in placed):
+                        ty = cand
+                        break
+                placed.append((box[0] - lh * 0.33, ty - lh / 2, box[0] + lw, ty + lh / 2))
+            tag(extra, lab, box[0], ty, col, s, H, size=0.02)
     # --- s1b: the five cameras
     if sid == "s1b_cones":
         names = {"fl": "FRONT L", "fr": "FRONT R", "sl": "LEFT", "sr": "RIGHT", "rr": "REAR"}
@@ -581,10 +603,10 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
                 if fr < MHE_STOP:
                     tag(extra, "RELAY", c1[0] + 14 * s, c1[1] - 14 * s, RED, s, H, clamp((fr - MHE_RELAY + 3) / 6), size=0.022)
         if fr >= MHE_STOP and sid == "s1d_stop":
-            tag(extra, "MHE STOPPED", W * 0.66, H * 0.12, RED, s, H, smooth((fr - MHE_STOP) / 8), size=0.034, anchor="c", weight="Bold")
+            tag(extra, "MHE STOPPED", W * 0.66, H * 0.12, RED, s, H, smooth((fr - MHE_STOP) / 8), size=0.034, anchor="c", weight="Bold", plate=True)
     if sid == "s1d_stop" and fr >= MHE_CLEAR:
         tag(extra, "ZONE CLEAR · RESUME", W * 0.66, H * 0.12, GREEN, s, H, smooth((fr - MHE_CLEAR) / 8) * clamp((b - fr) / 6),
-            size=0.03, anchor="c", weight="Bold")
+            size=0.03, anchor="c", weight="Bold", plate=True)
     # --- zone
     if sid == "s2_zone":
         c0, c1 = A(rec, "cam_zone"), A(rec, "obx_zone")
@@ -592,12 +614,12 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
             pulse(L, c0[:2], c1[:2], (fr - ZONE_CROSS + 4) / 10, CYAN + (255,), s)
         if ZONE_CROSS <= fr < ZONE_CLEAR:
             tag(extra, "INTRUSION · ZONE B", W * 0.66, H * 0.12, RED, s, H, smooth((fr - ZONE_CROSS) / 6), size=0.034, anchor="c",
-                weight="Bold")
+                weight="Bold", plate=True)
             if c1:
                 tag(extra, "LIGHT BAR · BUZZER", c1[0] + 14 * s, c1[1] + 14 * s, RED, s, H, smooth((fr - ZONE_CROSS - 6) / 8), size=0.02)
         if fr >= ZONE_CLEAR:
             tag(extra, "ZONE CLEAR", W * 0.66, H * 0.12, GREEN, s, H, smooth((fr - ZONE_CLEAR) / 8) * clamp((b - fr) / 6), size=0.03,
-                anchor="c", weight="Bold")
+                anchor="c", weight="Bold", plate=True)
     # --- door counters
     if sid == "s3_door":
         ev = door_counts(anchors)["ev"]
@@ -628,7 +650,7 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
             bracket_box(L, bx, RED + (240,), s)
             tag(extra, "FIRE 0.96", bx[0], bx[1] - 12 * s, RED, s, H, size=0.02)
             tag(extra, "FIRE DETECTED · BAY 7", W * 0.66, H * 0.12, RED, s, H, smooth((fr - FIRE_DETECT) / 6), size=0.034,
-                anchor="c", weight="Bold")
+                anchor="c", weight="Bold", plate=True)
             if c0 and c1 and fr <= FIRE_DETECT + 12:
                 pulse(L, c0[:2], c1[:2], (fr - FIRE_DETECT) / 10, CYAN + (255,), s)
     # --- robot
@@ -636,12 +658,12 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
         c0, c1 = A(rec, "cam_cell"), A(rec, "obx_cell")
         if ROBOT_DETECT <= fr < ROBOT_RELAY:
             tag(extra, "PERSON IN CELL", W * 0.66, H * 0.12, ORANGE, s, H, smooth((fr - ROBOT_DETECT) / 6), size=0.034, anchor="c",
-                weight="Bold")
+                weight="Bold", plate=True)
         if ROBOT_RELAY <= fr < ROBOT_CLEAR:
-            tag(extra, "ROBOT STOPPED", W * 0.66, H * 0.12, RED, s, H, 1.0, size=0.034, anchor="c", weight="Bold")
+            tag(extra, "ROBOT STOPPED", W * 0.66, H * 0.12, RED, s, H, 1.0, size=0.034, anchor="c", weight="Bold", plate=True)
         if fr >= ROBOT_CLEAR:
             tag(extra, "CELL CLEAR · RESUME", W * 0.66, H * 0.12, GREEN, s, H, smooth((fr - ROBOT_CLEAR) / 8) * clamp((b - fr) / 6),
-                size=0.03, anchor="c", weight="Bold")
+                size=0.03, anchor="c", weight="Bold", plate=True)
     # --- system: site labels + convergence
     if sid == "s6_system":
         sites = (("fk_obx", "MHE · 360° AUTO-STOP"), ("cam_zone", "ZONE · INTRUSION"), ("cam_door", "DOOR · PEOPLE COUNTING"),
