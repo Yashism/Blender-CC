@@ -1,0 +1,13 @@
+{
+  "name": "pvr-people-counting-slide",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0",
+    "playwright": "^1.56.1",
+    "three": "0.170.0"
+  }
+}

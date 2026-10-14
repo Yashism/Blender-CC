@@ -19,3 +19,5 @@ renders/final/logs/
 renders/final/calibration/*.png
 renders/final/_encoding_*
 renders/final/STOP
+# PVR counting slide: node deps, scratch
+pvr_counting/web/node_modules/
