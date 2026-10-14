@@ -306,7 +306,7 @@ def heat_grid(tracks, t_end, cell=0.2, sigma=0.9, include=("moving", "waiting", 
                 continue
             i, j = int((s[2] - y0) / cell), int((s[1] - x0) / cell)
             if 0 <= i < h and 0 <= j < w:
-                g[i, j] += R.DT * (0.45 if s[4] in ("fork", "drop") else 1.0)
+                g[i, j] += R.DT * {"moving": 1.0, "waiting": 0.45, "idle": 0.3}.get(s[4], 0.5)
     r = int(3 * sigma / cell)
     k = np.exp(-0.5 * (np.arange(-r, r + 1) * cell / sigma) ** 2)
     k /= k.sum()

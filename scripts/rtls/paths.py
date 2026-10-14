@@ -183,7 +183,8 @@ def drive(pts, flags, t0, v_max=V_MAX, v_turn=V_TURN):
 # ------------------------------------------------------------------------------------ the shift
 CHOKE = {("S", "L"): 0.45, ("lane", round(L.DOCKS_Y[L.TRAILER_DOCK], 2)): 0.55, ("apron", L.TRAILER_DOCK): 0.4,
          ("S", "E"): 0.35, ("N", "L"): 0.3}
-AISLE_WEIGHT = {"A": 0.5, "B": 1.4, "C": 0.8, "D": 2.1, "E": 1.1}      # slotting: fast movers live in D and B
+AISLE_WEIGHT = {"A": 0.25, "B": 2.2, "C": 0.45, "D": 3.6, "E": 0.7}     # slotting: fast movers live in D and B
+HOT_BAYS = {"D": (2, 3, 4, 5), "B": (5, 6, 7)}                          # ...and in a few bays of those aisles
 
 
 def wander(pts, r, amp=0.22, offset=0.0, taper=2.5):
@@ -222,7 +223,7 @@ def densify(pts, step=0.5):
 def simulate(seed=5, shift=SHIFT):
     nodes, edges = network()
     bays = [(a, i) for a in "ABCDE" for i in range(L.N_BAYS)]
-    bay_w = [AISLE_WEIGHT[a] * (1.6 if i in (0, 1, L.N_BAYS - 2, L.N_BAYS - 1) else 1.0) for a, i in bays]
+    bay_w = [AISLE_WEIGHT[a] * (3.0 if i in HOT_BAYS.get(a, ()) else 1.0) for a, i in bays]
     starts = {"MHE-01": ("B", 4), "MHE-02": ("D", 2), "MHE-03": ("S", "C"), "MHE-04": ("stage", 1),
               "MHE-05": ("apron", 1), "MHE-06": ("N", "D"), "MHE-07": ("lane", round(L.DOCKS_Y[0], 2)),
               "MHE-08": ("charge", 0)}
@@ -241,7 +242,7 @@ def simulate(seed=5, shift=SHIFT):
             t += 2400.0
             raw.append((t, *cur_xy, math.pi / 2, "charging"))
         while t < shift:
-            kind = r.choices(("pick", "load", "putaway"), (0.45, 0.3, 0.25))[0]
+            kind = r.choices(("pick", "load", "putaway"), (0.55, 0.2, 0.25))[0]
             if kind == "pick":
                 legs = [(r.choices(bays, bay_w)[0], "fork"), (("stage", r.randrange(4)), "drop")]
             elif kind == "load":
