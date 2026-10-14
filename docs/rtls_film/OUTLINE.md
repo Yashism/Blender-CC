@@ -1,4 +1,7 @@
-# RAMS LiDAR for MHE: live forklift location on the Digital Twin (outline v3, for review)
+# RAMS LiDAR for MHE: live forklift location on the Digital Twin (outline v3, approved)
+
+**Status:** approved. The film uses the client's OmniBox model (`assets/rtls_film/omnibox_motion.glb`) in
+place of the OmniBox Edge, finished matte black with a green status LED like the Edge in film 2.
 
 **v3:** LiDAR only. The people-detection beat is removed, and all on-screen lines are rewritten in plain
 words. Earlier versions are in git history.
@@ -115,7 +118,7 @@ The warehouse is a cutaway isometric diorama on a dark plinth. Two walls are cut
 - **Mezzanine office:** a screen inside shows the twin.
 - **Floor graphics:** green walkways, zebra crossings, yellow traffic lanes, zone codes, and tyre marks.
 - **Fleet:** 8 forklifts from the client GLB, numbered MHE-01 to MHE-08. **The hero is MHE-07**, with the
-  LiDAR sensor and OmniBox Edge on it.
+  LiDAR sensor and the OmniBox on it.
 - **Workers:** the Rocketbox workers from film 2, in hi-vis, walking the walkways as background life.
 
 ## The look
@@ -135,7 +138,7 @@ The warehouse is a cutaway isometric diorama on a dark plinth. Two walls are cut
 |---|---|
 | Pipeline | Blender 4.5 LTS, fully scripted in `scripts/rtls/`, like the earlier films |
 | Forklift | The client GLB from film 2 (`assets/apps_film/forklift.glb`), at real scale, with wheels and forks animated on paths, ×8 |
-| OmniBox Edge | `assets/apps_film/omnibox_edge.glb` |
+| OmniBox | `assets/rtls_film/omnibox_motion.glb` (client), 250 mm enclosure, matte black like the Edge, with a green status LED |
 | LiDAR sensor | Modelled new (a compact puck on the guard) |
 | Cyan dots | Geometry Nodes points on every surface, revealed by a sphere that expands from the sensor |
 | Scan lock | An orange slice of the live scan, offset and then eased onto the map |
