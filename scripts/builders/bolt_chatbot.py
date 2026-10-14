@@ -77,18 +77,34 @@ def animate(root):
     return arm
 
 
-def tail_region(s, arm, margin=0.05):
-    """Normalised camera-view box the tail sweeps through over the loop (+ margin), for border renders."""
+def tail_region(s, arm, margin=0.06):
+    """Normalised camera-view box of everything the wag moves (the tail and the rump it bends), sampled over the
+    loop, + a margin for the tail's shadow on the body."""
+    import numpy as np
     from bpy_extras.object_utils import world_to_camera_view
-    xs, ys = [], []
-    for f in range(1, N + 1):
+    body = bpy.data.objects["Bolt_body"]
+    dg = bpy.context.evaluated_depsgraph_get()
+
+    def verts(f):
         s.frame_set(f)
-        for i in range(1, 6):
-            pb = arm.pose.bones[f"tail.{i:02d}"]
-            for p in (pb.head, pb.tail):
-                q = world_to_camera_view(s, s.camera, arm.matrix_world @ p)
-                xs.append(q.x)
-                ys.append(q.y)
+        ev = body.evaluated_get(dg)
+        me = ev.to_mesh()
+        co = np.empty(len(me.vertices) * 3)
+        me.vertices.foreach_get("co", co)
+        ev.to_mesh_clear()
+        return co.reshape(-1, 3)
+    ref = verts(1)
+    moved = np.zeros(len(ref), bool)
+    for f in range(1, N + 1, 2):
+        moved |= np.linalg.norm(verts(f) - ref, axis=1) > 0.001
+    mw = body.matrix_world
+    xs, ys = [], []
+    for f in range(1, N + 1, 2):
+        co = verts(f)[moved]
+        for c in co[::max(1, len(co) // 4000)]:
+            q = world_to_camera_view(s, s.camera, mw @ Vector(c))
+            xs.append(q.x)
+            ys.append(q.y)
     return (max(0.0, min(xs) - margin), min(1.0, max(xs) + margin),
             max(0.0, min(ys) - margin), min(1.0, max(ys) + margin))
 
@@ -134,9 +150,10 @@ def main():
     with open(os.path.join(a.out, "region.json"), "w") as fh:  # pixel box (top-left origin) for the paste
         json.dump(dict(size=a.res, box=[int(x0 * a.res), int((1 - y1) * a.res), int(x1 * a.res) + 1,
                                         int((1 - y0) * a.res) + 1]), fh)
-    s.frame_set(1)
-    s.render.filepath = os.path.join(a.out, "base.png")
-    bpy.ops.render.render(write_still=True)
+    if not os.path.exists(os.path.join(a.out, "base.png")):
+        s.frame_set(1)
+        s.render.filepath = os.path.join(a.out, "base.png")
+        bpy.ops.render.render(write_still=True)
     s.render.use_border, s.render.use_crop_to_border = True, False
     s.render.border_min_x, s.render.border_max_x, s.render.border_min_y, s.render.border_max_y = x0, x1, y0, y1
     for fr in range(1, N + 1):

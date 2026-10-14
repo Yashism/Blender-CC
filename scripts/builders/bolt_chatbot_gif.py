@@ -8,6 +8,7 @@ to frame and gifsicle stores only the moving tail: full 256 colours, no lossy pa
 
 Writes
   bolt_chatbot.gif          480 px, transparent background (GIF has 1-bit alpha: edges matted for light pages)
+  bolt_chatbot_white.gif    480 px on solid white (small file: only the tail is stored per frame)
   bolt_chatbot.webp         480 px, true alpha + soft ground shadow (crisp on any page colour; all modern browsers)
   bolt_chatbot_badge.gif    256 px round launcher badge: Bolt's head and chest on a warm circle with an orange ring
   bolt_chatbot_poster.png   still (true alpha) for reduced-motion / no-animation fallbacks
@@ -20,12 +21,14 @@ import os
 import shutil
 import subprocess
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 FPS = 24
 ORANGE = (255, 112, 20)
 CREAM = (255, 239, 224)
 MATTE = (255, 255, 255)
+DITHER = Image.Dither.NONE        # 255 shared colours are enough for the felt; dither noise defeats GIF compression
 
 
 def load(src):
@@ -33,7 +36,8 @@ def load(src):
     rj = os.path.join(src, "region.json")
     if not os.path.exists(rj):
         return [Image.open(f).convert("RGBA") for f in fs]
-    box = tuple(json.load(open(rj))["box"])
+    x0, y0, x1, y1 = json.load(open(rj))["box"]
+    box = (x0 + 4, y0 + 4, x1 - 4, y1 - 4)                 # inset: the denoiser differs at a border render's edge
     base = Image.open(os.path.join(src, "base.png")).convert("RGBA")
     out = []
     for f in fs:                                           # the base with the tail box replaced
@@ -81,7 +85,7 @@ def matte(im):
 
 def gif_frame(im, palette):
     """RGBA -> palette frame (shared palette, light dither) with one transparent index (alpha cut at 50%)."""
-    p = matte(im).quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG)
+    p = matte(im).quantize(palette=palette, dither=DITHER)
     p.paste(255, mask=im.getchannel("A").point(lambda v: 255 if v < 128 else 0))
     p.info["transparency"] = 255
     return p
@@ -93,6 +97,17 @@ def save_gif(frames, path):
         strip.paste(matte(frames[k]), (i * frames[0].width, 0))
     palette = strip.quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     pal = [gif_frame(f, palette) for f in frames]
+    # error-diffusion dither ripples across the whole frame when only the tail changes: pin every pixel whose
+    # source colour is unchanged to frame 0's index, so the static body is identical and gifsicle keeps just the tail
+    src0, idx0 = np.asarray(frames[0]).astype(int), np.asarray(pal[0])
+    for k in range(1, len(pal)):                           # (tolerance: render noise in the re-rendered tail box)
+        same = np.abs(np.asarray(frames[k]).astype(int) - src0).max(axis=2) <= 10
+        idx = np.asarray(pal[k]).copy()
+        idx[same] = idx0[same]
+        im = Image.fromarray(idx, "P")
+        im.putpalette(pal[k].getpalette())
+        im.info["transparency"] = 255
+        pal[k] = im
     pal[0].save(path, save_all=True, append_images=pal[1:], duration=int(1000 / FPS), loop=0, disposal=2,
                 transparency=255, optimize=False)
     if shutil.which("gifsicle"):                           # frame deltas only (lossless)
@@ -116,6 +131,13 @@ def main():
 
     full = [im.crop(crop).resize((S, S), Image.LANCZOS) for im in frames]
     save_gif(full, os.path.join(a.out, "bolt_chatbot.gif"))
+
+    white = []                                             # same loop on solid white: no transparency, so the GIF
+    for im in frames:                                      # stores only the moving tail (small file)
+        c = Image.new("RGBA", im.size, (255, 255, 255, 255))
+        c.alpha_composite(im)
+        white.append(c.crop(crop).resize((S, S), Image.LANCZOS))
+    save_gif(white, os.path.join(a.out, "bolt_chatbot_white.gif"))
 
     soft = []
     for im in frames:
@@ -146,7 +168,8 @@ def main():
         c.putalpha(disc)
         badge.append(c)
     save_gif(badge, os.path.join(a.out, "bolt_chatbot_badge.gif"))
-    for n in ("bolt_chatbot.gif", "bolt_chatbot.webp", "bolt_chatbot_badge.gif", "bolt_chatbot_poster.png"):
+    for n in ("bolt_chatbot.gif", "bolt_chatbot_white.gif", "bolt_chatbot.webp", "bolt_chatbot_badge.gif",
+              "bolt_chatbot_poster.png"):
         p = os.path.join(a.out, n)
         print(f"{n}: {os.path.getsize(p) / 1024:.0f} KB")
 
