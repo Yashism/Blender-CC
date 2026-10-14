@@ -20,6 +20,9 @@ from rtls import fleet as F  # noqa: E402
 from rtls import layout as L  # noqa: E402
 from rtls import look  # noqa: E402
 from rtls import mat as M  # noqa: E402
+from rtls import paths as R  # noqa: E402
+from rtls import site  # noqa: E402
+from rtls import twin as TW  # noqa: E402
 from rtls import warehouse as WH  # noqa: E402
 
 
@@ -63,6 +66,41 @@ POSES = {
     "MHE-08": (L.CHARGE["x"][0] + 1.7, 12.6, 90),
 }
 HERO_EXTERIOR = (L.DRIVE_IN["x"], L.Y0 - 6.5, 90)
+T_LIVE = 4210.0                       # the moment of the live-twin stills (seconds into the simulated shift)
+
+
+def sim_poses(tracks, t):
+    out = {}
+    for n, tr in tracks.items():
+        x, y, h, _ = R.pose_at(tr, t)
+        out[n] = (x, y, math.degrees(h))
+    return out
+
+
+def clear_fx():
+    c = bpy.data.collections.get("TWIN_FX")
+    if c:
+        for o in list(c.objects):
+            bpy.data.objects.remove(o, do_unlink=True)
+
+
+def status_lines(tracks, t):
+    words = {"moving": None, "waiting": "Waiting", "idle": "Waiting %d min", "fork": "Lifting", "drop": "Dropping",
+             "charging": "Charging"}
+    out = {}
+    for n, tr in tracks.items():
+        x, y, h, st = R.pose_at(tr, t)
+        place = TW.where(x, y)
+        if st == "idle":
+            k = 0
+            while R.pose_at(tr, t - k * 10)[3] == "idle" and k < 200:
+                k += 1
+            out[n] = place + " · " + words["idle"] % max(1, k * 10 // 60)
+        elif words.get(st):
+            out[n] = place + " · " + words[st]
+        else:
+            out[n] = place
+    return out
 
 
 def place_fleet(fl, poses):
@@ -76,9 +114,9 @@ def add_people(frame):
     if coll.name not in bpy.context.scene.collection.children:
         bpy.context.scene.collection.children.link(coll)
     walks = [
-        (0, [(L.WALK_E[0] + 0.6, -9.0), (L.WALK_E[0] + 0.6, 6.0)]),
+        (0, [(12.4, -9.2), (12.4, 8.5)]),
         (1, [(-14.0, (L.WALK_S[0] + L.WALK_S[1]) / 2), (2.0, (L.WALK_S[0] + L.WALK_S[1]) / 2)]),
-        (4, [(L.STAGING["x"][0] + 0.5, 2.5), (L.STAGING["x"][1] - 1.0, 2.5)]),
+        (4, [(L.STAGING["x"][0] + 0.5, 4.4), (L.STAGING["x"][1] - 1.0, 4.4)]),
         (2, [(-20.0, (L.WALK_N[0] + L.WALK_N[1]) / 2), (-4.0, (L.WALK_N[0] + L.WALK_N[1]) / 2)]),
     ]
     for i, (variant, path) in enumerate(walks):
@@ -104,6 +142,7 @@ def main():
     look.world_daylight()
     P = M.build()
     wh = WH.build(P)
+    site.build(P)
     fl = F.build_fleet(P)
     place_fleet(fl, POSES)
     if o["people"]:
@@ -128,6 +167,16 @@ def main():
         "exterior": dict(cam=look.iso_camera("cam_exterior", (10.0, -6.0, 2.0), 74.0, azim=40.0), cut=False,
                          pose={L.HERO: HERO_EXTERIOR}),
     }
+    tracks = R.simulate()
+    live = sim_poses(tracks, T_LIVE)
+    fx = TW.fx_collection()
+    shots.update({
+        "trails_real": dict(cam=look.iso_camera("cam_trails", (4.0, -1.5, 0.0), 54.0), cut=True, pose=live, fx="trails"),
+        "twin_live": dict(cam=look.iso_camera("cam_twin", (4.0, -0.5, 0.0), 62.0), cut=True, pose=live, fx="live",
+                          twin=True),
+        "twin_heat": dict(cam=look.iso_camera("cam_heat", (4.0, 0.0, 0.0), 58.0, elev=52.0), cut=True, pose=live,
+                          fx="heat", twin=True),
+    })
     os.makedirs(o["out"], exist_ok=True)
     scn = bpy.context.scene
     if o["save"]:
@@ -140,6 +189,23 @@ def main():
         show(C["roof"], not s["cut"])
         show(C["walls_near_up"], not s["cut"])
         place_fleet(fl, {**POSES, **s.get("pose", {})})
+        bpy.context.view_layer.update()
+        clear_fx()
+        kind = s.get("fx")
+        if kind == "trails":
+            TW.trails(tracks, T_LIVE, 50.0, fx, hero=L.HERO, hero_seconds=140.0)
+            TW.markers(fl, s["cam"], fx, labels=False)
+        elif kind == "live":
+            TW.trails(tracks, T_LIVE, 45.0, fx, hero=L.HERO, hero_seconds=90.0)
+            TW.markers(fl, s["cam"], fx, labels=True, status=status_lines(tracks, T_LIVE), hero=L.HERO)
+        elif kind == "heat":
+            TW.shift_lines(tracks, T_LIVE, fx)
+            TW.heatmap(tracks, T_LIVE, fx)
+            TW.markers(fl, s["cam"], fx, labels=False)
+        if s.get("twin"):
+            TW.twin_on()
+        else:
+            TW.twin_off()
         scn.camera = s["cam"]
         scn.render.filepath = os.path.join(o["out"], f"{name}.png")
         t1 = time.time()

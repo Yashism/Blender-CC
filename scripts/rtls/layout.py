@@ -64,7 +64,7 @@ def aisle_cx(letter):
 
 # ---------------------------------------------------------------- traffic and walkways
 LANE = (RACK_X1 + 0.4, RACK_X1 + 4.4)          # main north-south traffic lane
-WALK_E = (LANE[1], LANE[1] + 1.2)              # green walkway east of the lane
+LANE_X = (LANE[0] + LANE[1]) / 2
 WALK_S = (Y0 + 0.3, Y0 + 1.5)                  # green walkway along the south wall
 WALK_N = (Y1 - 1.5, Y1 - 0.3)                  # green walkway along the north wall
 CROSS_S = (Y0, RACK_Y0)                        # south cross-aisle band
@@ -78,7 +78,12 @@ DOCK_HEIGHT = 1.2                              # floor height above the truck we
 TRAILER_DOCK = 1                               # index of the dock with a trailer backed in
 
 # ---------------------------------------------------------------- zones
-STAGING = dict(x=(15.0, 22.6), y=(-8.0, 7.2), lane_w=1.5)
+# dock floor: a clear corridor from the traffic lane to every dock door, staging lanes between the corridors
+# (pallets are dropped and picked at a lane's west end), and a clear apron along the dock wall
+CORRIDOR_W = 3.0
+APRON_X = 20.4                                 # apron from here to the dock wall
+STAGING = dict(x=(13.6, APRON_X - 0.4), lanes=(-7.8, -3.0, 2.0, 6.8), lane_w=1.5)
+STAGE_HEAD_X = STAGING["x"][0] - 1.2           # where a truck stands to drop / pick at a lane end
 PACK = dict(x=(13.0, 21.5), y=(-15.0, -10.0))
 OFFICE = dict(x=(14.5, 23.8), y=(10.2, 15.8), floor=3.2)
 CHARGE = dict(x=(15.0, 23.0), y=(14.0, 15.8))
@@ -89,7 +94,7 @@ ZONES = {                                      # painted zone codes (centre, lab
     "Z-02": (aisle_cx("B"), CROSS_N[0] + 2.4),
     "Z-03": (aisle_cx("D"), CROSS_S[0] + 2.6),
     "Z-04": ((LANE[0] + LANE[1]) / 2, 0.0),
-    "Z-05": (STAGING["x"][0] + 1.0, STAGING["y"][1] + 1.0),
+    "Z-05": (STAGING["x"][0] + 3.0, 8.6),
     "Z-06": ((PACK["x"][0] + PACK["x"][1]) / 2, PACK["y"][1] + 0.9),
 }
 
@@ -100,6 +105,15 @@ BLIND_CORNER = (RACK_X1, RACK_Y0)
 YARD_X1 = X1 + 20.0
 YARD_Y0 = Y0 - 11.0
 WELL = dict(x=(X1, X1 + 18.0), y=(-9.0, 8.0), depth=DOCK_HEIGHT)    # depressed truck well at the docks
+
+# ---------------------------------------------------------------- the logistics park around it (site.py)
+SITE = 600.0                                   # half-size of the ground; the camera never reaches its edge
+ROADS = [                                      # (x0, x1, y0, y1) carriageways around our block
+    (-SITE, SITE, -40.0, -31.0),               # south road
+    (-SITE, SITE, 27.0, 36.0),                 # north road
+    (-43.0, -34.0, -SITE, SITE),               # west road
+    (50.0, 59.0, -SITE, SITE),                 # east road
+]
 
 # ---------------------------------------------------------------- fleet
 FLEET = ["MHE-%02d" % i for i in range(1, 9)]

@@ -40,7 +40,7 @@ def render_settings(res=(1920, 1080), samples=96, engine="CYCLES"):
 
 
 def world_daylight(sun_elev=38.0, sun_azim=150.0, strength=0.9):
-    """Sky texture lights the scene; camera rays see a flat graphite background instead (diorama on dark)."""
+    """Nishita sky + matched sun. The ground runs to the horizon, so the sky is only seen in low perspective shots."""
     w = bpy.data.worlds.get("rt_world") or bpy.data.worlds.new("rt_world")
     bpy.context.scene.world = w
     w.use_nodes = True
@@ -56,16 +56,8 @@ def world_daylight(sun_elev=38.0, sun_azim=150.0, strength=0.9):
     bg_sky = nt.nodes.new("ShaderNodeBackground")
     bg_sky.inputs["Strength"].default_value = strength * 0.12
     nt.links.new(sky.outputs["Color"], bg_sky.inputs["Color"])
-    bg_cam = nt.nodes.new("ShaderNodeBackground")
-    bg_cam.inputs["Color"].default_value = (*BG, 1)
-    bg_cam.inputs["Strength"].default_value = 1.0
-    lp = nt.nodes.new("ShaderNodeLightPath")
-    mix = nt.nodes.new("ShaderNodeMixShader")
-    nt.links.new(lp.outputs["Is Camera Ray"], mix.inputs["Fac"])
-    nt.links.new(bg_sky.outputs["Background"], mix.inputs[1])
-    nt.links.new(bg_cam.outputs["Background"], mix.inputs[2])
     out = nt.nodes.new("ShaderNodeOutputWorld")
-    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
+    nt.links.new(bg_sky.outputs["Background"], out.inputs["Surface"])
     # the sun itself, matched to the sky
     sd = bpy.data.lights.get("rt_sun") or bpy.data.lights.new("rt_sun", "SUN")
     sd.energy = 4.2 * strength

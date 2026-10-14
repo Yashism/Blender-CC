@@ -119,23 +119,23 @@ def build(P):
 def _base(P, C):
     c = C["base"]
     W = L.WALL_T
-    bx0, bx1, by0, by1 = L.X0 - 2.5, L.YARD_X1, L.YARD_Y0, L.Y1 + 2.5
     D = L.DOCK_HEIGHT
-    slab("board", bx0 - 0.3, bx1 + 0.3, by0 - 0.3, by1 + 0.3, -D - 0.6, -D - 0.05, P["plinth"], P["plinth"], c)
+    S = L.SITE
     slab("floor", L.X0 - W, L.X1 + W, L.Y0 - W, L.Y1 + W, -D - 0.05, 0.0, P["floor"], P["slab_edge"], c)
-    # yard pieces around the building (top = asphalt), leaving the truck well open at the docks
+    # the ground runs on in every direction (site.py lays roads, verges and the neighbours on top of it);
+    # only the truck well at the docks is left open
     wx0, wx1 = L.WELL["x"]
     wy0, wy1 = L.WELL["y"]
     pieces = [
-        ("yard_s", bx0, bx1, by0, L.Y0 - W, P["asphalt"]),
-        ("yard_e_s", L.X1 + W, bx1, L.Y0 - W, wy0, P["asphalt"]),
-        ("yard_e_n", L.X1 + W, bx1, wy1, by1, P["asphalt"]),
-        ("yard_e_end", wx1, bx1, wy0, wy1, P["asphalt"]),
-        ("apron_w", bx0, L.X0 - W, L.Y0 - W, by1, P["concrete"]),
-        ("apron_n", L.X0 - W, L.X1 + W, L.Y1 + W, by1, P["concrete"]),
+        ("ground_s", -S, S, -S, L.Y0 - W),
+        ("ground_n", -S, S, L.Y1 + W, S),
+        ("ground_w", -S, L.X0 - W, L.Y0 - W, L.Y1 + W),
+        ("ground_e_s", L.X1 + W, S, L.Y0 - W, wy0),
+        ("ground_e_n", L.X1 + W, S, wy1, L.Y1 + W),
+        ("ground_e_end", wx1, S, wy0, wy1),
     ]
-    for n, x0, x1, y0, y1, top in pieces:
-        slab(n, x0, x1, y0, y1, -D - 0.05, 0.0, top, P["slab_edge"], c)
+    for n, x0, x1, y0, y1 in pieces:
+        slab(n, x0, x1, y0, y1, -D - 0.05, 0.0, P["asphalt"], P["slab_edge"], c)
     # the well: flat by the dock wall, then a ramp up to grade
     flat_x = L.X1 + W + 9.0
     slab("well_floor", L.X1 + W, flat_x, wy0, wy1, -D - 0.05, -D, P["asphalt"], P["slab_edge"], c)
@@ -288,8 +288,7 @@ def _markings(P, C):
     for x in L.LANE:
         mark(f"lane_edge_{x}", x - lw / 2, x + lw / 2, L.Y0 + 1.6, L.Y1 - 1.6, Y, c)
     # walkways (green with yellow edges)
-    walks = [("walk_e", L.WALK_E[0], L.WALK_E[1], L.Y0 + 1.6, L.Y1 - 1.6),
-             ("walk_s", L.X0 + 0.3, L.LANE[0] - 0.2, L.WALK_S[0], L.WALK_S[1]),
+    walks = [("walk_s", L.X0 + 0.3, L.LANE[0] - 0.2, L.WALK_S[0], L.WALK_S[1]),
              ("walk_n", L.X0 + 0.3, L.OFFICE["x"][0] - 1.6, L.WALK_N[0], L.WALK_N[1])]
     for n, x0, x1, y0, y1 in walks:
         mark(n, x0, x1, y0, y1, G, c)
@@ -299,11 +298,19 @@ def _markings(P, C):
         else:
             mark(n + "_e0", x0 - lw, x0, y0, y1, Y, c)
             mark(n + "_e1", x1, x1 + lw, y0, y1, Y, c)
-    # zebra crossings over the lane
-    for yc in (-12.6, 9.2):
-        for k in range(8):
-            x = L.LANE[0] + 0.25 + k * 0.5
-            mark(f"zebra_{yc}_{k}", x, x + 0.3, yc - 1.0, yc + 1.0, Wt, c)
+    # zebra crossing where the north walkway crosses the traffic lane
+    yc = (L.WALK_N[0] + L.WALK_N[1]) / 2
+    for k in range(8):
+        x = L.LANE[0] + 0.25 + k * 0.5
+        mark(f"zebra_{k}", x, x + 0.3, yc - 0.6, yc + 0.6, Wt, c)
+    # dock corridors: dashed yellow edges from the lane to the apron, apron edge line
+    for k, yd in enumerate(L.DOCKS_Y):
+        for sy in (-1, 1):
+            y = yd + sy * L.CORRIDOR_W / 2
+            for j in range(int((L.APRON_X - L.LANE[1]) / 1.0)):
+                x = L.LANE[1] + j * 1.0
+                mark(f"corr_{k}_{sy}_{j}", x, x + 0.5, y - 0.05, y + 0.05, Y, c)
+    mark("apron_edge", L.APRON_X - 0.05, L.APRON_X + 0.05, L.STAGING["lanes"][0] - 1.0, L.STAGING["lanes"][-1] + 1.0, Y, c)
     # stop bars at every aisle mouth
     for letter, (a, b) in L.AISLES.items():
         for yy in (L.RACK_Y0 - 0.45, L.RACK_Y1 + 0.45):
@@ -312,15 +319,12 @@ def _markings(P, C):
         floor_text(f"aisle_{letter}_n", letter, (((a + b) / 2), L.RACK_Y1 + 1.6), 1.2, math.pi, Wt, c)
     # staging lanes (white outlines, numbered)
     sx0, sx1 = L.STAGING["x"]
-    sy0, sy1 = L.STAGING["y"]
-    n = int((sy1 - sy0) / L.STAGING["lane_w"])
-    for i in range(n + 1):
-        y = sy0 + i * L.STAGING["lane_w"]
-        mark(f"stg_line_{i}", sx0, sx1, y - 0.04, y + 0.04, Wt, c)
-    mark("stg_end", sx0 - 0.04, sx0 + 0.04, sy0, sy0 + n * L.STAGING["lane_w"], Wt, c)
-    for i in range(n):
-        y = sy0 + (i + 0.5) * L.STAGING["lane_w"]
-        floor_text(f"stg_no_{i}", "S%02d" % (i + 1), (sx0 - 0.6, y), 0.42, -math.pi / 2, Wt, c)
+    hw = L.STAGING["lane_w"] / 2
+    for i, yc in enumerate(L.STAGING["lanes"]):
+        for y in (yc - hw, yc + hw):
+            mark(f"stg_line_{i}_{y}", sx0, sx1, y - 0.04, y + 0.04, Wt, c)
+        mark(f"stg_end_{i}", sx1 - 0.04, sx1 + 0.04, yc - hw, yc + hw, Wt, c)
+        floor_text(f"stg_no_{i}", "S%02d" % (i + 1), (sx0 - 0.55, yc), 0.42, -math.pi / 2, Wt, c)
     # zone codes
     for code, (x, y) in L.ZONES.items():
         floor_text(f"zone_{code}", code, (x, y), 0.75, 0.0, Y, c)
@@ -383,13 +387,10 @@ def _zones(P, C, rng):
     loads = K.load_library(P)
     # staging lanes: pallets waiting
     sx0, sx1 = L.STAGING["x"]
-    sy0 = L.STAGING["y"][0]
-    n = int((L.STAGING["y"][1] - sy0) / L.STAGING["lane_w"])
-    for i in range(n):
-        y = sy0 + (i + 0.5) * L.STAGING["lane_w"]
-        count = rng.choice((0, 2, 3, 4, 5, 5, 6))
+    for i, y in enumerate(L.STAGING["lanes"]):
+        count = (3, 5, 4, 2)[i]
         for j in range(count):
-            x = sx1 - 0.75 - j * 1.25
+            x = sx1 - 0.7 - j * 1.25
             K.instance(f"stg_{i}_{j}", loads[rng.randrange(len(loads))], c, (x, y, 0), rot_z=rng.uniform(-0.03, 0.03))
     # pick and pack
     px0, px1 = L.PACK["x"]
@@ -404,15 +405,10 @@ def _zones(P, C, rng):
         y = py0 + 0.6 + (k // 3) * 0.8
         K.instance(f"cage_{k}", cages[k % len(cages)], c, (x, y, 0), rot_z=rng.uniform(-0.05, 0.05))
     for k in range(6):                                              # a row of cages by the lane
-        K.instance(f"cage_lane_{k}", cages[(k + 1) % len(cages)], c, (13.0 + k * 0.85, -8.9, 0), rot_z=math.pi)
+        K.instance(f"cage_lane_{k}", cages[(k + 1) % len(cages)], c, (13.4 + k * 0.85, -9.6, 0), rot_z=math.pi)
     K.wheelie_bin(P, c, (px1 + 1.4, py1 - 0.4, 0), "crate_blue")
     K.wheelie_bin(P, c, (px1 + 1.4, py1 + 0.35, 0), "paint_green")
-    K.hand_pallet_truck(P, c, (sx0 - 1.2, 6.2, 0), rot_z=0.4)
-    # barriers along the walkway's east side, open at the crossings
-    xb = L.WALK_E[1] + 0.25
-    for y0, y1 in ((-14.2, -13.8), (-11.2, -8.3), (-7.8, 8.0)):
-        if y1 - y0 > 1.0:
-            K.barrier_run(P, c, (xb, y0), (xb, y1))
+    K.hand_pallet_truck(P, c, (L.APRON_X + 1.5, 7.6, 0), rot_z=0.4)
     # fire points on far-wall columns, convex mirror at the blind corner
     for x in (-16.0, 0.0, 16.0):
         K.fire_point(P, c, (x + 0.4, L.Y1 - 0.31, 0), rot_z=math.pi)

@@ -9,9 +9,12 @@ shot can be rebuilt from a fresh checkout.
 | `mat.py` | PBR materials: the power-floated slab with joints and tyre wear, asphalt, cladding, rack paint, cartons, wrap, hazard stripes |
 | `props.py` | Mesh builder and props: pallets with 24 load variants, rack frames and beams (instanced), roll cages, conveyor, pack benches, stretch wrapper, chargers, barriers, convex mirror, sectional doors, trailer |
 | `warehouse.py` | The warehouse: diorama board, slab, yard and truck well, walls (the near walls split at the cutaway height), roof with skylights and high-bays, racking with about 550 pallet loads, floor markings, docks, zones, office mezzanine |
-| `fleet.py` | The client forklift (`assets/apps_film/forklift.glb`, fitted to 2.30 m), ×8 (MHE-01..08, IDs on the counterweight). Each truck has a LiDAR on a mast and the OmniBox (`assets/rtls_film/omnibox_motion.glb`, matte black like the Edge, green status LED) on the overhead guard. The wheels sit on pivots, ready to roll |
+| `site.py` | The logistics park around the warehouse, so no frame shows an edge: roads with kerbs and pavements, verges with trees, a staff car park, neighbouring warehouses with docks, trailers and tractor units, a truck park, a car park, and a ring of further sheds. Tall buildings stand north and east (behind ours in the isometric view), low ones south and west |
+| `fleet.py` | The client forklift (`assets/apps_film/forklift.glb`, fitted to 2.30 m), ×8 (MHE-01..08, IDs on the counterweight). Each truck carries the client LiDAR (`assets/rtls_film/lidar_l2.glb`, real size) on a short bracket mast and the OmniBox (`assets/rtls_film/omnibox_motion.glb`, matte black like the Edge, green status LED) on the overhead guard. The wheels sit on pivots, ready to roll |
+| `paths.py` | The route network (aisles with a stop at every bay, cross-aisles, the traffic lane, dock corridors, staging lane heads, the trailer, the charging bays, the drive-in door). It simulates a 2-hour shift for every truck: picks, loads and putaways, with fork time, waits at busy junctions, and MHE-05 idle for 12 minutes at staging. Run `python3 -m rtls.paths` from `scripts/` for the stats |
+| `twin.py` | The Digital Twin layer: a twin look for every material (dark, thin cyan edges, glowing orange trucks), fading location trails, full-shift route lines, the heat map (time spent per spot, from the simulation), and markers (ring, pin, ID label with place and status) |
 | `look.py` | Cycles settings (AgX), a daylight sky that lights the scene while the camera sees a dark graphite background, isometric (orthographic) and perspective cameras |
-| `stills.py` | Stage 2 stills: overview, aisles, docks, hero truck, kit close-up, exterior |
+| `stills.py` | Stage 2 stills: overview, aisles, docks, hero truck, kit close-up, exterior, `trails_real` (trails on the real floor), `twin_live` (the live twin with labels), `twin_heat` (the shift's routes and the heat map) |
 
 The workers are the Rocketbox avatars and walk/idle cycles from film 2 (`scripts/apps/people.py`,
 `assets/people/rocketbox/`, MIT).
@@ -23,4 +26,4 @@ blender -b --factory-startup -P scripts/rtls/stills.py -- --res 1920x1080 --samp
 # quick check: --res 960x540 --samples 16, one shot: --only kit
 ```
 
-At 1080p with 96 samples, each still takes about 5–7 minutes on 4 CPU cores.
+At 1080p with 64 samples, each still takes about 5–8 minutes on 4 CPU cores (the twin stills are the slowest).

@@ -162,21 +162,42 @@ def omnibox_source(P):
 
 
 def lidar_source(P):
-    """A compact 360-degree LiDAR (about 100 mm across) on a short mast; origin at the mast foot."""
-    coll = K.src_collection("LIDAR_SRC")
-    alu = M.pbr("rt_lidar_alu", (0.18, 0.19, 0.2), 0.35, 0.8)
-    win = M.pbr("rt_lidar_window", (0.01, 0.01, 0.012), 0.05, 0.0, coat=1.0)
-    ring = M.emissive("rt_lidar_ring", (1.0, 0.33, 0.02), 3.0, base=(0.9, 0.3, 0.02))
+    """The client LiDAR (assets/rtls_film/lidar_l2.glb, real size, about 75 mm) on a short bracket mast above the
+    overhead guard. Origin at the mast foot; returns the height of the optical head's centre."""
+    coll = _building(K.src_collection("LIDAR_SRC"))
+    new = _import_glb(os.path.join(ROOT, "assets", "rtls_film", "lidar_l2.glb"), coll)
+    meshes = [o for o in new if o.type == "MESH"]
+    _bake_into_mesh(meshes)
+    for o in new:
+        if o.type != "MESH":
+            bpy.data.objects.remove(o, do_unlink=True)
+    lo, hi = _bbox(meshes)
+    mast_top = 0.30
+    m = Matrix.Translation((-(lo.x + hi.x) / 2, -(lo.y + hi.y) / 2, mast_top - lo.z))
+    for o in meshes:
+        o.data.transform(m)
+    finish = {
+        "LiDAR head": M.pbr("rt_lidar_head", (0.012, 0.012, 0.014), 0.12, 0.0, coat=1.0),
+        "Flange": M.pbr("rt_lidar_anod", (0.05, 0.052, 0.056), 0.38, 0.7),
+        "Base housing": M.pbr("rt_lidar_anod", (0.05, 0.052, 0.056), 0.38, 0.7),
+        "Base plate": M.pbr("rt_lidar_plate", (0.03, 0.031, 0.034), 0.45, 0.6),
+        "Head screws": M.pbr("rt_lidar_screw", (0.55, 0.56, 0.57), 0.3, 1.0),
+        "Base screws": M.pbr("rt_lidar_screw", (0.55, 0.56, 0.57), 0.3, 1.0),
+        "Status LED": M.emissive("rt_lidar_led", (0.1, 1.0, 0.25), 10.0),
+    }
+    for o in meshes:
+        key = next((k for k in finish if o.name.startswith(k)), None)
+        if key:
+            o.data.materials.clear()
+            o.data.materials.append(finish[key])
+    lo2, hi2 = _bbox([o for o in meshes if o.name.startswith("LiDAR head")])
+    bracket = M.pbr("rt_bracket", (0.03, 0.031, 0.034), 0.5, 0.5)
     mb = K.MB()
-    mb.box((0.14, 0.14, 0.012), (0, 0, 0.006), 0)                     # base plate
-    mb.cyl(0.018, 0.36, (0, 0, 0.18 + 0.012), 0, segs=14)              # mast
-    z = 0.372
-    mb.cyl(0.05, 0.03, (0, 0, z + 0.015), 0, segs=32)                  # lower body
-    mb.cyl(0.048, 0.034, (0, 0, z + 0.047), 1, segs=32)                # optical window band
-    mb.cyl(0.05, 0.02, (0, 0, z + 0.074), 0, segs=32, r2=0.046)        # top cap
-    mb.cyl(0.0505, 0.004, (0, 0, z + 0.031), 2, segs=32)               # thin RAMS-orange ring
-    ob = mb.done("lidar", [alu, win, ring], coll, smooth=False)
-    return dict(coll=coll, head_z=z + 0.047, ring=ring)
+    mb.box((0.14, 0.14, 0.012), (0, 0, 0.006), 0)                     # foot plate on the guard
+    mb.cyl(0.02, mast_top - 0.022, (0, 0, 0.012 + (mast_top - 0.022) / 2), 0, segs=16)
+    mb.box((0.085, 0.085, 0.01), (0, 0, mast_top - 0.005), 0)          # top plate under the sensor
+    mb.done("lidar_mast", [bracket], coll)
+    return dict(coll=coll, head_z=(lo2.z + hi2.z) / 2, led=finish["Status LED"])
 
 
 # ------------------------------------------------------------------------------------ trucks
