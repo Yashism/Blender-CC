@@ -8,22 +8,32 @@ shot can be rebuilt from a fresh checkout.
 | `layout.py` | The plan. Every dimension: the shell, the racking (aisles A–E), lanes, walkways, doors, zones, yard, fleet IDs. The builders, the truck paths, the twin and the cameras all read it |
 | `mat.py` | PBR materials: the power-floated slab with joints and tyre wear, asphalt, cladding, rack paint, cartons, wrap, hazard stripes |
 | `props.py` | Mesh builder and props: pallets with 24 load variants, rack frames and beams (instanced), roll cages, conveyor, pack benches, stretch wrapper, chargers, barriers, convex mirror, sectional doors, trailer |
-| `warehouse.py` | The warehouse: diorama board, slab, yard and truck well, walls (the near walls split at the cutaway height), roof with skylights and high-bays, racking with about 550 pallet loads, floor markings, docks, zones, office mezzanine |
+| `warehouse.py` | The building (132 × 96 m distribution centre) and its hero zone: slab, east yard and truck wells, walls (the near walls split at the cutaway height), roof with skylights and high-bays, aisles A–E, floor markings, the east dock bank and drive-in door, staging, inbound QC, office mezzanine |
+| `zones.py` | The rest of the building, so every frame is full of warehouse: zone N racking (aisles F–H east-west), zone W high-bay narrow aisles, the pick-and-pack hall (shelving, sortation line, pack stations, wrapper, cage marshalling), block stacking, a cold store, the workshop and battery room |
 | `site.py` | The logistics park around the warehouse, so no frame shows an edge: roads with kerbs and pavements, verges with trees, a staff car park, neighbouring warehouses with docks, trailers and tractor units, a truck park, a car park, and a ring of further sheds. Tall buildings stand north and east (behind ours in the isometric view), low ones south and west |
 | `fleet.py` | The client forklift (`assets/apps_film/forklift.glb`, fitted to 2.30 m), ×8 (MHE-01..08, IDs on the counterweight). Each truck carries the client LiDAR (`assets/rtls_film/lidar_l2.glb`, real size) on a short bracket mast and the OmniBox (`assets/rtls_film/omnibox_motion.glb`, matte black like the Edge, green status LED) on the overhead guard. The wheels sit on pivots, ready to roll |
 | `paths.py` | The route network (aisles with a stop at every bay, cross-aisles, the traffic lane, dock corridors, staging lane heads, the trailer, the charging bays, the drive-in door). It simulates a 2-hour shift for every truck: picks, loads and putaways, with fork time, waits at busy junctions, and MHE-05 idle for 12 minutes at staging. Run `python3 -m rtls.paths` from `scripts/` for the stats |
-| `twin.py` | The Digital Twin layer: a twin look for every material (dark, thin cyan edges, glowing orange trucks), fading location trails, full-shift route lines, the heat map (time spent per spot, from the simulation), and markers (ring, pin, ID label with place and status) |
+| `twin.py` | The Digital Twin layer: a twin look for every material (a soft matte light-grey model under high soft light, RAMS-orange trucks), fading location traces, full-shift route lines, the heat map (time spent per spot, from the simulation, on the classic blue-to-red scale), and markers (ring, pin, white ID card with place and status) |
 | `look.py` | Cycles settings (AgX), a daylight sky that lights the scene while the camera sees a dark graphite background, isometric (orthographic) and perspective cameras |
-| `stills.py` | Stage 2 stills: overview, aisles, docks, hero truck, kit close-up, exterior, `trails_real` (trails on the real floor), `twin_live` (the live twin with labels), `twin_heat` (the shift's routes and the heat map) |
+| `stills.py` | Stills: wide, overview, aisles, docks, hero truck, kit close-up, exterior (hook only), `trails_real` (traces on the real floor), `twin_live` (isometric twin with labels), `twin_top_live` and `twin_top_heat` (top views). Every warehouse frame is checked to stay inside the building |
 
 The workers are the Rocketbox avatars and walk/idle cycles from film 2 (`scripts/apps/people.py`,
 `assets/people/rocketbox/`, MIT).
 
+The simulated driving is deliberately organic: each driver has their own pace, holds an offset from the centre
+line and drifts along it, takes corners at different radii, and makes give-way stops. The aisles have uneven
+traffic (fast movers in D and B), and the heat map has a slow random variation.
+
 ## Rebuild the stills
+
+Previews in this container run at 960×540 with 16 samples (`renders/rtls/previews/`). The final 1080p renders run
+on the GPU PC.
+
 
 ```
 blender -b --factory-startup -P scripts/rtls/stills.py -- --res 1920x1080 --samples 96 --out renders/rtls/stills
 # quick check: --res 960x540 --samples 16, one shot: --only kit
 ```
 
-At 1080p with 64 samples, each still takes about 5–8 minutes on 4 CPU cores (the twin stills are the slowest).
+On 4 CPU cores a preview still takes about 20 s, after a one-minute scene build. On a GPU, set
+`scene.cycles.device = "GPU"` and render at 1920x1080.

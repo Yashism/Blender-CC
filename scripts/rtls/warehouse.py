@@ -74,16 +74,16 @@ def wall_run(name, axis, fixed, a0, a1, z0, z1, thick, openings, mat, coll):
     return obs
 
 
-def gable(name, x, y0, y1, z0, z1, thick, mat, coll):
-    """Triangular gable infill on a west/east wall from the eaves (z0) to the ridge (z1) at y = 0."""
+def gable(name, x, y0, y1, z0, z1, thick, mat, coll, ridge_y=0.0):
+    """Triangular gable infill on a west/east wall from the eaves (z0) to the ridge (z1) at ridge_y."""
     bm = bmesh.new()
-    pts = [(y0, z0), (y1, z0), (0.0, z1)]
+    pts = [(y0, z0), (y1, z0), (ridge_y, z1)]
     vs = [bm.verts.new((x - thick / 2, py, pz)) for py, pz in pts] + \
          [bm.verts.new((x + thick / 2, py, pz)) for py, pz in pts]
     bm.faces.new((vs[0], vs[1], vs[2]))
     bm.faces.new((vs[5], vs[4], vs[3]))
-    for a, b in ((0, 1), (1, 2), (2, 0)):
-        bm.faces.new((vs[a], vs[b], vs[b + 3], vs[a + 3]))
+    for a_, b_ in ((0, 1), (1, 2), (2, 0)):
+        bm.faces.new((vs[a_], vs[b_], vs[b_ + 3], vs[a_ + 3]))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
@@ -95,7 +95,8 @@ def gable(name, x, y0, y1, z0, z1, thick, mat, coll):
 
 
 def roof_z(y):
-    return L.EAVES + (L.RIDGE - L.EAVES) * (1 - abs(y) / (L.Y1 - L.Y0) * 2)
+    half = (L.BY1 - L.BY0) / 2
+    return L.EAVES + (L.RIDGE - L.EAVES) * (1 - abs(y - L.RIDGE_Y) / half)
 
 
 # ------------------------------------------------------------------------------------ build
@@ -113,6 +114,8 @@ def build(P):
     _zones(P, C, rng)
     out["office"] = _office(P, C)
     _yard(P, C)
+    from rtls import zones
+    zones.build(P, C, random.Random(21))
     return out
 
 
@@ -121,123 +124,121 @@ def _base(P, C):
     W = L.WALL_T
     D = L.DOCK_HEIGHT
     S = L.SITE
-    slab("floor", L.X0 - W, L.X1 + W, L.Y0 - W, L.Y1 + W, -D - 0.05, 0.0, P["floor"], P["slab_edge"], c)
-    # the ground runs on in every direction (site.py lays roads, verges and the neighbours on top of it);
-    # only the truck well at the docks is left open
-    wx0, wx1 = L.WELL["x"]
-    wy0, wy1 = L.WELL["y"]
-    pieces = [
-        ("ground_s", -S, S, -S, L.Y0 - W),
-        ("ground_n", -S, S, L.Y1 + W, S),
-        ("ground_w", -S, L.X0 - W, L.Y0 - W, L.Y1 + W),
-        ("ground_e_s", L.X1 + W, S, L.Y0 - W, wy0),
-        ("ground_e_n", L.X1 + W, S, wy1, L.Y1 + W),
-        ("ground_e_end", wx1, S, wy0, wy1),
-    ]
+    slab("floor", L.BX0 - W, L.BX1 + W, L.BY0 - W, L.BY1 + W, -D - 0.05, 0.0, P["floor"], P["slab_edge"], c)
+    # the ground outside runs on in every direction, with the two truck wells left open along the east wall
+    xe = L.BX1 + W
+    wells = sorted(L.WELLS, key=lambda w: w["y"][0])
+    pieces = [("ground_s", -S, S, -S, L.BY0 - W), ("ground_n", -S, S, L.BY1 + W, S),
+              ("ground_w", -S, L.BX0 - W, L.BY0 - W, L.BY1 + W)]
+    y = L.BY0 - W
+    for i, wl in enumerate(wells):
+        pieces.append((f"ground_e{i}", xe, S, y, wl["y"][0]))
+        pieces.append((f"ground_e{i}_end", wl["x"][1], S, wl["y"][0], wl["y"][1]))
+        y = wl["y"][1]
+    pieces.append(("ground_e_last", xe, S, y, L.BY1 + W))
     for n, x0, x1, y0, y1 in pieces:
-        slab(n, x0, x1, y0, y1, -D - 0.05, 0.0, P["asphalt"], P["slab_edge"], c)
-    # the well: flat by the dock wall, then a ramp up to grade
-    flat_x = L.X1 + W + 9.0
-    slab("well_floor", L.X1 + W, flat_x, wy0, wy1, -D - 0.05, -D, P["asphalt"], P["slab_edge"], c)
-    bm = bmesh.new()
-    p = [(flat_x, wy0, -D), (wx1, wy0, 0.0), (wx1, wy1, 0.0), (flat_x, wy1, -D),
-         (flat_x, wy0, -D - 0.05), (wx1, wy0, -D - 0.05), (wx1, wy1, -D - 0.05), (flat_x, wy1, -D - 0.05)]
-    v = [bm.verts.new(q) for q in p]
-    for f in ((0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
-        bm.faces.new([v[i] for i in f])
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    me = bpy.data.meshes.new("well_ramp")
-    bm.to_mesh(me)
-    bm.free()
-    me.materials.append(P["asphalt"])
-    ramp = bpy.data.objects.new("well_ramp", me)
-    c.objects.link(ramp)
-    for i, yy in enumerate((wy0, wy1)):                           # retaining walls along the well
-        geo.box(f"well_wall{i}", (wx1 - L.X1 - W, 0.3, D + 0.15),
-                loc=((L.X1 + W + wx1) / 2, yy + (-0.15 if i == 0 else 0.15), -D / 2 + 0.075),
-                mat=P["concrete"], coll=c, bevel=0.01)
-    # drive-in ramp: the yard is at floor level on the south side, so only a threshold strip
-    geo.box("drive_in_threshold", (L.DRIVE_IN["w"], 0.5, 0.01), loc=(L.DRIVE_IN["x"], L.Y0 - 0.1, 0.005),
+        if x1 - x0 > 0.01 and y1 - y0 > 0.01:
+            slab(n, x0, x1, y0, y1, -D - 0.05, 0.0, P["asphalt"], P["slab_edge"], c)
+    for i, wl in enumerate(wells):                       # each well: flat by the docks, then a ramp up to grade
+        wx0, wx1 = xe, wl["x"][1]
+        wy0, wy1 = wl["y"]
+        flat_x = xe + 9.0
+        slab(f"well{i}_floor", wx0, flat_x, wy0, wy1, -D - 0.05, -D, P["asphalt"], P["slab_edge"], c)
+        bm = bmesh.new()
+        pp = [(flat_x, wy0, -D), (wx1, wy0, 0.0), (wx1, wy1, 0.0), (flat_x, wy1, -D),
+              (flat_x, wy0, -D - 0.05), (wx1, wy0, -D - 0.05), (wx1, wy1, -D - 0.05), (flat_x, wy1, -D - 0.05)]
+        v = [bm.verts.new(q) for q in pp]
+        for f in ((0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
+            bm.faces.new([v[k] for k in f])
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        me = bpy.data.meshes.new(f"well{i}_ramp")
+        bm.to_mesh(me)
+        bm.free()
+        me.materials.append(P["asphalt"])
+        c.objects.link(bpy.data.objects.new(f"well{i}_ramp", me))
+        for k, yy in enumerate((wy0, wy1)):
+            geo.box(f"well{i}_wall{k}", (wx1 - wx0, 0.3, D + 0.15),
+                    loc=((wx0 + wx1) / 2, yy + (-0.15 if k == 0 else 0.15), -D / 2 + 0.075),
+                    mat=P["concrete"], coll=c, bevel=0.01)
+    geo.box("drive_in_threshold", (0.5, L.DRIVE_IN["w"], 0.01), loc=(L.BX1 + W / 2, L.DRIVE_IN["y"], 0.005),
             mat=P["steel_dark"], coll=c, bevel=0)
 
 
 def _walls(P, C):
     W = L.WALL_T
     far, near, up = C["walls_far"], C["walls_near"], C["walls_near_up"]
-    docks = [(y, L.DOCK_W, L.DOCK_H) for y in L.DOCKS_Y]
-    drive = [(L.DRIVE_IN["x"], L.DRIVE_IN["w"], L.DRIVE_IN["h"])]
-    # far walls: precast plinth + cladding
-    yN = L.Y1 + W / 2
-    wall_run("north_plinth", "x", yN, L.X0 - W, L.X1 + W, 0, L.PLINTH, W, [], P["concrete"], far)
-    wall_run("north_clad", "x", yN, L.X0 - W, L.X1 + W, L.PLINTH, L.EAVES, W, [], P["wall"], far)
-    xE = L.X1 + W / 2
-    wall_run("east_plinth", "y", xE, L.Y0 - W, L.Y1 + W, 0, L.PLINTH, W, docks, P["concrete"], far)
-    wall_run("east_clad", "y", xE, L.Y0 - W, L.Y1 + W, L.PLINTH, L.EAVES, W, docks, P["wall"], far)
-    gable("east_gable", xE, L.Y0 - W, L.Y1 + W, L.EAVES, L.RIDGE + 0.2, W, P["wall"], far)
-    # a dark band at the eaves on the far walls (reads well from above)
-    geo.box("north_band", (L.X1 - L.X0 + 2 * W, W + 0.04, 0.6), loc=(0, yN, L.EAVES - 0.3), mat=P["wall_dark"],
+    east_open = [(y, L.DOCK_W, L.DOCK_H) for y in L.DOCKS_Y + L.DOCKS_SOUTH] + \
+                [(L.DRIVE_IN["y"], L.DRIVE_IN["w"], L.DRIVE_IN["h"])]
+    xa, xb, ya, yb = L.BX0 - W, L.BX1 + W, L.BY0 - W, L.BY1 + W
+    # far walls (north, east): precast plinth + cladding, east gable, dark band at the eaves
+    yN = L.BY1 + W / 2
+    wall_run("north_plinth", "x", yN, xa, xb, 0, L.PLINTH, W, [], P["concrete"], far)
+    wall_run("north_clad", "x", yN, xa, xb, L.PLINTH, L.EAVES, W, [], P["wall"], far)
+    xE = L.BX1 + W / 2
+    wall_run("east_plinth", "y", xE, ya, yb, 0, L.PLINTH, W, east_open, P["concrete"], far)
+    wall_run("east_clad", "y", xE, ya, yb, L.PLINTH, L.EAVES, W, east_open, P["wall"], far)
+    gable("east_gable", xE, ya, yb, L.EAVES, L.RIDGE + 0.2, W, P["wall"], far, ridge_y=L.RIDGE_Y)
+    geo.box("north_band", (xb - xa, W + 0.04, 0.7), loc=((xa + xb) / 2, yN, L.EAVES - 0.35), mat=P["wall_dark"],
             coll=far, bevel=0)
-    # near walls: low part always, upper part for the exterior
-    yS = L.Y0 - W / 2
-    wall_run("south_plinth", "x", yS, L.X0 - W, L.X1 + W, 0, L.CUT_H, W, drive, P["concrete"], near)
-    wall_run("south_clad", "x", yS, L.X0 - W, L.X1 + W, L.CUT_H, L.EAVES, W, drive, P["wall"], up)
-    xW = L.X0 - W / 2
-    wall_run("west_plinth", "y", xW, L.Y0 - W, L.Y1 + W, 0, L.CUT_H, W, [], P["concrete"], near)
-    wall_run("west_clad", "y", xW, L.Y0 - W, L.Y1 + W, L.CUT_H, L.EAVES, W, [], P["wall"], up)
-    gable("west_gable", xW, L.Y0 - W, L.Y1 + W, L.EAVES, L.RIDGE + 0.2, W, P["wall"], up)
-    geo.box("south_band", (L.X1 - L.X0 + 2 * W, W + 0.04, 0.6), loc=(0, yS, L.EAVES - 0.3), mat=P["wall_dark"],
+    geo.box("east_band", (W + 0.04, yb - ya, 0.7), loc=(xE, (ya + yb) / 2, L.EAVES - 0.35), mat=P["wall_dark"],
+            coll=far, bevel=0)
+    # near walls (south, west): low part always, the rest only for exterior shots
+    yS = L.BY0 - W / 2
+    wall_run("south_plinth", "x", yS, xa, xb, 0, L.CUT_H, W, [], P["concrete"], near)
+    wall_run("south_clad", "x", yS, xa, xb, L.CUT_H, L.EAVES, W, [], P["wall"], up)
+    xW = L.BX0 - W / 2
+    wall_run("west_plinth", "y", xW, ya, yb, 0, L.CUT_H, W, [], P["concrete"], near)
+    wall_run("west_clad", "y", xW, ya, yb, L.CUT_H, L.EAVES, W, [], P["wall"], up)
+    gable("west_gable", xW, ya, yb, L.EAVES, L.RIDGE + 0.2, W, P["wall"], up, ridge_y=L.RIDGE_Y)
+    geo.box("south_band", (xb - xa, W + 0.04, 0.7), loc=((xa + xb) / 2, yS, L.EAVES - 0.35), mat=P["wall_dark"],
             coll=up, bevel=0)
-    # cut-edge caps on the near walls (a clean light top so the cut reads as a diorama section)
-    geo.box("south_cap", (L.X1 - L.X0 + 2 * W, W + 0.02, 0.03), loc=(0, yS, L.CUT_H + 0.015), mat=P["paint_white"],
-            coll=near, bevel=0)
-    geo.box("west_cap", (W + 0.02, L.Y1 - L.Y0 + 2 * W, 0.03), loc=(xW, 0, L.CUT_H + 0.015), mat=P["paint_white"],
-            coll=near, bevel=0)
-    # portal-frame columns on the inside faces of the north (far) and south (near) walls
+    # wall columns: every 12 m on the north and south walls, wind posts every 12 m on the east and west walls
     for x in L.FRAME_X:
-        xc = min(max(x, L.X0 + 0.25), L.X1 - 0.25)
-        geo.box(f"colN_{x}", (0.42, 0.3, L.EAVES), loc=(xc, L.Y1 - 0.15, L.EAVES / 2), mat=P["frame"], coll=far,
+        xc = min(max(x, L.BX0 + 0.25), L.BX1 - 0.25)
+        geo.box(f"colN_{x}", (0.5, 0.35, L.EAVES), loc=(xc, L.BY1 - 0.18, L.EAVES / 2), mat=P["frame"], coll=far,
                 bevel=0.01)
-        geo.box(f"colN_{x}_guard", (0.6, 0.45, 1.0), loc=(xc, L.Y1 - 0.25, 0.5), mat=P["safety_yellow"], coll=far,
+        geo.box(f"colN_{x}_guard", (0.7, 0.5, 1.0), loc=(xc, L.BY1 - 0.3, 0.5), mat=P["safety_yellow"], coll=far,
                 bevel=0.03)
-        geo.box(f"colS_{x}_lo", (0.42, 0.3, L.CUT_H), loc=(xc, L.Y0 + 0.15, L.CUT_H / 2), mat=P["frame"], coll=near,
+        geo.box(f"colS_{x}_lo", (0.5, 0.35, L.CUT_H), loc=(xc, L.BY0 + 0.18, L.CUT_H / 2), mat=P["frame"], coll=near,
                 bevel=0.01)
-        geo.box(f"colS_{x}_up", (0.42, 0.3, L.EAVES - L.CUT_H), loc=(xc, L.Y0 + 0.15, (L.EAVES + L.CUT_H) / 2),
+        geo.box(f"colS_{x}_up", (0.5, 0.35, L.EAVES - L.CUT_H), loc=(xc, L.BY0 + 0.18, (L.EAVES + L.CUT_H) / 2),
                 mat=P["frame"], coll=up, bevel=0.01)
-    for y in (-8.0, 8.0):                                          # gable wind posts
-        if all(abs(y - d) > L.DOCK_W / 2 + 0.4 for d in L.DOCKS_Y):
-            geo.box(f"colE_{y}", (0.3, 0.42, L.EAVES), loc=(L.X1 - 0.15, y, L.EAVES / 2), mat=P["frame"], coll=far,
+    opens = [y for y, _, _ in east_open]
+    for k in range(1, int((L.BY1 - L.BY0) / 12)):
+        y = L.BY0 + 12.0 * k
+        if all(abs(y - d) > L.DRIVE_IN["w"] / 2 + 0.5 for d in opens):
+            geo.box(f"colE_{y}", (0.35, 0.5, L.EAVES), loc=(L.BX1 - 0.18, y, L.EAVES / 2), mat=P["frame"], coll=far,
                     bevel=0.01)
-        geo.box(f"colW_{y}_lo", (0.3, 0.42, L.CUT_H), loc=(L.X0 + 0.15, y, L.CUT_H / 2), mat=P["frame"], coll=near,
+        geo.box(f"colW_{y}_lo", (0.35, 0.5, L.CUT_H), loc=(L.BX0 + 0.18, y, L.CUT_H / 2), mat=P["frame"], coll=near,
                 bevel=0.01)
-    # high window strip on the north wall (daylight band)
-    for i, x in enumerate(range(-20, 24, 8)):
-        geo.box(f"winN_{i}", (5.0, W + 0.06, 0.9), loc=(x, yN, 7.6), mat=P["glass"], coll=far, bevel=0)
+    # cut-edge caps on the near walls
+    geo.box("south_cap", (xb - xa, W + 0.02, 0.03), loc=((xa + xb) / 2, yS, L.CUT_H + 0.015), mat=P["paint_white"],
+            coll=near, bevel=0)
+    geo.box("west_cap", (W + 0.02, yb - ya, 0.03), loc=(xW, (ya + yb) / 2, L.CUT_H + 0.015), mat=P["paint_white"],
+            coll=near, bevel=0)
+    # high window band on the north wall
+    for i, x in enumerate(range(int(L.BX0) + 8, int(L.BX1) - 2, 12)):
+        geo.box(f"winN_{i}", (7.0, W + 0.06, 1.0), loc=(x, yN, 9.2), mat=P["glass"], coll=far, bevel=0)
 
 
 def _roof(P, C):
     c = C["roof"]
     W = L.WALL_T
-    span_x = L.X1 - L.X0 + 2 * W + 0.6
-    half = (L.Y1 - L.Y0) / 2 + W + 0.5
-    ang = math.atan2(L.RIDGE - L.EAVES, (L.Y1 - L.Y0) / 2)
+    xa, xb = L.BX0 - W - 0.4, L.BX1 + W + 0.4
+    half = (L.BY1 - L.BY0) / 2 + W + 0.5
+    ang = math.atan2(L.RIDGE - L.EAVES, (L.BY1 - L.BY0) / 2)
     run = half / math.cos(ang)
-    for s in (-1, 1):
-        cy = s * half / 2
+    for s_ in (-1, 1):
+        cy = L.RIDGE_Y + s_ * half / 2
         cz = (L.EAVES + L.RIDGE) / 2 + 0.15
-        geo.box(f"roof_{s}", (span_x, run, 0.12), loc=(0, cy, cz), rot=(s * -ang, 0, 0), mat=P["roof"], coll=c,
-                bevel=0)
-        for i, x in enumerate(range(-20, 24, 8)):                 # skylight strips
-            geo.box(f"sky_{s}_{i}", (1.6, run * 0.6, 0.13), loc=(x, cy, cz + 0.01), rot=(s * -ang, 0, 0),
+        geo.box(f"roof_{s_}", (xb - xa, run, 0.14), loc=((xa + xb) / 2, cy, cz), rot=(s_ * -ang, 0, 0),
+                mat=P["roof"], coll=c, bevel=0)
+        for i, x in enumerate(range(int(L.BX0) + 6, int(L.BX1), 12)):
+            geo.box(f"sky_{s_}_{i}", (2.0, run * 0.7, 0.15), loc=(x, cy, cz + 0.01), rot=(s_ * -ang, 0, 0),
                     mat=P["skylight"], coll=c, bevel=0)
-    for x in L.FRAME_X:                                            # rafters
-        xc = min(max(x, L.X0 + 0.25), L.X1 - 0.25)
-        for s in (-1, 1):
-            geo.box(f"rafter_{x}_{s}", (0.3, (L.Y1 - L.Y0) / 2 / math.cos(ang), 0.6),
-                    loc=(xc, s * (L.Y1 - L.Y0) / 4, (L.EAVES + L.RIDGE) / 2 - 0.45), rot=(s * -ang, 0, 0),
-                    mat=P["frame"], coll=c, bevel=0)
     hb = K.high_bay_src(P)
-    for x in range(-21, 24, 6):
-        for y in (-12, -6, 0, 6, 12):
+    for x in range(int(L.BX0) + 4, int(L.BX1), 8):
+        for y in range(int(L.BY0) + 4, int(L.BY1), 8):
             K.instance(f"hb_{x}_{y}", hb, c, (x, y, roof_z(y) - 1.6))
 
 
@@ -263,7 +264,7 @@ def _racks(P, C, rng):
     filled = []
     for s in slots:
         xc, y, z, li, i, lv, k = s
-        if rng.random() < 0.14:
+        if rng.random() > (0.72, 0.68, 0.6, 0.45)[lv]:              # emptier toward the top, gaps to pick from
             continue
         src = loads[rng.randrange(len(loads))]
         if lv == 0 and rng.random() < 0.3:
@@ -328,16 +329,15 @@ def _markings(P, C):
     # zone codes
     for code, (x, y) in L.ZONES.items():
         floor_text(f"zone_{code}", code, (x, y), 0.75, 0.0, Y, c)
-    # hazard hatch around the stretch wrapper
-    wx, wy = L.WRAPPER
-    for i, (x0, x1, y0, y1) in enumerate([(wx - 1.6, wx + 2.0, wy - 1.5, wy - 1.25), (wx - 1.6, wx + 2.0, wy + 1.25, wy + 1.5),
-                                          (wx - 1.6, wx - 1.35, wy - 1.5, wy + 1.5), (wx + 1.75, wx + 2.0, wy - 1.5, wy + 1.5)]):
-        mark(f"wrap_hatch_{i}", x0, x1, y0, y1, P["hazard"], c)
     # dock floor marks and the drive-in door hatch
     for k, y in enumerate(L.DOCKS_Y):
         floor_text(f"dock_no_{k}", f"DOCK {k + 1}", (L.X1 - 3.4, y), 0.4, -math.pi / 2, Wt, c)
-    dx, dw = L.DRIVE_IN["x"], L.DRIVE_IN["w"]
-    mark("drive_hatch", dx - dw / 2, dx + dw / 2, L.Y0 + 0.05, L.Y0 + 0.45, P["hazard"], c)
+    dy, dw = L.DRIVE_IN["y"], L.DRIVE_IN["w"]
+    mark("drive_hatch", L.X1 - 0.45, L.X1 - 0.05, dy - dw / 2, dy + dw / 2, P["hazard"], c)
+    for j in range(int((L.X1 - 1.0 - L.LANE[1]) / 1.0)):         # dashed path from the lane to the door
+        x = L.LANE[1] + j * 1.0
+        for sy in (-1, 1):
+            mark(f"door_path_{sy}_{j}", x, x + 0.5, dy + sy * 1.8 - 0.05, dy + sy * 1.8 + 0.05, Y, c)
     # charging bays (yellow boxes) under the office
     for k in range(3):
         x = L.CHARGE["x"][0] + 0.6 + k * 2.6
@@ -349,37 +349,36 @@ def _docks(P, C):
     c = C["props"]
     W = L.WALL_T
     xo = L.X1 + W                                                   # outside face of the east wall
-    for k, y in enumerate(L.DOCKS_Y):
+    for k, y in enumerate(L.DOCKS_Y + L.DOCKS_SOUTH):
         K.dock_leveller(P, c, y, L.X1, w=2.0, depth=2.6)
-        # seal frame outside, bumpers, a dock light and a red/green signal
-        for sy in (-1, 1):
+        for sy in (-1, 1):                                          # seal frame, bumpers
             geo.box(f"seal_{k}_{sy}", (0.35, 0.3, L.DOCK_H + 0.3), loc=(xo + 0.17, y + sy * (L.DOCK_W / 2 + 0.15),
                     (L.DOCK_H + 0.3) / 2), mat=P["dock_seal"], coll=c, bevel=0.03)
             geo.box(f"bumper_{k}_{sy}", (0.14, 0.25, 0.45), loc=(xo + 0.07, y + sy * 0.95, -0.3),
                     mat=P["bumper"], coll=c, bevel=0.02)
         geo.box(f"seal_top_{k}", (0.35, L.DOCK_W + 0.6, 0.6), loc=(xo + 0.17, y, L.DOCK_H + 0.3), mat=P["dock_seal"],
                 coll=c, bevel=0.03)
-        geo.box(f"signal_{k}", (0.12, 0.25, 0.5), loc=(xo + 0.08, y + L.DOCK_W / 2 + 0.7, 2.0),
+        geo.box(f"signal_{k}", (0.12, 0.25, 0.5), loc=(L.X1 - 0.1, y + L.DOCK_W / 2 + 0.55, 2.0),
                 mat=P["black_plastic"], coll=c, bevel=0.01)
         lamp = P["led_green"] if k == L.TRAILER_DOCK else P["led_red"]
-        geo.cylinder(f"signal_lamp_{k}", 0.07, 0.03, loc=(xo + 0.15, y + L.DOCK_W / 2 + 0.7, 2.1), rot=(0, math.pi / 2, 0),
-                     mat=lamp, coll=c)
+        geo.cylinder(f"signal_lamp_{k}", 0.07, 0.03, loc=(L.X1 - 0.17, y + L.DOCK_W / 2 + 0.55, 2.1),
+                     rot=(0, math.pi / 2, 0), mat=lamp, coll=c)
         geo.box(f"dock_lamp_arm_{k}", (0.04, 0.9, 0.04), loc=(L.X1 - 0.3, y - L.DOCK_W / 2 - 0.45, 2.2),
                 mat=P["steel_dark"], coll=c, bevel=0)
-        if k != L.TRAILER_DOCK:
-            K.sectional_door(P, c, L.X1 + W / 2, y, L.DOCK_W - 0.05, L.DOCK_H, 0.0, open_frac=0.0)
-        else:
-            K.sectional_door(P, c, L.X1 + W / 2, y, L.DOCK_W - 0.05, L.DOCK_H, 0.0, open_frac=1.0)
-    # trailer backed onto the open dock, standing in the well
-    yT = L.DOCKS_Y[L.TRAILER_DOCK]
+        K.sectional_door(P, c, L.X1 + W / 2, y, L.DOCK_W - 0.05, L.DOCK_H, 0.0,
+                         open_frac=1.0 if k == L.TRAILER_DOCK else 0.0)
+        if k >= len(L.DOCKS_Y):
+            floor_text(f"dock_no_{k}", f"DOCK {k + 1}", (L.X1 - 3.4, y), 0.4, -math.pi / 2, P["paint_white"],
+                       C["markings"])
+    yT = L.DOCKS_Y[L.TRAILER_DOCK]                                  # trailer on the open dock, in the well
     K.trailer(P, c, (L.X1 + W + 0.22, yT, -L.DOCK_HEIGHT), 0.0)
-    # drive-in door: open, steel jambs with bollards
-    dx, dw = L.DRIVE_IN["x"], L.DRIVE_IN["w"]
-    for sx in (-1, 1):
-        geo.cylinder(f"bollard_{sx}", 0.1, 1.2, loc=(dx + sx * (dw / 2 + 0.3), L.Y0 - 0.5, 0.6),
-                     mat=P["safety_yellow"], coll=c)
-        geo.box(f"drive_jamb_{sx}", (0.15, 0.3, L.DRIVE_IN["h"]), loc=(dx + sx * (dw / 2 + 0.07), L.Y0 - 0.1,
-                L.DRIVE_IN["h"] / 2), mat=P["hazard"], coll=C["walls_near_up"], bevel=0)
+    dy, dw = L.DRIVE_IN["y"], L.DRIVE_IN["w"]                        # drive-in door: open, striped jambs, bollards
+    for sy in (-1, 1):
+        for xb in (L.X1 - 0.5, L.X1 + W + 0.5):
+            geo.cylinder(f"bollard_{sy}_{xb}", 0.1, 1.2, loc=(xb, dy + sy * (dw / 2 + 0.3), 0.6),
+                         mat=P["safety_yellow"], coll=c)
+        geo.box(f"drive_jamb_{sy}", (W + 0.1, 0.15, L.DRIVE_IN["h"]), loc=(L.X1 + W / 2, dy + sy * (dw / 2 + 0.07),
+                L.DRIVE_IN["h"] / 2), mat=P["hazard"], coll=C["walls_far"], bevel=0)
 
 
 def _zones(P, C, rng):
@@ -392,26 +391,23 @@ def _zones(P, C, rng):
         for j in range(count):
             x = sx1 - 0.7 - j * 1.25
             K.instance(f"stg_{i}_{j}", loads[rng.randrange(len(loads))], c, (x, y, 0), rot_z=rng.uniform(-0.03, 0.03))
-    # pick and pack
-    px0, px1 = L.PACK["x"]
-    py0, py1 = L.PACK["y"]
-    K.conveyor(P, c, (px0 + 0.3, py0 + 1.2), 6.0)
-    for k, x in enumerate((px0 + 1.4, px0 + 3.6, px0 + 5.8)):
-        K.pack_bench(P, c, (x, py0 + 2.6, 0), rot_z=math.pi)
-    K.stretch_wrapper(P, c, (*L.WRAPPER, 0))
-    cages = [K.roll_cage_src(P, loaded=(s % 3 != 0), seed=s) for s in range(4)]
-    for k in range(9):
-        x = 22.6 + (k % 3) * 0.85 - 0.85
-        y = py0 + 0.6 + (k // 3) * 0.8
-        K.instance(f"cage_{k}", cages[k % len(cages)], c, (x, y, 0), rot_z=rng.uniform(-0.05, 0.05))
-    for k in range(6):                                              # a row of cages by the lane
-        K.instance(f"cage_lane_{k}", cages[(k + 1) % len(cages)], c, (13.4 + k * 0.85, -9.6, 0), rot_z=math.pi)
-    K.wheelie_bin(P, c, (px1 + 1.4, py1 - 0.4, 0), "crate_blue")
-    K.wheelie_bin(P, c, (px1 + 1.4, py1 + 0.35, 0), "paint_green")
+    # inbound quality check: cages and held pallets
+    qx0, qx1 = L.QC["x"]
+    qy0, qy1 = L.QC["y"]
+    cages = [K.roll_cage_src(P, loaded=(s_ % 3 != 0), seed=s_) for s_ in range(4)]
+    for k in range(6):
+        K.instance(f"cage_qc_{k}", cages[(k + 1) % len(cages)], c, (qx0 + 0.5 + k * 0.85, qy1 - 0.2, 0), rot_z=math.pi)
+    for k in range(3):
+        K.instance(f"qc_pallet_{k}", loads[rng.randrange(len(loads))], c, (qx0 + 6.2 + k * 1.35, qy0 + 0.9, 0),
+                   rot_z=rng.uniform(-0.04, 0.04))
+    for k, (x0, x1, y0, y1) in enumerate([(qx0, qx1, qy0, qy0 + 0.08), (qx0, qx1, qy1 - 0.08, qy1),
+                                          (qx0, qx0 + 0.08, qy0, qy1), (qx1 - 0.08, qx1, qy0, qy1)]):
+        mark(f"qc_line_{k}", x0, x1, y0, y1, P["paint_yellow"], C["markings"])
+    floor_text("qc_text", "INBOUND QC", (qx0 + 3.4, qy0 + 0.75), 0.5, 0.0, P["paint_yellow"], C["markings"])
+    K.wheelie_bin(P, c, (qx1 + 1.0, qy1 - 0.4, 0), "crate_blue")
+    K.wheelie_bin(P, c, (qx1 + 1.0, qy1 - 1.2, 0), "paint_green")
     K.hand_pallet_truck(P, c, (L.APRON_X + 1.5, 7.6, 0), rot_z=0.4)
     # fire points on far-wall columns, convex mirror at the blind corner
-    for x in (-16.0, 0.0, 16.0):
-        K.fire_point(P, c, (x + 0.4, L.Y1 - 0.31, 0), rot_z=math.pi)
     K.fire_point(P, c, (L.X1 - 0.31, -8.0, 0), rot_z=math.pi / 2)
     bx, by = L.BLIND_CORNER
     geo.box("mirror_post", (0.08, 0.08, 3.2), loc=(bx + 0.15, by - 0.35, 1.6), mat=P["safety_yellow"], coll=c, bevel=0)
@@ -466,28 +462,29 @@ def _office(P, C):
         mb.bar(p0, p1, 0.08, 0)
         mb.bar(p0 + Vector((0, 0, 1.0)), p1 + Vector((0, 0, 1.0)), 0.05, 0)
         mb.done(f"stringer_{sx}", [rail_m], c)
-    # chargers along the north wall under the deck
+    # block partition behind the deck (the battery room is beyond it) and the chargers against it
+    px0, px1, py = L.PARTITION
+    geo.box("partition", (px1 - px0, 0.2, 4.0), loc=((px0 + px1) / 2, py + 0.1, 2.0), mat=P["concrete"], coll=c,
+            bevel=0.01)
     for k in range(3):
-        K.charger(P, c, (L.CHARGE["x"][0] + 1.7 + k * 2.6, L.Y1 - 0.35, 0), rot_z=0.0)
+        K.charger(P, c, (L.CHARGE["x"][0] + 1.7 + k * 2.6, py - 0.25, 0), rot_z=0.0)
     return dict(screen=screen)
 
 
 def _yard(P, C):
+    """The east yard (only seen in the hook): approach lane to the drive-in door, trailer bays to the north."""
     c = C["yard"]
     Wt, Y = P["paint_white"], P["paint_yellow"]
-    # parking bays for trailers south of the building
-    for k in range(7):
-        x = 6.0 + k * 4.0
-        mark(f"yard_bay_{k}", x - 0.06, x + 0.06, L.YARD_Y0 + 1.0, L.YARD_Y0 + 8.0, Wt, c)
-    K.trailer(P, c, (26.0, L.YARD_Y0 + 4.0, 0.0), 0.0, length=13.6)
-    # a painted lane from the yard to the drive-in door, with arrows
-    dx = L.DRIVE_IN["x"]
-    for x in (dx - 2.2, dx + 2.2):
-        mark(f"yard_lane_{x}", x - 0.06, x + 0.06, L.Y0 - 9.0, L.Y0 - 0.6, Y, c)
+    dy = L.DRIVE_IN["y"]
+    for y in (dy - 2.2, dy + 2.2):
+        mark(f"yard_lane_{y}", L.X1 + 1.0, L.YARD_X1 - 2.0, y - 0.06, y + 0.06, Y, c)
     for k in range(3):
-        y = L.Y0 - 7.5 + k * 2.4
-        floor_text(f"yard_arrow_{k}", "^", (dx, y), 1.6, 0.0, Wt, c)
-    # lamp posts
-    for k, (x, y) in enumerate(((L.X1 + 6.0, L.Y0 - 6.0), (-8.0, L.Y0 - 8.0), (L.X1 + 8.0, 12.0))):
+        floor_text(f"yard_arrow_{k}", ">", (L.X1 + 5.0 + k * 4.0, dy), 1.4, math.pi, Wt, c)
+    for k in range(7):
+        y = 11.0 + k * 4.0
+        mark(f"yard_bay_{k}", L.X1 + 4.0, L.X1 + 18.0, y - 0.06, y + 0.06, Wt, c)
+    K.trailer(P, c, (L.X1 + 4.5, 15.0, 0.0), 0.0, length=13.6)
+    K.trailer(P, c, (L.X1 + 4.5, 23.0, 0.0), 0.0, length=13.6)
+    for k, (x, y) in enumerate(((L.X1 + 6.0, -15.5), (L.X1 + 8.0, 10.0), (L.X1 + 8.0, -30.0))):
         geo.cylinder(f"lamp_post_{k}", 0.08, 8.0, loc=(x, y, 4.0), mat=P["steel_dark"], coll=c)
         geo.box(f"lamp_head_{k}", (0.7, 0.3, 0.12), loc=(x + 0.3, y, 8.0), mat=P["steel_dark"], coll=c, bevel=0.02)

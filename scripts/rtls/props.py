@@ -158,7 +158,7 @@ def load_variant(P, kind, seed):
     return coll
 
 
-LOAD_KINDS = (("cartons", 9), ("cartons_low", 4), ("white", 1), ("wrap", 4), ("drums", 1), ("bags", 2), ("crates", 1))
+LOAD_KINDS = (("cartons", 10), ("cartons_low", 5), ("wrap", 3), ("bags", 1))
 
 
 def load_library(P):
@@ -172,7 +172,7 @@ def load_library(P):
 # ------------------------------------------------------------------------------------ racking
 def rack_frame_src(P, height, depth):
     """One upright frame: two posts, zigzag bracing, footplates. Frame plane = local YZ, at x = 0."""
-    coll = src_collection(f"RACK_FRAME_{depth}")
+    coll = src_collection(f"RACK_FRAME_{depth}_{height}")
     if coll.objects:
         return coll
     mb = MB()
@@ -189,14 +189,15 @@ def rack_frame_src(P, height, depth):
     return coll
 
 
-def rack_beams_src(P, depth):
+def rack_beams_src(P, depth, beams=None):
     """The beam pairs of one bay (from x = 0 to x = BAY) at every beam level."""
     from rtls import layout as L
-    coll = src_collection(f"RACK_BEAMS_{depth}")
+    beams = beams or L.BEAMS
+    coll = src_collection(f"RACK_BEAMS_{depth}_{len(beams)}")
     if coll.objects:
         return coll
     mb = MB()
-    for z in L.BEAMS:
+    for z in beams:
         for sy in (-depth / 2 + 0.05, depth / 2 - 0.05):
             mb.box((L.BAY - 0.09, 0.05, 0.12), (L.BAY / 2, sy, z - 0.06), 0)
         for xx in (0.45, L.BAY / 2, L.BAY - 0.45):                    # pallet support bars

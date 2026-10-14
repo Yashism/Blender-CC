@@ -1,7 +1,8 @@
 """RTLS film: the Digital Twin layer.
 
-  twin_on() / twin_off()   swap every material to the twin look (dark, thin cyan edges, glowing orange trucks)
-                           and back; FX objects (trails, heat map, markers) keep their own materials
+  twin_on() / twin_off()   swap every material to the twin look and back: a soft matte light-grey model of the whole
+                           building under soft daylight, where only the data has colour (RAMS-orange trucks, traces,
+                           a warm heat map, white label cards); FX objects keep their own materials
   trails(...)              the forklifts' location traces: glowing ribbons on the floor that fade with age
   shift_lines(...)         every route of the shift as faint thin lines (they stack into the busy paths)
   heatmap(...)             where the trucks spent their time (waiting and idle included), as a floor overlay
@@ -21,7 +22,6 @@ from rtls import paths as R
 from rtls.warehouse import FONT
 
 ORANGE = (1.0, 0.33, 0.02)
-CYAN = (0.12, 0.62, 0.85)
 FX_TAG = "rt_fx"
 
 
@@ -38,47 +38,28 @@ def _tag(ob):
 
 
 # ------------------------------------------------------------------------------------ materials
-def _edge_material(name, base, edge, edge_s=2.5, rough=0.6, emit=None, emit_s=0.0, radius=0.035):
-    """Dark surface with glowing edges found by comparing the true normal to a bevelled normal."""
+TRUCK_MATS = ("black", "black_metal", "yellow", "black_plastic", "metal", "lights", "wheels", "rt_obx", "rt_lidar")
+
+
+def _clay(name, color, rough=0.85, emit=None, emit_s=0.0, coat=0.0):
     m = bpy.data.materials.get(name)
     if m:
         return m
     m = bpy.data.materials.new(name)
     m.use_nodes = True
-    nt = m.node_tree
-    b = nt.nodes["Principled BSDF"]
-    b.inputs["Base Color"].default_value = (*base, 1)
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (*color, 1)
     b.inputs["Roughness"].default_value = rough
-    geom = nt.nodes.new("ShaderNodeNewGeometry")
-    bev = nt.nodes.new("ShaderNodeBevel")
-    bev.samples = 6
-    bev.inputs["Radius"].default_value = radius
-    dot = nt.nodes.new("ShaderNodeVectorMath")
-    dot.operation = "DOT_PRODUCT"
-    nt.links.new(geom.outputs["Normal"], dot.inputs[0])
-    nt.links.new(bev.outputs["Normal"], dot.inputs[1])
-    mr = nt.nodes.new("ShaderNodeMapRange")
-    mr.inputs["From Min"].default_value = 0.995
-    mr.inputs["From Max"].default_value = 0.94
-    nt.links.new(dot.outputs["Value"], mr.inputs["Value"])
-    mul = nt.nodes.new("ShaderNodeMath")
-    mul.operation = "MULTIPLY"
-    mul.inputs[1].default_value = edge_s
-    nt.links.new(mr.outputs["Result"], mul.inputs[0])
+    b.inputs["Specular IOR Level"].default_value = 0.35
+    b.inputs["Coat Weight"].default_value = coat
     if emit:
-        add = nt.nodes.new("ShaderNodeMath")
-        add.operation = "ADD"
-        add.inputs[1].default_value = emit_s
-        nt.links.new(mul.outputs["Value"], add.inputs[0])
-        mul = add
         b.inputs["Emission Color"].default_value = (*emit, 1)
-    else:
-        b.inputs["Emission Color"].default_value = (*edge, 1)
-    nt.links.new(mul.outputs["Value"], b.inputs["Emission Strength"])
+        b.inputs["Emission Strength"].default_value = emit_s
     return m
 
 
-def _floor_material():
+def _clay_floor():
+    """Light grey floor with a faint 6 m grid, like a plan drawn on the model."""
     m = bpy.data.materials.get("tw_floor")
     if m:
         return m
@@ -86,31 +67,22 @@ def _floor_material():
     m.use_nodes = True
     nt = m.node_tree
     b = nt.nodes["Principled BSDF"]
-    b.inputs["Base Color"].default_value = (0.010, 0.012, 0.015, 1)
-    b.inputs["Roughness"].default_value = 0.5
+    b.inputs["Roughness"].default_value = 0.8
+    b.inputs["Specular IOR Level"].default_value = 0.3
     tc = nt.nodes.new("ShaderNodeTexCoord")
-    lines = []
-    for size, mortar, s in ((1.0, 0.012, 0.25), (6.0, 0.005, 0.9)):
-        br = nt.nodes.new("ShaderNodeTexBrick")
-        br.offset = 0.0
-        br.squash = 1.0
-        br.inputs["Scale"].default_value = 1.0 / size
-        br.inputs["Mortar Size"].default_value = mortar
-        br.inputs["Mortar Smooth"].default_value = 0.0
-        br.inputs["Brick Width"].default_value = 1.0
-        br.inputs["Row Height"].default_value = 1.0
-        nt.links.new(tc.outputs["Object"], br.inputs["Vector"])
-        mul = nt.nodes.new("ShaderNodeMath")
-        mul.operation = "MULTIPLY"
-        mul.inputs[1].default_value = s
-        nt.links.new(br.outputs["Fac"], mul.inputs[0])
-        lines.append(mul)
-    add = nt.nodes.new("ShaderNodeMath")
-    add.operation = "MAXIMUM"
-    nt.links.new(lines[0].outputs["Value"], add.inputs[0])
-    nt.links.new(lines[1].outputs["Value"], add.inputs[1])
-    b.inputs["Emission Color"].default_value = (*CYAN, 1)
-    nt.links.new(add.outputs["Value"], b.inputs["Emission Strength"])
+    br = nt.nodes.new("ShaderNodeTexBrick")
+    br.offset = 0.0
+    br.squash = 1.0
+    br.inputs["Scale"].default_value = 1.0 / 6.0
+    br.inputs["Mortar Size"].default_value = 0.004
+    br.inputs["Mortar Smooth"].default_value = 0.3
+    br.inputs["Brick Width"].default_value = 1.0
+    br.inputs["Row Height"].default_value = 1.0
+    br.inputs["Color1"].default_value = (0.50, 0.51, 0.52, 1)
+    br.inputs["Color2"].default_value = (0.50, 0.51, 0.52, 1)
+    br.inputs["Mortar"].default_value = (0.42, 0.43, 0.45, 1)
+    nt.links.new(tc.outputs["Object"], br.inputs["Vector"])
+    nt.links.new(br.outputs["Color"], b.inputs["Base Color"])
     return m
 
 
@@ -130,27 +102,24 @@ def _emit_flat(name, color, strength, base=None, alpha=1.0):
     return m
 
 
-TRUCK_MATS = ("black", "black_metal", "yellow", "black_plastic", "metal", "lights", "wheels", "rt_obx", "rt_lidar")
-
-
 def _twin_for(mat):
     n = mat.name if mat else ""
     if n.startswith("rt_floor"):
-        return _floor_material()
+        return _clay_floor()
     if n.startswith(TRUCK_MATS) or n.startswith("rt_bracket"):
-        return _edge_material("tw_truck", (0.9, 0.28, 0.02), ORANGE, 1.0, emit=ORANGE, emit_s=0.9)
+        return _clay("tw_truck", (0.95, 0.30, 0.03), 0.45, emit=ORANGE, emit_s=0.35, coat=0.4)
     if n.startswith(("rt_paint", "rt_hazard")):
-        return _emit_flat("tw_marking", (0.25, 0.35, 0.42), 0.35, base=(0.03, 0.035, 0.04))
-    if n.startswith(("rt_glass", "rt_skylight")):
-        return _emit_flat("tw_glass", CYAN, 0.08, base=(0.01, 0.012, 0.015), alpha=0.25)
+        return _clay("tw_marking", (0.40, 0.42, 0.44), 0.8)
+    if n.startswith(("rt_glass", "rt_skylight", "rt_strip", "rt_fence")):
+        return _emit_flat("tw_glass", (1, 1, 1), 0.0, base=(0.85, 0.88, 0.9), alpha=0.25)
     if n.startswith(("rt_asphalt", "rt_road", "rt_grass", "rt_paving", "rt_kerb", "rt_carpark", "rt_yard",
                      "rt_leaf", "rt_bark", "rt_slab")):
-        return _edge_material("tw_ground", (0.006, 0.007, 0.009), CYAN, 0.25)
+        return _clay("tw_ground", (0.42, 0.43, 0.44), 0.9)
     if n.startswith(("rt_carton", "rt_shrink", "rt_drum", "rt_bag", "rt_crate", "rt_tape", "rt_pallet")):
-        return _edge_material("tw_load", (0.025, 0.03, 0.036), CYAN, 0.55, radius=0.02)
+        return _clay("tw_load", (0.74, 0.74, 0.73), 0.9)
     if n.startswith(("rt_rack",)):
-        return _edge_material("tw_rack", (0.03, 0.045, 0.06), CYAN, 1.6, radius=0.02)
-    return _edge_material("tw_struct", (0.018, 0.021, 0.026), CYAN, 1.1)
+        return _clay("tw_rack", (0.56, 0.58, 0.61), 0.7)
+    return _clay("tw_struct", (0.64, 0.65, 0.66), 0.85)
 
 
 _SAVED = {}
@@ -169,15 +138,24 @@ def twin_on():
             data.materials[i] = _twin_for(m)
     sun = bpy.data.objects.get("rt_sun")
     fill = bpy.data.objects.get("rt_fill")
-    for o, k in ((sun, 0.18), (fill, 0.25)):
+    for o, k in ((sun, 0.85), (fill, 0.6)):              # high, soft light: short shadows, a model on a table
         if o:
             o.data["base_energy"] = o.data.get("base_energy", o.data.energy)
+            o.data["base_angle"] = o.data.get("base_angle", o.data.angle)
+            o["base_rot"] = o.get("base_rot", tuple(o.rotation_euler))
             o.data.energy = o.data["base_energy"] * k
+    if sun:
+        sun.data.angle = math.radians(14.0)
+        el, az = math.radians(66.0), math.radians(150.0)
+        d = Vector((math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)))
+        sun.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
     w = bpy.context.scene.world
     for n in w.node_tree.nodes:
         if n.type == "BACKGROUND":
             n["base"] = n.get("base", n.inputs["Strength"].default_value)
-            n.inputs["Strength"].default_value = n["base"] * 0.25
+            n.inputs["Strength"].default_value = n["base"] * 1.15
+    bpy.context.scene.view_settings.look = "AgX - High Contrast"
+    bpy.context.scene.view_settings.exposure = -0.55
 
 
 def twin_off():
@@ -191,6 +169,10 @@ def twin_off():
         o = bpy.data.objects.get(n)
         if o and "base_energy" in o.data:
             o.data.energy = o.data["base_energy"]
+            o.data.angle = o.data["base_angle"]
+            o.rotation_euler = o["base_rot"]
+    bpy.context.scene.view_settings.look = "AgX - Medium High Contrast"
+    bpy.context.scene.view_settings.exposure = 0.0
     w = bpy.context.scene.world
     for n in w.node_tree.nodes:
         if n.type == "BACKGROUND" and "base" in n:
@@ -275,8 +257,8 @@ def ribbon(name, pts, width, z, coll, mat, ages=None):
 def trails(tracks, t_end, seconds, coll, width=0.3, hero=None, hero_seconds=None, z=0.045):
     """The last `seconds` of every truck's track, fading toward the oldest point."""
     out = {}
-    mat = _trail_material("tw_trail", ORANGE, 5.0)
-    mat_h = _trail_material("tw_trail_hero", (1.0, 0.42, 0.06), 9.0, alpha_pow=0.9)
+    mat = _trail_material("tw_trail", (1.0, 0.36, 0.06), 1.5)
+    mat_h = _trail_material("tw_trail_hero", (1.0, 0.30, 0.03), 2.2, alpha_pow=0.8)
     for name, tr in tracks.items():
         secs = hero_seconds if (hero and name == hero and hero_seconds) else seconds
         w = R.window(tr, t_end - secs, t_end)
@@ -291,7 +273,7 @@ def trails(tracks, t_end, seconds, coll, width=0.3, hero=None, hero_seconds=None
 
 
 def shift_lines(tracks, t_end, coll, width=0.06, step=4, z=0.038):
-    mat = _trail_material("tw_shift_line", ORANGE, 2.2, const_alpha=0.16)
+    mat = _trail_material("tw_shift_line", (0.12, 0.13, 0.15), 0.0, const_alpha=0.12)
     obs = []
     for name, tr in tracks.items():
         w = R.window(tr, 0.0, t_end)[::step]
@@ -302,14 +284,15 @@ def shift_lines(tracks, t_end, coll, width=0.06, step=4, z=0.038):
 
 
 # ------------------------------------------------------------------------------------ heat map
-HEAT_STOPS = [  # (t, r, g, b, alpha)
-    (0.00, 0.02, 0.10, 0.45, 0.00),
-    (0.10, 0.02, 0.18, 0.70, 0.00),
-    (0.25, 0.02, 0.35, 0.90, 0.22),
-    (0.45, 0.05, 0.75, 0.75, 0.40),
-    (0.62, 0.90, 0.85, 0.10, 0.62),
-    (0.80, 1.00, 0.42, 0.02, 0.80),
-    (1.00, 1.00, 0.05, 0.02, 0.92),
+HEAT_STOPS = [  # (t, r, g, b, alpha): the classic heat-map scale, blue (quiet) to red (busiest)
+    (0.00, 0.10, 0.20, 0.85, 0.00),
+    (0.10, 0.10, 0.25, 0.90, 0.00),
+    (0.22, 0.05, 0.40, 0.95, 0.38),
+    (0.38, 0.00, 0.75, 0.90, 0.55),
+    (0.52, 0.10, 0.80, 0.30, 0.65),
+    (0.66, 0.95, 0.90, 0.05, 0.75),
+    (0.82, 1.00, 0.45, 0.00, 0.84),
+    (1.00, 0.90, 0.05, 0.03, 0.92),
 ]
 
 
@@ -323,18 +306,27 @@ def heat_grid(tracks, t_end, cell=0.2, sigma=0.9, include=("moving", "waiting", 
                 continue
             i, j = int((s[2] - y0) / cell), int((s[1] - x0) / cell)
             if 0 <= i < h and 0 <= j < w:
-                g[i, j] += R.DT
+                g[i, j] += R.DT * (0.45 if s[4] in ("fork", "drop") else 1.0)
     r = int(3 * sigma / cell)
     k = np.exp(-0.5 * (np.arange(-r, r + 1) * cell / sigma) ** 2)
     k /= k.sum()
     g = np.apply_along_axis(lambda v: np.convolve(v, k, mode="same"), 1, g)
     g = np.apply_along_axis(lambda v: np.convolve(v, k, mode="same"), 0, g)
+    rs = np.random.default_rng(3)                                  # a slow, uneven variation so it reads organic
+    nz = rs.random(g.shape)
+    kr = int(3 * 3.0 / cell)
+    kk = np.exp(-0.5 * (np.arange(-kr, kr + 1) * cell / 3.0) ** 2)
+    kk /= kk.sum()
+    nz = np.apply_along_axis(lambda v: np.convolve(v, kk, mode="same"), 1, nz)
+    nz = np.apply_along_axis(lambda v: np.convolve(v, kk, mode="same"), 0, nz)
+    nz = (nz - nz.min()) / max(1e-9, nz.max() - nz.min())
+    g = g * (0.65 + 0.7 * nz)
     hi = np.percentile(g[g > 0], 99.3) if np.any(g > 0) else 1.0
     g = np.clip(g / hi, 0, 1) ** 0.6
     return g, (x0, x1, y0, y1)
 
 
-def heatmap(tracks, t_end, coll, z=0.032, strength=2.4):
+def heatmap(tracks, t_end, coll, z=0.032, strength=1.0):
     g, (x0, x1, y0, y1) = heat_grid(tracks, t_end)
     h, w = g.shape
     st = np.array(HEAT_STOPS)
@@ -404,13 +396,13 @@ def _ring_mesh(name, r0, r1, seg=64):
     return me
 
 
-def markers(fleet, cam, coll, labels=True, status=None, hero=None):
+def markers(fleet, cam, coll, labels=True, status=None, hero=None, ring_scale=1.0, label_scale=1.0):
     """Ring + pin + label for each truck. status: {name: text} for the second label line."""
-    ring_m = _emit_flat("tw_marker", ORANGE, 6.0)
-    pin_m = _emit_flat("tw_pin", ORANGE, 4.0)
-    card_m = _emit_flat("tw_card", (0.05, 0.055, 0.065), 1.0, base=(0.03, 0.033, 0.04))
-    txt_m = _emit_flat("tw_text", (1, 1, 1), 2.0)
-    sub_m = _emit_flat("tw_text_sub", (0.62, 0.68, 0.74), 1.2)
+    ring_m = _emit_flat("tw_marker", (1.0, 0.33, 0.03), 1.6, base=(0.95, 0.3, 0.03))
+    pin_m = _clay("tw_pin", (0.12, 0.13, 0.14), 0.5)
+    card_m = _emit_flat("tw_card", (1, 1, 1), 0.35, base=(0.92, 0.93, 0.94))
+    txt_m = _clay("tw_text", (0.03, 0.035, 0.04), 0.6)
+    sub_m = _clay("tw_text_sub", (0.28, 0.3, 0.33), 0.6)
     me = _ring_mesh("tw_ring", 2.15, 2.35)
     me.materials.append(ring_m)
     me[FX_TAG] = 1
@@ -423,6 +415,7 @@ def markers(fleet, cam, coll, labels=True, status=None, hero=None):
         ring = bpy.data.objects.new(f"ring_{name}", me)
         coll.objects.link(ring)
         ring.location = (p.x, p.y, 0.055)
+        ring.scale = (ring_scale, ring_scale, 1.0)
         ring.visible_shadow = False
         _tag(ring)
         top = 8.6                                       # labels float above the racks (7.2 m + loads)
@@ -436,7 +429,7 @@ def markers(fleet, cam, coll, labels=True, status=None, hero=None):
         if not labels:
             continue
         big = name == hero
-        sc = 1.6 if big else 1.25
+        sc = (1.6 if big else 1.25) * label_scale
         card = geo.box(f"card_{name}", (3.3 * sc, 0.02, 1.15 * sc), loc=(0, 0, 0), mat=card_m, coll=coll, bevel=0.06)
         card.rotation_euler = rot
         card.rotation_euler.rotate_axis("X", -math.pi / 2)

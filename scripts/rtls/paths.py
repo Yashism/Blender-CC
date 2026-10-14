@@ -87,10 +87,13 @@ def network():
         node(("charge_in", k), x, Y_N)
         edge("charge_j" if k == 0 else ("charge_in", k - 1), ("charge_in", k))
         edge(("charge_in", k), ("charge", k))
-    # drive-in door to the yard
-    node("door_in", lx, L.Y0 + 0.5)
-    node("yard", lx, L.Y0 - 6.5)
-    edge(("S", "L"), "door_in")
+    # drive-in door on the east wall, out to the yard
+    dy = L.DRIVE_IN["y"]
+    node("door_j", lx, dy)
+    node("door_in", L.X1 - 0.8, dy)
+    node("yard", L.X1 + 7.0, dy)
+    edge(("S", "L"), "door_j")
+    edge("door_j", "door_in")
     edge("door_in", "yard")
     return nodes, edges
 
@@ -153,11 +156,11 @@ def fillet(pts, r=FILLET, seg=6):
     return out, flags
 
 
-def drive(pts, flags, t0):
+def drive(pts, flags, t0, v_max=V_MAX, v_turn=V_TURN):
     """Time a path: accelerate, cruise, slow for corners, stop at the end. Returns samples (t, x, y, heading)."""
     n = len(pts)
     seg = [math.dist(pts[i], pts[i + 1]) for i in range(n - 1)]
-    vlim = [V_TURN if f else V_MAX for f in flags]
+    vlim = [v_turn if f else v_max for f in flags]
     vlim[0] = vlim[-1] = 0.0
     v = vlim[:]
     for i in range(1, n):                          # forward pass: acceleration limit
@@ -180,69 +183,113 @@ def drive(pts, flags, t0):
 # ------------------------------------------------------------------------------------ the shift
 CHOKE = {("S", "L"): 0.45, ("lane", round(L.DOCKS_Y[L.TRAILER_DOCK], 2)): 0.55, ("apron", L.TRAILER_DOCK): 0.4,
          ("S", "E"): 0.35, ("N", "L"): 0.3}
+AISLE_WEIGHT = {"A": 0.5, "B": 1.4, "C": 0.8, "D": 2.1, "E": 1.1}      # slotting: fast movers live in D and B
+
+
+def wander(pts, r, amp=0.22, offset=0.0, taper=2.5):
+    """Drivers don't follow the centre line: a constant offset for the leg plus a slow drift along it,
+    both easing to zero at the two ends of the leg."""
+    if len(pts) < 2:
+        return pts
+    s = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        s.append(s[-1] + math.dist(a, b))
+    total = s[-1]
+    waves = [(r.uniform(3.5, 9.0), r.uniform(0, 6.28), amp * r.uniform(0.5, 1.0)) for _ in range(2)]
+    out = []
+    n = len(pts)
+    for i, p in enumerate(pts):
+        a = pts[max(0, i - 1)]
+        b = pts[min(n - 1, i + 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy) or 1.0
+        nx, ny = -dy / ln, dx / ln
+        ease = min(1.0, s[i] / taper, (total - s[i]) / taper)
+        d = (offset + sum(A * math.sin(2 * math.pi * s[i] / lam + ph) for lam, ph, A in waves)) * max(0.0, ease)
+        out.append((p[0] + nx * d, p[1] + ny * d))
+    return out
+
+
+def densify(pts, step=0.5):
+    out = [pts[0]]
+    for a, b in zip(pts, pts[1:]):
+        n = max(1, int(math.dist(a, b) / step))
+        for k in range(1, n + 1):
+            out.append((a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n))
+    return out
 
 
 def simulate(seed=5, shift=SHIFT):
     nodes, edges = network()
-    rng = random.Random(seed)
     bays = [(a, i) for a in "ABCDE" for i in range(L.N_BAYS)]
+    bay_w = [AISLE_WEIGHT[a] * (1.6 if i in (0, 1, L.N_BAYS - 2, L.N_BAYS - 1) else 1.0) for a, i in bays]
     starts = {"MHE-01": ("B", 4), "MHE-02": ("D", 2), "MHE-03": ("S", "C"), "MHE-04": ("stage", 1),
               "MHE-05": ("apron", 1), "MHE-06": ("N", "D"), "MHE-07": ("lane", round(L.DOCKS_Y[0], 2)),
               "MHE-08": ("charge", 0)}
     tracks = {}
     for ti, name in enumerate(L.FLEET):
         r = random.Random(seed * 100 + ti)
+        v_max = r.uniform(1.9, 2.7)                # every driver has their own pace
+        v_turn = r.uniform(0.8, 1.3)
         cur = starts[name]
+        cur_xy = nodes[cur]
         t = 0.0
         raw = []                                   # (t, x, y, heading, state)
-        x0, y0 = nodes[cur]
         h = 0.0
         if name == "MHE-08":                       # on charge for the first 40 minutes
-            raw.append((t, x0, y0, math.pi / 2, "charging"))
+            raw.append((t, *cur_xy, math.pi / 2, "charging"))
             t += 2400.0
-            raw.append((t, x0, y0, math.pi / 2, "charging"))
+            raw.append((t, *cur_xy, math.pi / 2, "charging"))
         while t < shift:
             kind = r.choices(("pick", "load", "putaway"), (0.45, 0.3, 0.25))[0]
             if kind == "pick":
-                legs = [(bays[r.randrange(len(bays))], "fork"), (("stage", r.randrange(4)), "drop")]
+                legs = [(r.choices(bays, bay_w)[0], "fork"), (("stage", r.randrange(4)), "drop")]
             elif kind == "load":
                 legs = [(("stage", r.randrange(4)), "fork"), ("trailer", "drop")]
             else:
-                legs = [(("apron", r.choice((0, 2))), "fork"), (bays[r.randrange(len(bays))], "drop")]
+                legs = [(("apron", r.choice((0, 2))), "fork"), (r.choices(bays, bay_w)[0], "drop")]
             for goal, act in legs:
                 if goal == cur:
                     continue
                 keys = route(nodes, edges, cur, goal)
-                # waits at busy junctions (they make the hot spots)
-                pts = [nodes[k] for k in keys]
-                fp, fl = fillet(pts)
-                samples = drive(fp, fl, t)
-                # insert junction waits: find the sample nearest each choke node on the way
+                gx, gy = nodes[goal]
+                jit = 0.6 if goal == "trailer" or goal[0] in ("stage", "apron") else 0.25
+                goal_xy = (gx + r.uniform(-jit, jit), gy + r.uniform(-jit * 0.5, jit * 0.5))
+                pts = [cur_xy] + [nodes[k] for k in keys[1:-1]] + [goal_xy]
+                fp, fl = fillet(pts, r=r.uniform(0.9, 2.2))
+                dense = densify(fp)
+                dflags = []
+                for i, p in enumerate(dense):              # corner flags carried over to the dense points
+                    j = min(range(len(fp)), key=lambda k: (fp[k][0] - p[0]) ** 2 + (fp[k][1] - p[1]) ** 2)
+                    dflags.append(fl[j])
+                dense = wander(dense, r, amp=r.uniform(0.12, 0.3), offset=r.uniform(-0.45, 0.45))
+                samples = drive(dense, dflags, t, v_max * r.uniform(0.9, 1.08), v_turn)
                 waits = []
                 for k in keys[1:-1]:
                     if k in CHOKE and r.random() < CHOKE[k]:
-                        waits.append((nodes[k], r.uniform(6.0, 30.0)))
+                        waits.append((nodes[k], r.uniform(4.0, 35.0)))
+                if r.random() < 0.3 and len(samples) > 20:   # a give-way stop somewhere along the leg
+                    q = samples[r.randrange(5, len(samples) - 5)]
+                    waits.append(((q[1], q[2]), r.uniform(2.0, 12.0)))
                 shift_t = 0.0
                 for (tt, xx, yy, hh) in samples:
                     for (wx, wy), wdur in list(waits):
-                        if math.hypot(xx - wx, yy - wy) < 2.2:
+                        if math.hypot(xx - wx, yy - wy) < 1.0:
                             raw.append((tt + shift_t, xx, yy, hh, "waiting"))
                             shift_t += wdur
                             waits.remove(((wx, wy), wdur))
                     raw.append((tt + shift_t, xx, yy, hh, "moving"))
                 t = samples[-1][0] + shift_t if samples else t
                 h = samples[-1][3] if samples else h
-                cur = goal
-                gx, gy = nodes[goal]
-                dwell = r.uniform(18.0, 40.0)
-                raw.append((t, gx, gy, h, act))
+                cur, cur_xy = goal, goal_xy
+                dwell = r.uniform(15.0, 55.0)
+                raw.append((t, *goal_xy, h, act))
                 t += dwell
-                raw.append((t, gx, gy, h, act))
+                raw.append((t, *goal_xy, h, act))
             if name == "MHE-05" and 3000.0 < t < 3600.0:      # the one that waits 12 minutes at staging
-                gx, gy = nodes[cur]
-                raw.append((t, gx, gy, h, "idle"))
+                raw.append((t, *cur_xy, h, "idle"))
                 t += 720.0
-                raw.append((t, gx, gy, h, "idle"))
+                raw.append((t, *cur_xy, h, "idle"))
         tracks[name] = resample(raw)
     return tracks
 

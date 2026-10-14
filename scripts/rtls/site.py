@@ -231,11 +231,14 @@ def build(P):
                 _plane(f"road_{i}_pave{s}", xx + (0.3 if s > 0 else -2.3), xx + (2.3 if s > 0 else -0.3), y0, y1, pave,
                        coll, z=0.0, h=0.1)
 
-    # our block: verges with trees, the site entrance in the south verge, a staff car park to the north
+    # our block: paved aprons around the building, verges with trees out to the roads, a staff car park north
+    W = L.WALL_T
     bx0, bx1, by0, by1 = L.ROADS[2][1] + 2.3, L.ROADS[3][0] - 2.3, L.ROADS[0][3] + 2.3, L.ROADS[1][2] - 2.3
-    verges = [("v_s_w", bx0, 2.0, by0, L.YARD_Y0 - 0.5), ("v_s_e", 15.5, bx1, by0, L.YARD_Y0 - 0.5),
-              ("v_w", bx0, L.X0 - 2.6, L.YARD_Y0 - 0.5, by1), ("v_e_s", L.YARD_X1 + 0.5, bx1, L.YARD_Y0 - 0.5, -10.5),
-              ("v_e_n", L.YARD_X1 + 0.5, bx1, 9.5, by1), ("v_n", L.X0 - 2.6, bx1, L.Y1 + 9.0, by1)]
+    _plane("apron_n", L.BX0 - 2.6, L.BX1 + W, L.BY1 + W, L.BY1 + 9.0, pave, coll, z=0.0, h=0.03)
+    _plane("apron_w", L.BX0 - 2.6, L.BX0 - W, L.BY0 - 2.6, L.BY1 + 9.0, pave, coll, z=0.0, h=0.03)
+    _plane("apron_s", L.BX0 - 2.6, L.BX1 + W, L.BY0 - 2.6, L.BY0 - W, pave, coll, z=0.0, h=0.03)
+    verges = [("v_s", bx0, bx1, by0, L.BY0 - 2.6), ("v_w", bx0, L.BX0 - 2.6, L.BY0 - 2.6, by1),
+              ("v_n", L.BX0 - 2.6, bx1, L.BY1 + 9.0, by1), ("v_e", L.YARD_X1 + 0.5, bx1, L.BY0 - 2.6, L.BY1 + 9.0)]
     for n, x0, x1, y0, y1 in verges:
         if x1 - x0 < 0.5 or y1 - y0 < 0.5:
             continue
@@ -247,60 +250,43 @@ def build(P):
             p = (x0 + u * (x1 - x0), (y0 + y1) / 2) if along_x else ((x0 + x1) / 2, y0 + u * (y1 - y0))
             K.instance(f"{n}_tree{k}", trees[rng.randrange(len(trees))], coll, (p[0], p[1], 0.05),
                        rot_z=rng.uniform(0, 6.28), scale=rng.uniform(0.8, 1.15))
-    # paving apron along the north and west walls of our building
-    _plane("apron_n", L.X0 - 2.6, L.X1 + 0.2, L.Y1 + 0.2, L.Y1 + 9.0, pave, coll, z=0.0, h=0.03)
-    _plane("apron_w", L.X0 - 2.6, L.X0 - 0.2, L.YARD_Y0 - 0.5, L.Y1 + 9.0, pave, coll, z=0.0, h=0.03)
-    # staff car park north of the building (between the apron and the north verge)
-    for k in range(14):
-        x = -20.0 + k * 2.6
-        _plane(f"staff_bay_{k}", x - 0.05, x + 0.05, L.Y1 + 3.5, L.Y1 + 8.5, Wt, coll, z=0.035, h=0.002)
+    for k in range(30):
+        x = -60.0 + k * 2.6
+        _plane(f"staff_bay_{k}", x - 0.05, x + 0.05, L.BY1 + 3.5, L.BY1 + 8.5, Wt, coll, z=0.035, h=0.002)
         if rng.random() < 0.75:
-            K.instance(f"staff_car_{k}", cars[rng.randrange(len(cars))], coll, (x + 1.3, L.Y1 + 6.0, 0.03),
+            K.instance(f"staff_car_{k}", cars[rng.randrange(len(cars))], coll, (x + 1.3, L.BY1 + 6.0, 0.03),
                        rot_z=math.pi / 2 + rng.uniform(-0.05, 0.05))
 
     # neighbours: tall sheds north and east (behind us), low parks south and west (in front of us)
+    n0 = L.ROADS[1][3] + 8.0
+    s0 = L.ROADS[0][2] - 8.0
+    w0 = L.ROADS[2][0] - 8.0
     sheds = [
-        ("N1", -28, 46, 52, 125, 13.5, "S"), ("N2", 64, 175, 50, 135, 14.0, "S"), ("NW", -175, -50, 48, 130, 12.5, "S"),
-        ("E1", 78, 175, -30, 22, 13.0, "W"), ("SE", 64, 175, -135, -52, 12.0, "N"),
-        ("W1", -210, -112, -30, 28, 12.5, "E"), ("S1", -28, 46, -175, -98, 12.0, "N"),
-        ("SW", -175, -50, -140, -52, 11.0, "N"),
+        ("N1", -60, 20, n0, n0 + 70, 13.5, "S"), ("N2", 64, 175, n0, n0 + 80, 14.0, "S"),
+        ("NW", -200, -70, n0, n0 + 80, 12.5, "S"), ("E1", 78, 175, -40, 30, 13.0, "W"),
+        ("SE", 64, 175, s0 - 80, s0, 12.0, "N"), ("W1", w0 - 100, w0, -40, 30, 12.5, "E"),
+        ("S1", -40, 40, s0 - 110, s0 - 40, 12.0, "N"), ("SW", -200, -60, s0 - 80, s0, 11.0, "N"),
     ]
     for n, x0, x1, y0, y1, h, side in sheds:
         shed(P, coll, n, x0, x1, y0, y1, h, side, rng)
-    for x0, x1, y0, y1 in ((-28, 46, 36 + 2.3, 52), (64, 175, 36 + 2.3, 50), (59 + 2.3, 78, -30, 22),
-                           (64, 175, -52, -40 - 2.3), (-112, -43 - 2.3, -30, 28)):
-        _plane(f"yard_{x0}_{y0}", x0, x1, y0, y1, M.pbr("rt_yard_concrete", (0.3, 0.3, 0.29), 0.85), coll, z=0.0,
-               h=0.02)
-    # truck park west of us: rows of trailers
     tr = trailer_src(P)
     tcs = [tractor_src(P, k) for k in range(4)]
-    for row in range(3):
-        x = -100 + row * 18
-        for k in range(12):
-            y = -26 + k * 4.4
-            _plane(f"tp_line_{row}_{k}", x, x + 15.0, y - 2.2, y - 2.12, Wt, coll, z=0.025, h=0.002)
-            if rng.random() < 0.7:
-                K.instance(f"tp_trl_{row}_{k}", tr, coll, (x + 0.5, y, 0.0), rot_z=0.0)
-                if rng.random() < 0.3:
-                    K.instance(f"tp_cab_{row}_{k}", tcs[rng.randrange(4)], coll, (x + 0.5 + 11.4, y, 0.0), rot_z=0.0)
     # car park south of the south road, with tree islands
-    _plane("carpark", -28, 46, -88, -42.3, M.pbr("rt_carpark", (0.05, 0.05, 0.052), 0.85), coll, z=0.0, h=0.02)
-    for row in range(4):
-        y = -46 - row * 11
-        for k in range(26):
-            x = -26 + k * 2.75
+    cp_y1 = s0 + 6.0
+    _plane("carpark", -36, 46, cp_y1 - 36, cp_y1, M.pbr("rt_carpark", (0.05, 0.05, 0.052), 0.85), coll, z=0.0, h=0.02)
+    for row in range(3):
+        y = cp_y1 - 3 - row * 11
+        for k in range(28):
+            x = -34 + k * 2.75
             _plane(f"cp_bay_{row}_{k}", x - 0.05, x + 0.05, y - 5.0, y, Wt, coll, z=0.025, h=0.002)
             if rng.random() < 0.72:
                 K.instance(f"cp_car_{row}_{k}", cars[rng.randrange(len(cars))], coll, (x + 1.37, y - 2.5, 0.02),
                            rot_z=math.pi / 2 + rng.choice((0, math.pi)) + rng.uniform(-0.05, 0.05))
-        if row % 2 == 1:
-            _plane(f"cp_island_{row}", -26, 46, y - 6.2, y - 5.2, grass, coll, z=0.0, h=0.08)
-            for k in range(10):
-                K.instance(f"cp_tree_{row}_{k}", trees[rng.randrange(len(trees))], coll, (-24 + k * 7.6, y - 5.7, 0.08),
-                           scale=rng.uniform(0.7, 1.0), rot_z=rng.uniform(0, 6.28))
-    # trucks on the roads (a few, parked at the kerb for the stills)
-    for k, (x, y, rz) in enumerate(((-38.5 + 2.0, -60.0, math.pi / 2), (54.5 + 2.0, 60.0, -math.pi / 2),
-                                    (110.0, -33.5, math.pi), (-90.0, 29.5, 0.0))):
+    # trucks on the roads
+    sy = (L.ROADS[0][2] + L.ROADS[0][3]) / 2
+    ny = (L.ROADS[1][2] + L.ROADS[1][3]) / 2
+    for k, (x, y, rz) in enumerate(((-60.0, sy - 2.0, 0.0), (20.0, sy + 2.0, math.pi), (56.5, 60.0, -math.pi / 2),
+                                    (-90.0, ny + 2.0, 0.0))):
         K.instance(f"road_trl_{k}", tr, coll, (x, y, 0.0), rot_z=rz)
         d = Vector((math.cos(rz), math.sin(rz), 0))
         K.instance(f"road_cab_{k}", tcs[k % 4], coll, tuple(Vector((x, y, 0)) + d * 11.4), rot_z=rz)
@@ -309,7 +295,7 @@ def build(P):
         for gy in range(-3, 4):
             if max(abs(gx), abs(gy)) < 2:
                 continue
-            cx, cy = gx * 150.0, gy * 150.0
+            cx, cy = gx * 160.0 - 40.0, gy * 160.0
             w, d = rng.uniform(80, 120), rng.uniform(60, 100)
             shed(P, coll, f"R{gx}_{gy}", cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2, rng.uniform(10, 15),
                  rng.choice("NSEW"), rng, trailers=0.35, office=rng.random() < 0.5)

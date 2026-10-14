@@ -207,7 +207,7 @@ def cardboard(name, color):
     nt = m.node_tree
     info = nt.nodes.new("ShaderNodeObjectInfo")
     info.location = (-900, 200)
-    r = _ramp(nt, info.outputs["Random"], tuple(c * 0.82 for c in color), tuple(min(1, c * 1.12) for c in color),
+    r = _ramp(nt, info.outputs["Random"], tuple(c * 0.9 for c in color), tuple(min(1, c * 1.05) for c in color),
               y=200)
     n = _noise(nt, _coord(nt, "Object"), 30.0, 3.0, 0.5, y=-200)
     mx = _mix(nt, 0.12, r.outputs["Color"], n.outputs["Color"], "OVERLAY")
@@ -257,14 +257,14 @@ def build():
         steel=pbr("rt_steel_grey", (0.36, 0.37, 0.38), 0.42, 0.6),
         steel_dark=pbr("rt_steel_dark", (0.05, 0.055, 0.06), 0.45, 0.6),
         galv=pbr("rt_galv", (0.6, 0.61, 0.62), 0.32, 0.9),
-        rack_up=pbr("rt_rack_upright", (0.015, 0.09, 0.30), 0.38, 0.3, coat=0.25),
-        rack_beam=pbr("rt_rack_beam", (0.86, 0.20, 0.015), 0.35, 0.25, coat=0.25),
+        rack_up=pbr("rt_rack_upright", (0.03, 0.09, 0.22), 0.45, 0.3, coat=0.1),
+        rack_beam=pbr("rt_rack_beam", (0.70, 0.22, 0.03), 0.42, 0.25, coat=0.1),
         wood=wood(),
-        card=cardboard("rt_carton", (0.42, 0.28, 0.15)),
-        card_light=cardboard("rt_carton_light", (0.58, 0.44, 0.27)),
+        card=cardboard("rt_carton", (0.46, 0.32, 0.18)),
+        card_light=cardboard("rt_carton_light", (0.52, 0.38, 0.22)),
         card_white=cardboard("rt_carton_white", (0.72, 0.71, 0.68)),
         tape=pbr("rt_tape", (0.55, 0.42, 0.25), 0.3),
-        wrap=pbr("rt_shrink_wrap", (0.78, 0.80, 0.82), 0.12, coat=0.7, spec=0.6),
+        wrap=pbr("rt_shrink_wrap", (0.55, 0.47, 0.36), 0.35, coat=0.25, spec=0.5),
         drum_blue=pbr("rt_drum_blue", (0.01, 0.07, 0.28), 0.35, 0.1, coat=0.3),
         bag=pbr("rt_bag", (0.72, 0.68, 0.6), 0.75),
         crate_grey=pbr("rt_crate_grey", (0.18, 0.2, 0.22), 0.5),

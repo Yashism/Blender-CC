@@ -115,3 +115,27 @@ def persp_camera(name, loc, target, lens=50.0, dof=None):
     co.location = loc
     co.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
     return co
+
+
+def ground_corners(cam, aspect=16 / 9):
+    """Where the four frame corners of an orthographic camera meet the floor (z = 0)."""
+    m = cam.matrix_world
+    f = m.to_3x3() @ Vector((0, 0, -1))
+    r = m.to_3x3() @ Vector((1, 0, 0))
+    u = m.to_3x3() @ Vector((0, 1, 0))
+    hw = cam.data.ortho_scale / 2
+    hh = hw / aspect
+    out = []
+    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        p = m.translation + r * sx * hw + u * sy * hh
+        t = -p.z / f.z
+        out.append((p + f * t).xy)
+    return out
+
+
+def frame_inside(cam, x0, x1, y0, y1, hidden=0.0):
+    """True when an orthographic frame shows only the building: every corner lands on the floor inside it (the far
+    walls hide `hidden` metres of ground behind them)."""
+    if cam.data.type != "ORTHO":
+        return True
+    return all(x0 + 0.5 < c.x < x1 + hidden - 1 and y0 + 0.5 < c.y < y1 + hidden - 1 for c in ground_corners(cam))
