@@ -5,9 +5,9 @@
 //   [pFF, pHO)   foot flat (fixed in world)
 //   [pHO, beta)  forefoot rocker: rotate about the MTP (ball) joint; toes stay flat
 //   [beta, 1)    swing: Hermite path from toe-off to the next heel strike + clearance lift
-// The root advances `S` metres per cycle, so a planted point moves backwards relative to
-// the root at exactly S per unit phase -> no foot sliding when the crowd moves the root at
-// `speed` with phase = dist / S.
+// The root advances `k S` metres per cycle (k = stride factor: people shorten their stride
+// when they slow down), so a planted point moves backwards relative to the root at exactly
+// k S per unit phase -> no foot sliding when the crowd advances the phase at speed / (k S).
 // Pelvis height comes from the legs' reach each frame (soft-min of what both legs allow),
 // capped so the bob is 2-4 cm and the stance knee keeps a natural flex.
 import * as THREE from 'three';
@@ -81,21 +81,26 @@ export class Gait {
     this.swayA = 0.02 * sc * g.sway;
     this.yawP = 0.075; this.rollP = 0.055 * g.sway; this.yawT = 0.06;
     this.surgeA = 0.007 * sc;
-    // stride: as long as possible while the pelvis does not drop more than ~4.5% of leg length
+    // full stride (at brisk walking speed): as long as possible while the pelvis does not
+    // drop more than ~3.5% of leg length, so the stance knee stays nearly straight (no crouch)
     this._fw = { x: 0, y: 0, z: 0, pitch: 0, toe: 0, contact: 0 };
-    let S = M.H * (this.child ? 0.79 : 0.815);
-    for (let it = 0; it < 12; it++) {
+    this._k = 1;
+    let S = M.H * (this.child ? 0.77 : 0.79);
+    for (let it = 0; it < 16; it++) {
       this.S = S;
       this._solveOffset();
       const drop = this.restHip - this.minHip;
-      if (drop < (this.Lt + this.Ls) * 0.066) break;
-      S *= 0.96;
+      if (drop < (this.Lt + this.Ls) * 0.035) break;
+      S *= 0.97;
     }
     this.S = S;
     // swing endpoints / velocities (constant for this person)
     this._prepSwing();
-    // walking pelvis cap: lowest allowed height + bob
-    this._solveCap();
+    // walking pelvis cap (lowest allowed height + bob), per stride factor
+    this.capK = [0.5, 0.65, 0.8, 0.9, 1.0, 1.06];
+    this.capV = this.capK.map((k) => { this._k = k; this._solveCap(); return this.walkCap; });
+    this._k = 1;
+    this.walkCap = this.capV[4];
     this.out = {
       pelvisPos: new THREE.Vector3(),
       local: BONES.map(() => new THREE.Quaternion()),
@@ -109,7 +114,7 @@ export class Gait {
   // world-frame (root at z = S*p) sagittal foot state for local phase p in [0,1)
   _stance(p, o) {
     const hb = this.hb, bf = this.bf, aH = this.aH, bH = this.bH;
-    const zH0 = this.hsOff;
+    const zH0 = this.hsOff * this._k;
     if (p < this.pFF) {
       const th = this.thHS * (1 - smooth(0, 1, p / this.pFF));
       const c = Math.cos(th), s = Math.sin(th);
@@ -118,7 +123,7 @@ export class Gait {
       o.z = zH0 + hb; o.y = aH; o.pitch = 0; o.toe = 0; o.contact = 1;
     } else {
       const x = clamp((p - this.pHO) / (this.beta - this.pHO), 0, 1);
-      const th = -this.thTO * Math.pow(x, 1.7);
+      const th = -this.thTO * Math.pow(x, 1.4);
       const c = Math.cos(th), s = Math.sin(th);
       const dz = -bf, dy = aH - bH;
       o.z = zH0 + hb + bf + dz * c - dy * s; o.y = bH + dz * s + dy * c; o.pitch = th; o.toe = -th; o.contact = 1;
@@ -130,29 +135,32 @@ export class Gait {
     const b = this.beta, d = 1e-4;
     const cy = Math.cos(this.toeOut), sy = Math.sin(this.toeOut);
     this._cy = cy; this._sy = sy;
+    const k0 = this._k; this._k = 1;
     this._stance(b - d, o); const z1 = o.z, y1 = o.y;
     this._stance(b - 2 * d, o); const z0 = o.z, y0 = o.y;
+    this._k = k0;
     // toe-off ankle (world, along-axis offset from the heel strike point rotated by toe-out)
     this.A0d = z1 - this.hsOff;
-    this.A0z = this.hsOff + cy * this.A0d; this.A0y = y1;
+    this.A0y = y1;
     this.V0z = cy * (z1 - z0) / d; this.V0y = (y1 - y0) / d;
     const th = this.thHS;
     this.A1d = this.hb * Math.cos(th) - this.aH * Math.sin(th);
-    this.A1z = this.hsOff + this.S + cy * this.A1d;
     this.A1y = this.hb * Math.sin(th) + this.aH * Math.cos(th);
   }
   // world-frame foot state (root at z = S*p). o.d = along-axis offset from the heel strike point.
   _foot(p, o) {
+    const h0 = this.hsOff * this._k;
     if (p < this.beta) {
       this._stance(p, o);
-      o.d = o.z - this.hsOff;
-      o.z = this.hsOff + this._cy * o.d;
+      o.d = o.z - h0;
+      o.z = h0 + this._cy * o.d;
       return o;
     }
     const u = (p - this.beta) / (1 - this.beta);
     const su = 1 - this.beta;
-    const span = this.A1z - this.A0z;
-    o.z = hermite(this.A0z, this.A1z, this.V0z * su * 0.8, span * 0.12, u);
+    const A0z = h0 + this._cy * this.A0d, A1z = h0 + this.S * this._k + this._cy * this.A1d;
+    const span = A1z - A0z;
+    o.z = hermite(A0z, A1z, this.V0z * su * 0.8, span * 0.12, u);
     const us = Math.pow(u, 0.8);
     o.y = hermite(this.A0y, this.A1y, this.V0y * su * 0.6, -0.04, u) + this.lift * 16 * us * us * (1 - us) * (1 - us);
     o.d = lerp(this.A0d, this.A1d, smooth(0, 1, u));
@@ -168,7 +176,7 @@ export class Gait {
     this._foot(p, o);
     const sg = side ? -1 : 1;
     o.x = sg * (this.footX + this._sy * o.d);
-    o.z -= this.S * p;
+    o.z -= this.S * this._k * p;
     o.yaw = sg * this.toeOut;
     return o;
   }
@@ -232,10 +240,15 @@ export class Gait {
 
   // --------------------------------------------------------------- full pose
   // carry: { side: 'L'|'R', kind } ; returns this.out
-  pose(phase, speed, turnRate, t, carry) {
+  // strideK: stride factor (stride = strideK * S); the caller advances the phase at speed / (strideK S)
+  pose(phase, speed, turnRate, t, carry, strideK = 1) {
     const o = this.out;
     const g = this.g;
     phase = phase || 0; speed = speed || 0; turnRate = turnRate || 0;
+    const kS = clamp(strideK || 1, 0.5, 1.06);
+    this._k = kS;
+    let walkCap = this.capV[this.capV.length - 1];
+    for (let i = 1; i < this.capK.length; i++) if (kS <= this.capK[i]) { const f = (kS - this.capK[i - 1]) / (this.capK[i] - this.capK[i - 1]); walkCap = lerp(this.capV[i - 1], this.capV[i], f); break; }
     const phi = phase - Math.floor(phase);
     const w = smooth(0.06, 0.45, speed);                  // walk weight
     const sp = clamp(speed / 1.25, 0.55, 1.3);            // amplitude scale
@@ -278,10 +291,10 @@ export class Gait {
     // turning lean (into the turn) and forward lean with speed
     const lean = -clamp(speed * turnRate / 9.81 * 1.2, -0.12, 0.12);
     pv.roll += lean * 0.5;
-    pv.x += lean * this.restHip * 0.5;
+    pv.x -= lean * this.restHip * 0.5; // whole-body lean about the feet: hips move to the inside of the turn
     pv.yaw += 0.12 * turnRate * w;
     const allow = this._hipAllow(phi, pv, fl, fr);
-    const cap = lerp(this.restHip - 0.008 - (hasT ? 0.002 * (1 + smoothNoise1(ns + 5, tt * 0.25)) : 0), this.walkCap, w);
+    const cap = lerp(this.restHip - 0.008 - (hasT ? 0.002 * (1 + smoothNoise1(ns + 5, tt * 0.25)) : 0), walkCap, w);
     const hipY = smin(allow - 0.001, cap, 0.006);
     o.pelvisPos.set(pv.x, hipY, pv.z);
     const qP = o.abs[BI.pelvis];
@@ -292,7 +305,7 @@ export class Gait {
     // ---- spine & chest: counter-rotate, stay upright
     const thoraxYaw = w * this.yawT * sp * Math.cos(TAU * phi) + 0.2 * turnRate * w;
     const breathe = hasT ? 0.012 * Math.sin(tt * TAU / 4.2 + ns) : 0;
-    const fwdLean = (0.03 + 0.05 * w * clamp(speed / 1.3, 0, 1.3) + g.lean) * 1;
+    const fwdLean = 0.03 + 0.05 * w * clamp(speed / 1.3, 0, 1.3) + g.lean + 0.07 * g.slouch;
     // target chest world orientation
     const qC = _cq || (_cq = new THREE.Quaternion());
     qa(qC, AY, thoraxYaw);
@@ -306,7 +319,10 @@ export class Gait {
     o.abs[BI.chest].copy(o.abs[BI.spine]).multiply(qs);
     // ---- neck & head: steady head, looking ahead/down, turning into curves
     const look = (hasT ? smoothNoise1(ns + 21, tt * 0.22) * (0.25 + 0.35 * (1 - w)) : 0) + clamp(0.45 * turnRate, -0.45, 0.45);
-    const lookP = g.lookDown + (hasT ? smoothNoise1(ns + 31, tt * 0.17) * 0.06 : 0) + (carry && carry.kind === 'phone' ? 0.05 : 0);
+    const phone = carry && carry.kind === 'phone';
+    // phone users look down at the screen and glance up now and then
+    const glance = phone && hasT ? 0.4 * smooth(0.35, 0.75, smoothNoise1(ns + 51, tt * 0.16)) : 0;
+    const lookP = g.lookDown + (hasT ? smoothNoise1(ns + 31, tt * 0.17) * 0.05 : 0) + (phone ? 0.08 : 0) - glance;
     const qH = _hq || (_hq = new THREE.Quaternion());
     qa(qH, AY, look);
     qH.multiply(qa(_q, AX, lookP));
@@ -320,15 +336,16 @@ export class Gait {
     // ---- legs (IK)
     for (let s = 0; s < 2; s++) this._leg(s);
     // ---- arms
-    const armA = 0.3 * g.armSwing * clamp(speed / 1.3, 0.4, 1.35) * w;
+    const armA = 0.38 * g.armSwing * clamp(speed / 1.3, 0.45, 1.2) * w;
     const lag = 0.035;
     for (let s = 0; s < 2; s++) {
       const sg = s ? -1 : 1;                 // +1 left, -1 right
       const ph = TAU * (phi - lag - (s ? 0 : 0.5));
-      let flex = armA * Math.cos(ph) + 0.03;
-      let elbow = 0.22 + (0.18 + 0.3 * w * sp) * (0.5 + 0.5 * Math.cos(ph - 0.35));
-      let abd = 0.07 + 0.05 * clamp(this.look.mass, 0, 1) + (this.look.bust > 0.6 ? 0.02 : 0);
-      let twist = 0, pron = 0, wrist = 0.08, clavE = 0.02 * Math.cos(ph) * w, clavP = 0.03 * Math.cos(ph) * w;
+      let flex = armA * Math.cos(ph) - 0.02;
+      // relaxed elbows: ~15 deg at the back of the swing, ~40 deg at the front
+      let elbow = 0.25 + (0.1 + 0.35 * w * clamp(speed / 1.3, 0, 1.2)) * (0.5 + 0.5 * Math.cos(ph - 0.35));
+      let abd = 0.045 + 0.05 * clamp(this.look.mass, 0, 1) + (this.look.bust > 0.6 ? 0.02 : 0) + (this.look.outfit.skirtLen > 0.1 ? 0.02 : 0);
+      let twist = 0, sup = 0, wrist = 0.08, clavE = 0.02 * Math.cos(ph) * w, clavP = 0.03 * Math.cos(ph) * w;
       if (hasT && w < 1) { const n = smoothNoise1(ns + 41 + s, tt * 0.3); flex += n * 0.04 * (1 - w); elbow += n * 0.05 * (1 - w); }
       const side = s ? 'R' : 'L';
       if (carry && carry.side === side) {
@@ -337,20 +354,21 @@ export class Gait {
           const k = cp.swing;
           flex = cp.flex + flex * k + (cp.bob || 0) * Math.cos(2 * TAU * phi) * w;
           elbow = cp.elbow + (elbow - 0.3) * k * 0.5;
-          abd = cp.abd; twist = cp.twist; pron = cp.pron; wrist = cp.wrist;
+          abd = cp.abd; twist = cp.twist; sup = cp.sup; wrist = cp.wrist;
         }
       }
       // shoulder bag on this side: keep arm off the bag
       if (this.look.carry === 'bag' && this.look.bagStyle === 'shoulder' && this.look.carrySide === side) { abd += 0.12; flex *= 0.6; }
-      qa(o.local[s ? BI.clavR : BI.clavL], AZ, sg * clavE).multiply(qa(_q, AY, -sg * clavP));
-      qzxy(o.local[s ? BI.upperArmR : BI.upperArmL], sg * abd, -flex, sg * twist);
-      qa(o.local[s ? BI.forearmR : BI.forearmL], AX, -elbow).multiply(qa(_q, AY, sg * pron));
+      qa(o.local[s ? BI.clavR : BI.clavL], AZ, sg * (clavE - 0.03 * g.slouch + (s ? -g.droop : g.droop))).multiply(qa(_q, AY, -sg * (clavP + 0.05 * g.slouch)));
+      // twist > 0 = internal rotation (forearm towards the midline); sup > 0 = supination (palm up)
+      qzxy(o.local[s ? BI.upperArmR : BI.upperArmL], sg * abd, -flex, -sg * twist);
+      qa(o.local[s ? BI.forearmR : BI.forearmL], AX, -elbow).multiply(qa(_q, AY, sg * sup));
       qa(o.local[s ? BI.handR : BI.handL], AX, -wrist).multiply(qa(_q, AZ, sg * 0.05));
     }
     // ---- secondary: hair tail, drape, bag (lagged pendulums, functions of phase)
     const headPitchW = lookP;
     qzxy(o.local[BI.tail], 0.1 * w * Math.sin(TAU * (phi - 0.22)) - lean * 0.6, -headPitchW + 0.08 * w * sp + 0.03 * w * Math.sin(2 * TAU * (phi - 0.12)), -look * 0.5);
-    qzxy(o.local[BI.drape], 0.035 * w * Math.sin(TAU * (phi - 0.25)), 0.06 * w * sp + 0.025 * w * Math.sin(2 * TAU * (phi - 0.15)), 0);
+    qzxy(o.local[BI.drape], 0.03 * w * Math.sin(TAU * (phi - 0.25)), 0.025 * w * sp + 0.018 * w * Math.sin(2 * TAU * (phi - 0.15)), 0);
     qzxy(o.local[BI.bag], 0.05 * w * Math.sin(TAU * (phi - 0.3)), 0.07 * w * sp + 0.03 * w * Math.sin(2 * TAU * (phi - 0.18)), 0);
     return o;
   }
@@ -423,10 +441,10 @@ function setFootQuat(out, fwd, yaw) {
 }
 
 // Carry poses (radians): arm flexion (+ forward), elbow flexion, abduction, twist (internal +),
-// forearm pronation, wrist flexion; swing = fraction of normal arm swing kept.
+// forearm supination (+ palm up), wrist flexion; swing = fraction of normal arm swing kept.
 export const CARRY = {
-  popcorn: { flex: 0.32, elbow: 1.42, abd: 0.1, twist: 0.38, pron: 0.0, wrist: -0.1, swing: 0.12, bob: 0.015 },
-  cup: { flex: 0.26, elbow: 1.3, abd: 0.1, twist: 0.3, pron: 0.0, wrist: -0.12, swing: 0.15, bob: 0.015 },
-  phone: { flex: 0.42, elbow: 1.85, abd: 0.08, twist: 0.5, pron: -1.1, wrist: 0.15, swing: 0.06, bob: 0.01 },
+  popcorn: { flex: 0.12, elbow: 1.5, abd: 0.05, twist: 0.35, sup: 0.0, wrist: -0.1, swing: 0.1, bob: 0.012 },
+  cup: { flex: 0.1, elbow: 1.4, abd: 0.1, twist: 0.5, sup: 0.0, wrist: -0.15, swing: 0.12, bob: 0.012 },
+  phone: { flex: 0.22, elbow: 1.78, abd: 0.02, twist: 0.8, sup: 1.1, wrist: 0.2, swing: 0.05, bob: 0.008 },
   bag: null,
 };

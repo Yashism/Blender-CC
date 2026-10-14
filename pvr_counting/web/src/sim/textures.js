@@ -3,7 +3,7 @@
 // THREE textures sized in metres via `tile` so materials can map them with
 // world-scaled UVs (1 UV unit = 1 metre).
 import * as THREE from 'three';
-import { mulberry32, hash2 } from './rng.js';
+import { mulberry32 } from './rng.js';
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -108,51 +108,60 @@ function cached(key, fn) {
 
 // ---------------------------------------------------------------------------
 // Carpet: dark maroon cut pile with a small staggered tan "clover" motif and
-// scattered flecks. Tile = 1.04 m (8 x 8 motif cells of 0.13 m, staggered).
+// scattered flecks. Tile = 1.92 m (8 x 8 motif cells of 0.24 m, staggered).
 
 export function carpetTextures(renderer) {
   return cached('carpet', () => {
     const W = 1024, H = 1024, CELLS = 8, cell = W / CELLS;
     const rnd = mulberry32(9001);
-    // pile height / fibre noise
     const fib = new Float32Array(W * H);
     for (let i = 0; i < fib.length; i++) fib[i] = rnd();
     const mott = fbmField(W, H, 77, 4, 4, 0.55);
-    const tuft = fbmField(W, H, 91, 64, 2, 0.5);
+    const tuft = fbmField(W, H, 91, 128, 2, 0.5);   // tuft clusters (~8 px)
+    const mid = fbmField(W, H, 93, 16, 3, 0.5);
 
-    // motif mask drawn with canvas paths (antialiased), then read back
+    // motif mask: small irregular clover clusters on a staggered lattice
     const mc = makeCanvas(W, H), mx = mc.getContext('2d');
     mx.fillStyle = '#000'; mx.fillRect(0, 0, W, H);
-    const drawMotif = (cx, cy, rot, s) => {
+    const drawMotif = (cx, cy, rot, sc, bright) => {
+      const petals = rnd() < 0.35 ? 5 : 4;
+      const jit = [];
+      for (let k = 0; k < petals + 3; k++) jit.push(rnd());
       for (const ox of [-W, 0, W]) for (const oy of [-H, 0, H]) {
+        const X = cx + ox, Y = cy + oy;
+        if (X < -40 || X > W + 40 || Y < -40 || Y > H + 40) continue;
         mx.save();
-        mx.translate(cx + ox, cy + oy);
+        mx.translate(X, Y);
         mx.rotate(rot);
-        mx.fillStyle = '#fff';
-        // four small leaves around a centre, slightly irregular like a woven motif
-        for (let k = 0; k < 4; k++) {
-          const a = k * Math.PI / 2 + 0.25;
+        mx.fillStyle = `rgba(255,255,255,${bright})`;
+        for (let k = 0; k < petals; k++) {
+          const a = (k / petals) * Math.PI * 2 + (jit[k] - 0.5) * 0.6;
+          const r = (2.2 + 0.8 * jit[k]) * sc;
+          const dd = (6.2 + 1.4 * jit[(k + 1) % jit.length]) * sc;
           mx.beginPath();
-          mx.ellipse(Math.cos(a) * 6.5 * s, Math.sin(a) * 6.5 * s, 5.2 * s, 2.9 * s, a, 0, Math.PI * 2);
+          mx.ellipse(Math.cos(a) * dd, Math.sin(a) * dd, r, r * 0.8, a, 0, Math.PI * 2);
           mx.fill();
         }
-        mx.beginPath(); mx.arc(0, 0, 2.6 * s, 0, Math.PI * 2); mx.fill();
-        // two tiny side sprigs
-        mx.globalAlpha = 0.7;
-        mx.beginPath(); mx.ellipse(13 * s, -9 * s, 2.4 * s, 1.5 * s, 0.7, 0, Math.PI * 2); mx.fill();
-        mx.beginPath(); mx.ellipse(-12 * s, 10 * s, 2.4 * s, 1.5 * s, 0.7, 0, Math.PI * 2); mx.fill();
-        mx.globalAlpha = 1;
+        mx.beginPath(); mx.arc(0, 0, 1.4 * sc, 0, Math.PI * 2); mx.fill();
+        // a couple of loose dots around the cluster
+        mx.fillStyle = `rgba(255,255,255,${0.7 * bright})`;
+        for (let k = 0; k < 2; k++) {
+          const a = jit[petals + k] * Math.PI * 2;
+          mx.beginPath(); mx.arc(Math.cos(a) * 15 * sc, Math.sin(a) * 15 * sc, 1.8 * sc, 0, Math.PI * 2); mx.fill();
+        }
         mx.restore();
       }
     };
     for (let j = 0; j < CELLS; j++) for (let i = 0; i < CELLS; i++) {
-      drawMotif((i + 0.5) * cell, (j + 0.5) * cell, 0.0, 1.55);
-      drawMotif(i * cell, j * cell, Math.PI / 4, 1.25);
+      for (const [ox, oy] of [[0.5, 0.5], [0, 0]]) {
+        const jx = (rnd() - 0.5) * 6, jy = (rnd() - 0.5) * 6;
+        drawMotif((i + ox) * cell + jx, (j + oy) * cell + jy, rnd() * Math.PI, 1.25 + rnd() * 0.25, 0.7 + rnd() * 0.3);
+      }
     }
-    // small flecks between motifs
-    for (let k = 0; k < 900; k++) {
-      const x = rnd() * W, y = rnd() * H, r = 0.8 + rnd() * 1.1;
-      mx.fillStyle = `rgba(255,255,255,${0.35 + rnd() * 0.45})`;
+    // scattered light flecks (heathered yarn)
+    for (let k = 0; k < 1800; k++) {
+      const x = rnd() * W, y = rnd() * H, r = 0.6 + rnd() * 0.8;
+      mx.fillStyle = `rgba(255,255,255,${0.45 + rnd() * 0.55})`;
       mx.beginPath(); mx.arc(x, y, r, 0, Math.PI * 2); mx.fill();
     }
     const mask = mx.getImageData(0, 0, W, H).data;
@@ -163,26 +172,27 @@ export function carpetTextures(renderer) {
     const rough = new Float32Array(W * H);
     for (let i = 0; i < W * H; i++) {
       const m = mask[i * 4] / 255;
-      const f = fib[i], mo = mott[i], tu = tuft[i];
-      // base maroon (sRGB), mottled and fibre-speckled
-      const shade = 0.78 + 0.38 * mo + 0.20 * (tu - 0.5) + 0.16 * (f - 0.5);
-      let r = 82 * shade, g = 38 * shade, b = 34 * shade;
-      // motif yarn: muted tan/gold
-      const ms = 0.85 + 0.3 * (f - 0.5) + 0.2 * (mo - 0.5);
-      r = r * (1 - m) + 128 * ms * m;
-      g = g * (1 - m) + 84 * ms * m;
-      b = b * (1 - m) + 58 * ms * m;
+      const f = fib[i], mo = mott[i], tu = tuft[i], md = mid[i];
+      // base maroon: pile speckle + tuft clusters + broad mottle
+      const shade = 0.70 + 0.44 * mo + 0.30 * (tu - 0.5) + 0.22 * (f - 0.5) + 0.22 * (md - 0.5);
+      let r = 67 * shade, g = 31 * shade, b = 31 * shade;
+      // motif yarn: muted tan, takes the pile texture too
+      const ms = 0.8 + 0.35 * (f - 0.5) + 0.3 * (tu - 0.5);
+      const mm = m * 0.95;
+      r = r * (1 - mm) + 150 * ms * mm;
+      g = g * (1 - mm) + 102 * ms * mm;
+      b = b * (1 - mm) + 70 * ms * mm;
       d[i * 4] = Math.min(255, r); d[i * 4 + 1] = Math.min(255, g); d[i * 4 + 2] = Math.min(255, b); d[i * 4 + 3] = 255;
-      height[i] = 0.55 * f + 0.6 * tu + 0.35 * m;
-      rough[i] = clamp01(0.86 + 0.12 * f - 0.06 * m);
+      height[i] = 0.5 * f + 0.7 * tu + 0.25 * m;
+      rough[i] = clamp01(0.84 + 0.14 * f - 0.05 * m);
     }
     cx.putImageData(img, 0, 0);
     const set = {
       map: tex(col, { srgb: true, renderer }),
-      normalMap: tex(normalFromHeight(height, W, H, 1.6), { renderer }),
+      normalMap: tex(normalFromHeight(height, W, H, 1.8), { renderer }),
       roughnessMap: tex(greyCanvas(rough, W, H), { renderer }),
     };
-    return setTile(set, 1.04, 1.04);
+    return setTile(set, 1.92, 1.92);
   });
 }
 
@@ -192,23 +202,41 @@ export function carpetTextures(renderer) {
 
 export function fabricTextures(renderer) {
   return cached('fabric', () => {
-    const W = 512, H = 512;
+    const W = 1024, H = 1024;
     const rnd = mulberry32(4242);
     const lo = fbmField(W, H, 13, 3, 4, 0.6);
-    const hi = fbmField(W, H, 17, 64, 2, 0.5);
+    const hi = fbmField(W, H, 17, 96, 2, 0.5);
+    // lumpy felt / sprayed acoustic finish: thousands of soft blobs (tileable)
+    const bc = makeCanvas(W, H), bx = bc.getContext('2d');
+    bx.fillStyle = '#000'; bx.fillRect(0, 0, W, H);
+    bx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 7000; k++) {
+      const x = rnd() * W, y = rnd() * H, r = 3 + rnd() * rnd() * 11, a = 0.10 + rnd() * 0.16;
+      for (const ox of [-W, 0, W]) for (const oy of [-H, 0, H]) {
+        const X = x + ox, Y = y + oy;
+        if (X < -r || X > W + r || Y < -r || Y > H + r) continue;
+        const g = bx.createRadialGradient(X, Y, 0, X, Y, r);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        bx.fillStyle = g;
+        bx.fillRect(X - r, Y - r, 2 * r, 2 * r);
+      }
+    }
+    const blobs = bx.getImageData(0, 0, W, H).data;
     const col = makeCanvas(W, H), cx = col.getContext('2d');
     const img = cx.createImageData(W, H), d = img.data;
     const height = new Float32Array(W * H);
     for (let i = 0; i < W * H; i++) {
       const f = rnd();
-      const s = 0.86 + 0.22 * lo[i] + 0.16 * (hi[i] - 0.5) + 0.12 * (f - 0.5);
-      d[i * 4] = 70 * s; d[i * 4 + 1] = 72 * s; d[i * 4 + 2] = 64 * s; d[i * 4 + 3] = 255;
-      height[i] = 0.6 * hi[i] + 0.4 * f;
+      const b = blobs[i * 4] / 255;
+      const s = 0.86 + 0.2 * lo[i] + 0.16 * (hi[i] - 0.5) + 0.14 * (f - 0.5) + 0.10 * (b - 0.4);
+      d[i * 4] = 62 * s; d[i * 4 + 1] = 61 * s; d[i * 4 + 2] = 56 * s; d[i * 4 + 3] = 255;
+      height[i] = 0.9 * b + 0.25 * hi[i] + 0.08 * f;
     }
     cx.putImageData(img, 0, 0);
     return setTile({
       map: tex(col, { srgb: true, renderer }),
-      normalMap: tex(normalFromHeight(height, W, H, 1.1), { renderer }),
+      normalMap: tex(normalFromHeight(height, W, H, 3.2), { renderer }),
     }, 1.0, 1.0);
   });
 }
@@ -268,7 +296,7 @@ export function tuftedTextures(renderer, leafW = 1.26, leafH = 2.56) {
     const W = 512, H = 1024;
     const pxm = W / leafW; // px per metre
     const border = 0.07 * pxm;
-    const sx = 0.21 * pxm, sy = 0.26 * pxm; // diamond lattice spacing
+    const sx = 0.18 * pxm, sy = 0.22 * pxm; // diamond lattice spacing
     const rnd = mulberry32(777);
     const fine = fbmField(W, H, 3, 64, 2, 0.5);
     const lo = fbmField(W, H, 8, 4, 3, 0.6);
@@ -303,12 +331,12 @@ export function tuftedTextures(renderer, leafW = 1.26, leafH = 2.56) {
     const img = cx.createImageData(W, H), d = img.data;
     for (let i = 0; i < W * H; i++) {
       const s = ao[i] * (0.9 + 0.15 * lo[i] + 0.08 * (fine[i] - 0.5));
-      d[i * 4] = 50 * s; d[i * 4 + 1] = 55 * s; d[i * 4 + 2] = 60 * s; d[i * 4 + 3] = 255;
+      d[i * 4] = 74 * s; d[i * 4 + 1] = 78 * s; d[i * 4 + 2] = 84 * s; d[i * 4 + 3] = 255;
     }
     cx.putImageData(img, 0, 0);
     const set = {
       map: tex(col, { srgb: true, renderer, repeat: false }),
-      normalMap: tex(normalFromHeight(height, W, H, 3.2), { renderer, repeat: false }),
+      normalMap: tex(normalFromHeight(height, W, H, 4.5), { renderer, repeat: false }),
     };
     set.map.wrapS = set.map.wrapT = THREE.ClampToEdgeWrapping;
     set.normalMap.wrapS = set.normalMap.wrapT = THREE.ClampToEdgeWrapping;
@@ -394,17 +422,22 @@ export function screenTexture(renderer) {
     const W = 512, H = 256;
     const c = makeCanvas(W, H), x = c.getContext('2d');
     const g = x.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#5f86e6'); g.addColorStop(0.5, '#3f66cc'); g.addColorStop(1, '#2a4aa8');
+    g.addColorStop(0, '#7092e0'); g.addColorStop(0.5, '#4a6cc4'); g.addColorStop(1, '#30509e');
     x.fillStyle = g; x.fillRect(0, 0, W, H);
     const rg = x.createRadialGradient(W * 0.52, H * 0.3, 10, W * 0.5, H * 0.45, W * 0.55);
     rg.addColorStop(0, 'rgba(200,220,255,0.7)'); rg.addColorStop(0.5, 'rgba(130,165,240,0.22)'); rg.addColorStop(1, 'rgba(0,0,30,0.0)');
     x.fillStyle = rg; x.fillRect(0, 0, W, H);
-    // soft lower third band (pre-show advert layout), barely visible at this distance
-    x.fillStyle = 'rgba(30,50,120,0.25)'; x.fillRect(0, H * 0.72, W, H * 0.16);
     // edge falloff
     const eg = x.createLinearGradient(0, 0, W, 0);
     eg.addColorStop(0, 'rgba(0,0,20,0.35)'); eg.addColorStop(0.12, 'rgba(0,0,20,0)'); eg.addColorStop(0.88, 'rgba(0,0,20,0)'); eg.addColorStop(1, 'rgba(0,0,20,0.35)');
     x.fillStyle = eg; x.fillRect(0, 0, W, H);
+    // feathered border (projector edge softness + the masking's black velvet)
+    const F = 7;
+    for (const [x0, y0, x1, y1, w, h] of [[0, 0, F, 0, F, H], [W, 0, W - F, 0, F, H], [0, 0, 0, F, W, F], [0, H, 0, H - F, W, F]]) {
+      const fg = x.createLinearGradient(x0, y0, x1, y1);
+      fg.addColorStop(0, 'rgba(0,0,8,0.92)'); fg.addColorStop(1, 'rgba(0,0,8,0)');
+      x.fillStyle = fg; x.fillRect(Math.min(x0, x1), Math.min(y0, y1), w, h);
+    }
     const t = tex(c, { srgb: true, renderer, repeat: false });
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return t;
@@ -446,4 +479,3 @@ export function glowTexture() {
   });
 }
 
-export { hash2 };

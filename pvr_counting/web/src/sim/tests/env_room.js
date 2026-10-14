@@ -1,4 +1,5 @@
 // Empty-room render of the environment with the CCTV pass.
+// Optional query (own tools only): clean=1 (no noise), scale, samples, exposure, off=points,spots,hemi,env
 // node tools/shot.mjs --entry src/sim/tests/env_room.js --out <prefix> --times 0,1.5
 import * as THREE from 'three';
 import { buildEnvironment } from '../environment.js';
@@ -15,10 +16,17 @@ host.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const t0 = performance.now();
 const env = buildEnvironment(scene, renderer);
-const passes = createCCTVPasses(renderer, scene, env.camera, W, H, { renderScale: Number(params.get('scale') || 1.25) });
+const passes = createCCTVPasses(renderer, scene, env.camera, W, H, { renderScale: Number(params.get('scale') || 1.25), samples: Number(params.get('samples') ?? 4) });
 if (params.get('clean')) { passes.params.noise = 0; passes.params.block = 0; passes.params.chromaNoise = 0; }
 if (params.get('exposure')) passes.params.exposure = Number(params.get('exposure'));
 console.warn(`[env] build ${(performance.now() - t0).toFixed(0)} ms, render ${passes.renderSize.join('x')}`);
+const off = (params.get('off') || '').split(',');
+env.root.traverse((o) => {
+  if (o.isPointLight && off.includes('points')) o.visible = false;
+  if (o.isSpotLight && off.includes('spots')) o.visible = false;
+  if (o.isHemisphereLight && off.includes('hemi')) o.visible = false;
+});
+if (off.includes('env')) scene.environmentIntensity = 0;
 window.__env = env; window.__passes = passes;
 window.__ready = Promise.resolve();
 window.__renderAt = async (T) => {

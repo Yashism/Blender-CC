@@ -87,8 +87,10 @@ export function createHuman(seed, opts) -> Human
 //   object,          // THREE.Object3D, origin on the floor between the feet, facing +Z
 //   height,          // standing height in metres
 //   strideLength,    // metres travelled per full walk cycle (two steps)
-//   setPose(phase, speed, turnRate),  // phase in cycles (0..1 repeats), speed m/s
-//                                      // (0 = standing idle), turnRate rad/s (lean/look)
+//   setPose(phase, speed, turnRate, t?, strideK?),  // phase in cycles (0..1 repeats), speed m/s
+//                                      // (0 = standing idle), turnRate rad/s (lean/look);
+//                                      // optional: t (s, idle/look noise), strideK (stride factor:
+//                                      // stride = strideK * strideLength, default 1)
 //   boxPoints(out),  // fill `out` (array of THREE.Vector3) with WORLD positions that
 //                    // bound the visible body: head top, both hands, both feet (toe and
 //                    // heel), shoulders, elbows, knees, hip. Call after updateMatrixWorld.
@@ -108,6 +110,8 @@ and rotation, counter-swinging arms, slight vertical bob, head steady.
 export function createCrowd({ seed = 7, horizon = 3600, line = LINE }) -> {
   agents,                 // [{ id, seed, kind: 'in' | 'out', group, t0, t1, human: {kind, sex, carry}, speed }]
   stateAt(agent, t),      // null if not active, else { x, z, heading, speed, dist, turnRate, alpha }
+                          // (+ y, and strideK / ndist: speed-dependent stride; the integrated
+                          // phase is ndist / strideLength, used with setPose(..., strideK))
                           // heading: yaw in radians, 0 = facing +Z (toward the camera)
                           // dist: metres walked since t0 (phase = dist / strideLength)
                           // alpha: 0..1 for fading in/out at the edges or into the dark auditorium

@@ -57,12 +57,12 @@ export function keyed(keys) {
 
 export class GeoBuilder {
   constructor() {
-    this.cap = 4096;
+    this.cap = 12288;
     this.n = 0;
     this.pos = new Float32Array(this.cap * 3); this.nrm = new Float32Array(this.cap * 3);
     this.uv = new Float32Array(this.cap * 2); this.col = new Float32Array(this.cap * 3);
     this.si = new Uint16Array(this.cap * 4); this.sw = new Float32Array(this.cap * 4);
-    this.idx = []; 
+    this.idx = new Uint32Array(this.cap * 6); this.ni = 0;
   }
   get count() { return this.n; }
   _grow() {
@@ -92,7 +92,10 @@ export class GeoBuilder {
     this.n++;
     return i;
   }
-  tri(a, b, c) { this.idx.push(a, b, c); }
+  tri(a, b, c) {
+    if (this.ni + 3 > this.idx.length) { const g = new Uint32Array(this.idx.length * 2); g.set(this.idx); this.idx = g; }
+    this.idx[this.ni++] = a; this.idx[this.ni++] = b; this.idx[this.ni++] = c;
+  }
   build() {
     const g = new THREE.BufferGeometry();
     const n = this.n;
@@ -102,7 +105,8 @@ export class GeoBuilder {
     g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, n * 3), 3));
     g.setAttribute('skinIndex', new THREE.BufferAttribute(this.si.slice(0, n * 4), 4));
     g.setAttribute('skinWeight', new THREE.BufferAttribute(this.sw.slice(0, n * 4), 4));
-    g.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(this.idx) : new Uint16Array(this.idx), 1));
+    const ix = this.idx.subarray(0, this.ni);
+    g.setIndex(new THREE.BufferAttribute(n > 65535 ? ix.slice() : Uint16Array.from(ix), 1));
     g.computeBoundingSphere();
     return g;
   }
@@ -136,7 +140,7 @@ export function loft(B, rings, opt) {
     const pts = new Array(n + 1);
     const ths = new Array(n + 1);
     if (opt.arc) {
-      const D = 14;
+      const D = 10;
       const q4 = n / 4;
       let idx = 0;
       for (let q = 0; q < 4; q++) {
@@ -181,24 +185,30 @@ export function gridNormals(P, rings) {
   const N = new Array(K);
   let orient = 0;
   for (let k = 0; k < K; k++) {
-    N[k] = new Array(n + 1);
+    const row = new Array(n + 1);
+    N[k] = row;
     const ka = Math.max(0, k - 1), kb = Math.min(K - 1, k + 1);
+    const Pk = P[k], Pa = P[ka], Pb = P[kb];
+    const c = rings[k].c;
     for (let i = 0; i < n; i++) {
-      const ia = (i - 1 + n) % n, ib = (i + 1) % n;
-      const tth = sub(P[k][ib], P[k][ia]);
-      let ts = sub(P[kb][i], P[ka][i]);
-      if (Math.hypot(ts[0], ts[1], ts[2]) < 1e-9) ts = cross(rings[k].ax, rings[k].az);
-      let nn = cross(ts, tth);
-      if (Math.hypot(nn[0], nn[1], nn[2]) < 1e-12) nn = sub(P[k][i], rings[k].c);
-      N[k][i] = norm(nn);
-      orient += dot(N[k][i], sub(P[k][i], rings[k].c));
+      const ia = i === 0 ? n - 1 : i - 1, ib = i === n - 1 ? 0 : i + 1;
+      const tx = Pk[ib][0] - Pk[ia][0], ty = Pk[ib][1] - Pk[ia][1], tz = Pk[ib][2] - Pk[ia][2];
+      let sx = Pb[i][0] - Pa[i][0], sy = Pb[i][1] - Pa[i][1], sz = Pb[i][2] - Pa[i][2];
+      if (sx * sx + sy * sy + sz * sz < 1e-18) {
+        const ax = rings[k].ax, az = rings[k].az;
+        sx = ax[1] * az[2] - ax[2] * az[1]; sy = ax[2] * az[0] - ax[0] * az[2]; sz = ax[0] * az[1] - ax[1] * az[0];
+      }
+      let nx = sy * tz - sz * ty, ny = sz * tx - sx * tz, nz = sx * ty - sy * tx;
+      let l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      const px = Pk[i][0] - c[0], py = Pk[i][1] - c[1], pz = Pk[i][2] - c[2];
+      if (l < 1e-12) { nx = px; ny = py; nz = pz; l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1; }
+      nx /= l; ny /= l; nz /= l;
+      row[i] = [nx, ny, nz];
+      orient += nx * px + ny * py + nz * pz;
     }
   }
-  const sgn = orient >= 0 ? 1 : -1;
-  for (let k = 0; k < K; k++) {
-    for (let i = 0; i < n; i++) { const q = N[k][i]; N[k][i] = [q[0] * sgn, q[1] * sgn, q[2] * sgn]; }
-    N[k][n] = N[k][0];
-  }
+  if (orient < 0) for (let k = 0; k < K; k++) for (let i = 0; i < n; i++) { const q = N[k][i]; q[0] = -q[0]; q[1] = -q[1]; q[2] = -q[2]; }
+  for (let k = 0; k < K; k++) N[k][n] = N[k][0];
   return N;
 }
 
@@ -208,60 +218,72 @@ export function grid(B, P, TH, rings, opt) {
   let N = gridNormals(P, rings);
   if (opt.post) { opt.post(P, N); N = gridNormals(P, rings); }
   const vOf = (k) => (rings[k].v !== undefined ? rings[k].v : (K === 1 ? 0 : k / (K - 1)));
-  const toUV = (u, v) => {
-    if (opt.flipU) u = 1 - u;
-    return [rect[0] + (rect[2] - rect[0]) * u, rect[1] + (rect[3] - rect[1]) * v];
-  };
+  const ru = rect[2] - rect[0], rv = rect[3] - rect[1];
   const white = [1, 1, 1];
   const ids = new Array(K);
+  const uvb = [0, 0];
   for (let k = 0; k < K; k++) {
-    ids[k] = new Array(n + 1);
+    const idk = new Array(n + 1);
+    ids[k] = idk;
     const s = rings[k].s !== undefined ? rings[k].s : vOf(k);
+    const vk = vOf(k);
     for (let i = 0; i <= n; i++) {
       const th = i === n ? TAU : TH[k][i];
-      const u = opt.arc ? (i / n) : th / TAU;
+      let u = opt.arc ? (i / n) : th / TAU;
       const p = P[k][i];
-      let uv = opt.uvAt ? opt.uvAt(p, u, vOf(k), s, th % TAU) : null;
-      if (!uv) uv = toUV(u, vOf(k));
+      let uv = opt.uvAt ? opt.uvAt(p, u, vk, s, th % TAU) : null;
+      if (!uv) { if (opt.flipU) u = 1 - u; uvb[0] = rect[0] + ru * u; uvb[1] = rect[1] + rv * vk; uv = uvb; }
       const w = opt.weights(p, s, th % TAU);
       const c = opt.color ? opt.color(p, s, th % TAU, u) : white;
-      ids[k][i] = B.vert(p, N[k][i], uv[0], uv[1], c, w);
+      idk[i] = B.vert(p, N[k][i], uv[0], uv[1], c, w);
     }
   }
+  // winding: decide once per loft from the summed agreement of quad normals with vertex normals
+  let agree = 0;
   for (let k = 0; k < K - 1; k++) {
     for (let i = 0; i < n; i++) {
-      const a = ids[k][i], b = ids[k][i + 1], c = ids[k + 1][i + 1], d = ids[k + 1][i];
-      const pa = P[k][i], pb = P[k][i + 1], pc = P[k + 1][i + 1], pd = P[k + 1][i];
-      let tn = cross(sub(pb, pa), sub(pc, pa));
-      if (Math.hypot(tn[0], tn[1], tn[2]) < 1e-14) tn = cross(sub(pc, pa), sub(pd, pa));
-      const nn = [N[k][i][0] + N[k + 1][i + 1][0], N[k][i][1] + N[k + 1][i + 1][1], N[k][i][2] + N[k + 1][i + 1][2]];
-      if (dot(tn, nn) < 0) { B.tri(a, b, c); B.tri(a, c, d); }
+      const pa = P[k][i], pb = P[k][i + 1], pc = P[k + 1][i + 1];
+      const e1x = pb[0] - pa[0], e1y = pb[1] - pa[1], e1z = pb[2] - pa[2];
+      const e2x = pc[0] - pa[0], e2y = pc[1] - pa[1], e2z = pc[2] - pa[2];
+      const tx = e1y * e2z - e1z * e2y, ty = e1z * e2x - e1x * e2z, tz = e1x * e2y - e1y * e2x;
+      const q = N[k][i];
+      agree += tx * q[0] + ty * q[1] + tz * q[2];
+    }
+  }
+  const ccw = agree > 0;
+  for (let k = 0; k < K - 1; k++) {
+    const r0 = ids[k], r1 = ids[k + 1];
+    for (let i = 0; i < n; i++) {
+      const a = r0[i], b = r0[i + 1], c = r1[i + 1], d = r1[i];
+      if (ccw) { B.tri(a, b, c); B.tri(a, c, d); }
       else { B.tri(a, c, b); B.tri(a, d, c); }
     }
   }
   const cap = (k, bulge, end) => {
     if (bulge === null || bulge === undefined) return;
     const r = rings[k];
-    let ctr = [0, 0, 0];
-    for (let i = 0; i < n; i++) { ctr[0] += P[k][i][0]; ctr[1] += P[k][i][1]; ctr[2] += P[k][i][2]; }
-    ctr = [ctr[0] / n, ctr[1] / n, ctr[2] / n];
+    let cx = 0, cy = 0, cz = 0;
+    for (let i = 0; i < n; i++) { cx += P[k][i][0]; cy += P[k][i][1]; cz += P[k][i][2]; }
+    cx /= n; cy /= n; cz /= n;
     const k2 = end ? Math.max(0, k - 1) : Math.min(K - 1, k + 1);
-    let c2 = [0, 0, 0];
-    for (let i = 0; i < n; i++) { c2[0] += P[k2][i][0]; c2[1] += P[k2][i][1]; c2[2] += P[k2][i][2]; }
-    c2 = [c2[0] / n, c2[1] / n, c2[2] / n];
-    let dir = sub(ctr, c2);
-    if (Math.hypot(dir[0], dir[1], dir[2]) < 1e-9) dir = cross(r.ax, r.az);
-    dir = norm(dir);
-    const pole = [ctr[0] + dir[0] * bulge, ctr[1] + dir[1] * bulge, ctr[2] + dir[2] * bulge];
+    let dx = 0, dy = 0, dz = 0;
+    for (let i = 0; i < n; i++) { dx += P[k2][i][0]; dy += P[k2][i][1]; dz += P[k2][i][2]; }
+    dx = cx - dx / n; dy = cy - dy / n; dz = cz - dz / n;
+    let l = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (l < 1e-9) { const c2 = cross(r.ax, r.az); dx = c2[0]; dy = c2[1]; dz = c2[2]; l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1; }
+    const dir = [dx / l, dy / l, dz / l];
+    const pole = [cx + dir[0] * bulge, cy + dir[1] * bulge, cz + dir[2] * bulge];
     const s = r.s !== undefined ? r.s : vOf(k);
     let uv = opt.uvAt ? opt.uvAt(pole, 0.5, vOf(k), s, 0) : null;
-    if (!uv) uv = toUV(0.5, vOf(k));
+    if (!uv) uv = [rect[0] + ru * 0.5, rect[1] + rv * vOf(k)];
     const pid = B.vert(pole, dir, uv[0], uv[1], opt.color ? opt.color(pole, s, 0, 0.5) : white, opt.weights(pole, s, 0));
     for (let i = 0; i < n; i++) {
       const a = ids[k][i], b = ids[k][i + 1];
       const pa = P[k][i], pb = P[k][i + 1];
-      const tn = cross(sub(pb, pa), sub(pole, pa));
-      if (dot(tn, dir) > 0) B.tri(a, b, pid); else B.tri(a, pid, b);
+      const e1x = pb[0] - pa[0], e1y = pb[1] - pa[1], e1z = pb[2] - pa[2];
+      const e2x = pole[0] - pa[0], e2y = pole[1] - pa[1], e2z = pole[2] - pa[2];
+      const tx = e1y * e2z - e1z * e2y, ty = e1z * e2x - e1x * e2z, tz = e1x * e2y - e1y * e2x;
+      if (tx * dir[0] + ty * dir[1] + tz * dir[2] > 0) B.tri(a, b, pid); else B.tri(a, pid, b);
     }
   };
   cap(0, opt.capStart, false);
@@ -332,7 +354,44 @@ export function ribbon(B, pts, count, w, th, sideHint, opt) {
     const nrm = norm(cross(smp.t, side));
     const ww = typeof w === 'function' ? w(k / (count - 1)) : w;
     const tt = typeof th === 'function' ? th(k / (count - 1)) : th;
-    return { c: smp.p, ax: side, az: nrm, f: (a) => sellipse(a, ww / 2, tt / 2, opt.e || 6), s: k / (count - 1) };
+    const tk = k / (count - 1);
+    return { c: smp.p, ax: side, az: nrm, f: opt.shape ? (a) => opt.shape(a, tk, ww, tt) : (a) => sellipse(a, ww / 2, tt / 2, opt.e || 6), s: tk };
   });
   return loft(B, rings, opt);
+}
+
+// Smooth 3-D value noise in [-1, 1] (deterministic, seeded). Used for cloth wrinkles / hair clumps.
+function h3(seed, x, y, z) {
+  let h = Math.imul(x | 0, 0x27d4eb2d) ^ Math.imul(y | 0, 0x165667b1) ^ Math.imul(z | 0, 0x9e3779b1) ^ Math.imul(seed | 0, 0x85ebca6b);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+  return ((h >>> 0) / 4294967296) * 2 - 1;
+}
+export function noise3(seed, x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(
+    l(l(h3(seed, xi, yi, zi), h3(seed, xi + 1, yi, zi), u), l(h3(seed, xi, yi + 1, zi), h3(seed, xi + 1, yi + 1, zi), u), v),
+    l(l(h3(seed, xi, yi, zi + 1), h3(seed, xi + 1, yi, zi + 1), u), l(h3(seed, xi, yi + 1, zi + 1), h3(seed, xi + 1, yi + 1, zi + 1), u), v),
+    w);
+}
+// Displace grid points along normals: amp(p) metres, scale = [sx, sy, sz] noise frequency (1/m).
+export function wrinkle(P, N, seed, amp, scale, octaves = 2) {
+  for (let k = 0; k < P.length; k++) {
+    const row = P[k];
+    for (let i = 0; i < row.length; i++) {
+      const p = row[i];
+      const a = amp(p, k, i);
+      if (!a) continue;
+      let n = 0, f = 1, g = 1, tot = 0;
+      for (let o = 0; o < octaves; o++) {
+        n += g * noise3(seed + o * 101, p[0] * scale[0] * f, p[1] * scale[1] * f, p[2] * scale[2] * f);
+        tot += g; f *= 2.1; g *= 0.5;
+      }
+      n /= tot;
+      const q = N[k][i];
+      row[i] = [p[0] + q[0] * a * n, p[1] + q[1] * a * n, p[2] + q[2] * a * n];
+    }
+  }
 }

@@ -6,7 +6,7 @@
 // head plus long-hair / braid / bun / ponytail volumes. Carried items are skinned to the
 // hand. The walk is a procedural gait (human_gait.js) with planted feet.
 import * as THREE from 'three';
-import { GeoBuilder, loft, keyed, sellipse, ellipsoid, ribbon, clamp, lerp, smooth, gauss, v3 } from './human_geo.js';
+import { GeoBuilder, loft, keyed, sellipse, ellipsoid, ribbon, clamp, lerp, smooth, gauss, v3, wrinkle, noise3 } from './human_geo.js';
 import { sampleLook, paintAtlas, rectUV, swatchUV, itemUV, hairCoverage, canPaint, ATLAS } from './human_look.js';
 import { Gait, BONES, BI, PARENT, CARRY } from './human_gait.js';
 
@@ -20,13 +20,13 @@ function measure(look) {
   const sc = H / 1.7;
   const M = { H, k, sc, f };
   M.girth = 1 + look.mass * 0.12 + (look.child ? 0.04 : 0);
-  M.headH = H * F(0.13, 0.182) * look.headScale;
-  M.headB = M.headH * F(0.68, 0.74);
-  M.headL = M.headH * F(0.86, 0.9);
+  M.headH = H * F(0.134, 0.182) * look.headScale;
+  M.headB = M.headH * F(0.71, 0.75);
+  M.headL = M.headH * F(0.87, 0.9);
   M.chinY = H - M.headH;
   M.headY = M.chinY + 0.3 * M.headH;
   M.headZ = -0.012 * sc;
-  M.neckBaseY = H * F(0.838, 0.792);
+  M.neckBaseY = H * F(0.838, 0.792) + 0.008 * sc; // a slightly shorter neck (reads long from above otherwise)
   M.shoulderY = H * F(0.812, 0.768);
   M.chestY = H * F(0.72, 0.672);
   M.waistY = H * F(0.612, 0.585);
@@ -36,7 +36,7 @@ function measure(look) {
   M.ankleY = H * F(0.044, 0.05) + 0.012;
   M.hipX = H * (f ? 0.054 : 0.051) * Math.sqrt(look.hip) * F(1, 1.04);
   M.footX = M.hipX * 0.68;
-  M.shoulderX = H * (f ? 0.096 : 0.104) * look.shoulder * F(1, 0.93) * (1 + Math.max(0, look.mass) * 0.04);
+  M.shoulderX = H * (f ? 0.09 : 0.099) * look.shoulder * F(1, 0.93) * (1 + Math.max(0, look.mass) * 0.04);
   M.upperArm = H * F(0.186, 0.178);
   M.foreArm = H * F(0.146, 0.138);
   M.handLen = H * F(0.106, 0.1);
@@ -48,7 +48,7 @@ function measure(look) {
   M.toeF = 0.8 * M.footLen;
   M.ballH = 0.024 * sc;
   M.soleH = look.outfit.shoes === 'sneaker' ? 0.024 : look.outfit.shoes === 'formal' ? 0.014 : 0.012;
-  M.neckR = H * (f ? 0.0175 : 0.0205) * (1 + look.mass * 0.08) * F(1, 1.06);
+  M.neckR = H * (f ? 0.03 : 0.034) * (1 + look.mass * 0.08) * F(1.15, 1.08);
   return M;
 }
 
@@ -86,10 +86,11 @@ function restPositions(M, look) {
 // ------------------------------------------------------------------ torso shape
 const TORSO = keyed([
   // adult fraction of H, half width, front depth, back depth, centre z  (all / H, male baseline)
-  [0.455, 0.040, 0.026, 0.028, 0.0],
-  [0.462, 0.062, 0.036, 0.040, 0.0],
-  [0.47, 0.077, 0.044, 0.048, 0.0],
-  [0.49, 0.093, 0.050, 0.056, 0.0],
+  [0.44, 0.072, 0.034, 0.044, -0.002],
+  [0.45, 0.087, 0.043, 0.054, -0.003],
+  [0.462, 0.095, 0.049, 0.060, -0.003],
+  [0.475, 0.098, 0.051, 0.062, -0.003],
+  [0.49, 0.099, 0.052, 0.063, -0.003],
   [0.515, 0.0985, 0.052, 0.061, -0.002],
   [0.55, 0.095, 0.052, 0.058, -0.002],
   [0.585, 0.0895, 0.052, 0.051, 0.0],
@@ -97,16 +98,27 @@ const TORSO = keyed([
   [0.65, 0.0895, 0.054, 0.050, 0.0],
   [0.69, 0.093, 0.058, 0.053, 0.0],
   [0.72, 0.097, 0.061, 0.056, 0.0],
-  [0.75, 0.101, 0.058, 0.056, -0.003],
-  [0.78, 0.105, 0.051, 0.053, -0.006],
-  [0.80, 0.104, 0.043, 0.047, -0.009],
-  [0.812, 0.094, 0.036, 0.041, -0.012],
-  [0.824, 0.073, 0.031, 0.036, -0.014],
-  [0.834, 0.051, 0.027, 0.031, -0.015],
-  [0.843, 0.038, 0.025, 0.028, -0.015],
-  [0.85, 0.03, 0.022, 0.025, -0.015],
+  [0.75, 0.100, 0.058, 0.056, -0.003],
+  [0.78, 0.102, 0.052, 0.054, -0.006],
 ]);
 const LAND_A = [0.47, 0.515, 0.612, 0.72, 0.812, 0.838];
+// shoulder profile: ys (m above the shoulder joint, at 1.7m scale) -> [half width offset from shoulderX,
+// neck-radius multiple, blend to neck (0..1), front depth, back depth]
+const SHP = keyed([
+  [-0.12, 0.0, 1.3, 0, 0.098, 0.094],
+  [-0.085, 0.008, 1.3, 0, 0.092, 0.09],
+  [-0.055, 0.027, 1.3, 0, 0.086, 0.086],
+  [-0.03, 0.036, 1.3, 0, 0.078, 0.082],
+  [-0.008, 0.035, 1.3, 0, 0.071, 0.079],
+  [0.01, 0.027, 1.3, 0, 0.066, 0.076],
+  [0.024, 0.012, 1.3, 0.02, 0.062, 0.073],
+  [0.036, -0.022, 1.3, 0.12, 0.058, 0.069],
+  [0.047, -0.055, 1.3, 0.3, 0.054, 0.066],
+  [0.058, -0.08, 1.25, 0.62, 0.05, 0.062],
+  [0.068, -0.09, 1.12, 0.92, 0.047, 0.057],
+  [0.077, -0.09, 1.02, 1.0, 0.043, 0.051],
+  [0.084, -0.09, 0.95, 1.0, 0.04, 0.046],
+]);
 
 function makeTorso(M, look) {
   const H = M.H, f = M.f, o = look.outfit, sc = M.sc;
@@ -135,20 +147,47 @@ function makeTorso(M, look) {
   const hemY = o.top === 'saree' ? mapY(0.69) : isLong ? -1 : o.tucked ? beltY + 0.002 : Math.min(o.hemH * H, mapY(0.56));
   const sareeWaistY = mapY(0.6);
   const loose = o.top === 'hoodie' || o.top === 'kurta' || o.top === 'kameez' || o.top === 'kurti' || o.top === 'tee' || o.top === 'shirt' || o.top === 'jacket' || o.top === 'frock' || o.top === 'top';
-  function dims(y) {
+  function rawDims(y) {
     const fa = invY(y);
     const T = TORSO(fa);
     const wk = lerp(1, kidW(fa)[0], k);
     let w = T[0] * H * sexW(fa)[0] * wk * (1 + (girth - 1) * 1.1);
     let df = T[1] * H * (1 + (girth - 1) * 0.9);
     let db = T[2] * H * (1 + (girth - 1) * 0.8);
-    const cz = T[3] * H;
+    let cz = T[3] * H;
+    // shoulder girdle: profile relative to the shoulder joint (overrides the table near the top)
+    const ys = (y - M.shoulderY) / sc;
+    const sw = smooth(-0.11, -0.055, ys);
+    if (sw > 0) {
+      const shX = M.shoulderX, nr = M.neckR;
+      const S = SHP(ys);
+      const ws = lerp(shX + S[0] * sc, nr * S[1], S[2]);
+      w = lerp(w, ws, sw);
+      df = lerp(df, S[3] * sc * (1 + (girth - 1) * 0.6), sw);
+      db = lerp(db, S[4] * sc * (1 + (girth - 1) * 0.6), sw);
+      cz = lerp(cz, -0.014 * sc, sw);
+    }
     // extra waist girth for heavier people
     const wz = gauss(fa - 0.6, 0.05);
     w *= 1 + Math.max(0, look.mass) * 0.08 * wz;
     if (f) db *= 1 + 0.06 * gauss(fa - 0.51, 0.04);
     return { fa, w, df, db, cz };
   }
+  // garment drape: a loose top hangs from the chest/bust down to its hem (does not follow the waist)
+  function drapeK(y) { return (!loose || y >= M.chestY || y < hemY - 0.01) ? 0 : smooth(M.chestY, M.waistY, y); }
+  let _cd = null, _gd = null;
+  function drapeDims(y, d) {
+    const k = drapeK(y);
+    if (k <= 0) return d;
+    if (!_cd) { _cd = rawDims(M.chestY - 0.02 * sc); _gd = rawDims(mapY(0.5)); }
+    const c = _cd, gd = _gd;
+    const hang = o.top === 'hoodie' || o.top === 'kurta' || o.top === 'jacket' ? 0.97 : 0.94;
+    // straight hang from the chest to the seat (convex hull of the body), never inside the body
+    const t = clamp((M.chestY - y) / (M.chestY - mapY(0.5)), 0, 1);
+    const hw = lerp(c.w * hang, gd.w, t * t), hf = lerp(c.df * 0.93 + (look.bust > 0 ? look.bust * 0.012 * sc : 0), gd.df, t), hb = lerp(c.db * 0.97, gd.db + gluteA * 0.6, t);
+    return { fa: d.fa, w: Math.max(d.w, lerp(d.w, hw, k)), df: Math.max(d.df, lerp(d.df, hf, k)), db: Math.max(d.db, lerp(d.db, hb, k)), cz: d.cz };
+  }
+  function dims(y) { return drapeDims(y, rawDims(y)); }
   function cloth(y) {
     let off = 0;
     if (o.top === 'saree') {
@@ -162,41 +201,47 @@ function makeTorso(M, look) {
   const bustY = mapY(0.712);
   const bellyA = belly * 0.032 * sc;
   const bellyY = mapY(0.6);
-  const gluteA = (f ? 0.02 : 0.013) * sc * (1 + 0.3 * look.mass);
+  const gluteA = (f ? 0.014 : 0.008) * sc * (1 + 0.3 * look.mass);
   const gluteY = mapY(0.505);
   const pecA = f ? 0 : 0.006 * sc;
+  const pecY = mapY(0.735), scapY = mapY(0.765);
+  const shapeCache = new Map();
   const shapeAt = (y) => {
+    const hit = shapeCache.get(y);
+    if (hit) return hit;
     const d = dims(y);
     const off = cloth(y);
     const tight = !loose || y < hemY;
-    return (th) => {
+    const dk = drapeK(y);
+    // per-ring (y only) bump factors
+    const gBust = bustA > 0 ? bustA * gauss(y - bustY, 0.045 * sc) * (y < bustY ? 1 : 0.85) : 0;
+    const bridgeK = (tight && o.top === 'saree') ? 0 : 0.78;
+    const gBelly = bellyA > 0 ? bellyA * gauss(y - bellyY, 0.07 * sc) * (1 - 0.5 * dk) : 0;
+    const gGlute = gluteA * gauss(y - gluteY, 0.045 * sc) * (1 - 0.8 * dk);
+    const gPec = pecA > 0 ? pecA * gauss(y - pecY, 0.03 * sc) : 0;
+    const gScap = 0.006 * sc * gauss(y - scapY, 0.03 * sc);
+    const ie = 2 / 2.35;
+    const fn = (th) => {
       const c = Math.cos(th), s = Math.sin(th);
-      const e = 2.35;
-      let a = d.w * Math.sign(c) * Math.pow(Math.abs(c), 2 / e);
-      let b = (s > 0 ? d.df : d.db) * Math.sign(s) * Math.pow(Math.abs(s), 2 / e);
-      // bumps (radial push)
-      const dF = Math.atan2(Math.sin(th - PI / 2), Math.cos(th - PI / 2)); // angle from front
-      const dB = Math.atan2(Math.sin(th - 1.5 * PI), Math.cos(th - 1.5 * PI));
+      let a = d.w * Math.sign(c) * Math.pow(Math.abs(c), ie);
+      let b = (s > 0 ? d.df : d.db) * Math.sign(s) * Math.pow(Math.abs(s), ie);
+      // bumps (radial push); dF = angle from the front, dB = angle from the back
+      let dF = th - PI / 2; dF -= TAU * Math.round(dF / TAU);
+      let dB = th - 1.5 * PI; dB -= TAU * Math.round(dB / TAU);
       let push = off;
-      if (bustA > 0) {
-        const gy = gauss(y - bustY, 0.045 * sc) * (y < bustY ? 1 : 0.85);
-        const gl = gauss(dF - 0.43, 0.3), gr = gauss(dF + 0.43, 0.3);
-        const bridge = (tight && o.top === 'saree') ? 0 : 0.78 * gauss(dF, 0.55);
-        push += bustA * gy * Math.max(gl, gr, bridge);
-      }
-      if (bellyA > 0) push += bellyA * gauss(y - bellyY, 0.07 * sc) * gauss(dF, 0.75);
-      {
-        const gy = gauss(y - gluteY, 0.045 * sc);
-        push += gluteA * gy * Math.max(gauss(dB - 0.42, 0.36), gauss(dB + 0.42, 0.36), 0.85 * gauss(dB, 0.5));
-      }
-      if (pecA > 0) push += pecA * gauss(y - mapY(0.735), 0.03 * sc) * Math.max(gauss(dF - 0.5, 0.4), gauss(dF + 0.5, 0.4));
-      push += 0.006 * sc * gauss(y - mapY(0.765), 0.03 * sc) * Math.max(gauss(dB - 0.55, 0.35), gauss(dB + 0.55, 0.35));
+      if (gBust > 1e-6) push += gBust * Math.max(gauss(dF - 0.43, 0.3), gauss(dF + 0.43, 0.3), bridgeK * gauss(dF, 0.55));
+      if (gBelly > 1e-6) push += gBelly * gauss(dF, 0.75);
+      if (gGlute > 1e-6) push += gGlute * Math.max(gauss(dB - 0.42, 0.36), gauss(dB + 0.42, 0.36), 0.85 * gauss(dB, 0.5));
+      if (gPec > 1e-6) push += gPec * Math.max(gauss(dF - 0.5, 0.4), gauss(dF + 0.5, 0.4));
+      if (gScap > 1e-6) push += gScap * Math.max(gauss(dB - 0.55, 0.35), gauss(dB + 0.55, 0.35));
       const L = Math.hypot(a, b) || 1;
       a += (a / L) * push; b += (b / L) * push;
       return [a, b + d.cz];
     };
+    if (shapeCache.size < 256) shapeCache.set(y, fn);
+    return fn;
   };
-  const top = mapY(0.85), bot = mapY(0.455);
+  const top = M.shoulderY + 0.084 * sc, bot = mapY(0.44);
   return { mapY, invY, dims, cloth, shapeAt, top, bot, beltY, hemY, sareeWaistY, isLong, loose,
     point(y, th, extra = 0) {
       const ab = shapeAt(y)(th);
@@ -215,8 +260,9 @@ function buildBody(B, look, M, R, T, items) {
   // ================================================= TORSO
   {
     const ys = [];
-    const fr = [0.455, 0.459, 0.464, 0.47, 0.478, 0.488, 0.5, 0.515, 0.53, 0.55, 0.57, 0.59, 0.61, 0.63, 0.65, 0.67, 0.69, 0.71, 0.73, 0.75, 0.765, 0.78, 0.79, 0.8, 0.807, 0.814, 0.82, 0.826, 0.832, 0.838, 0.843, 0.847, 0.85];
+    const fr = [0.44, 0.443, 0.448, 0.455, 0.462, 0.47, 0.48, 0.49, 0.5, 0.515, 0.53, 0.55, 0.57, 0.59, 0.61, 0.63, 0.65, 0.67, 0.69, 0.71, 0.73, 0.75];
     for (const a of fr) ys.push(T.mapY(a));
+    for (const q of [-0.07, -0.05, -0.035, -0.02, -0.005, 0.008, 0.018, 0.027, 0.035, 0.042, 0.049, 0.056, 0.063, 0.07, 0.077, 0.084]) ys.push(M.shoulderY + q * sc);
     const addEdge = (y) => { if (y > T.bot + 0.01 && y < T.top - 0.01) { ys.push(y + 0.004); ys.push(y - 0.0025); } };
     if (!T.isLong) addEdge(T.hemY);
     if (o.top === 'saree') addEdge(T.sareeWaistY);
@@ -224,8 +270,19 @@ function buildBody(B, look, M, R, T, items) {
     ys.sort((a, b) => a - b);
     const rings = ys.map((y) => ({ c: [0, y, 0], ax: [1, 0, 0], az: [0, 0, 1], f: T.shapeAt(y), v: (T.top - y) / (T.top - T.bot), s: y }));
     const shX = M.shoulderX;
+    const wseed = (look.seed * 13 + 5) | 0;
+    const skinTop = M.shoulderY + 0.06 * sc;
     loft(B, rings, {
       n: 44, arc: true, rect: rectUV('torso'), capStart: 0.012 * sc, capEnd: 0.006 * sc,
+      post: (P, N) => {
+        const loose = T.loose ? 1 : 0.5;
+        wrinkle(P, N, wseed, (p) => {
+          const y = p[1];
+          if (y > skinTop) return 0;
+          if (o.top === 'saree' && y < T.hemY && y > T.sareeWaistY) return 0; // midriff skin
+          return (0.0022 + 0.0028 * loose * gauss(y - M.waistY, 0.08 * sc)) * sc * (o.top === 'hoodie' || o.top === 'jacket' ? 1.5 : 1);
+        }, [9 / sc, 14 / sc, 9 / sc], 2);
+      },
       weights: (p, y) => {
         const ax = Math.abs(p[0]);
         const wP = 1 - smooth(M.hipY + 0.01, M.waistY, y);
@@ -233,7 +290,7 @@ function buildBody(B, look, M, R, T, items) {
         const wS = Math.max(0, 1 - wP - wC);
         const side = p[0] > 0 ? 'L' : 'R';
         // shoulders follow the arm a little
-        const wArm = 0.45 * smooth(shX - 0.07 * sc, shX + 0.01, ax) * smooth(M.shoulderY - 0.1 * sc, M.shoulderY - 0.02 * sc, y);
+        const wArm = 0.78 * smooth(shX - 0.075 * sc, shX + 0.02 * sc, ax) * smooth(M.shoulderY - 0.13 * sc, M.shoulderY - 0.06 * sc, y) * (1 - smooth(M.shoulderY + 0.02 * sc, M.shoulderY + 0.06 * sc, y));
         const wNeck = 0.5 * smooth(M.neckBaseY - 0.03 * sc, M.neckBaseY + 0.01, y) * (1 - smooth(0.05 * sc, 0.09 * sc, ax));
         // hips / crotch follow the thighs a little
         const wTh = 0.45 * (1 - smooth(M.crotchY, M.hipY + 0.02, y)) * smooth(0.0, M.hipX, ax) + 0.25 * (1 - smooth(M.hipY - 0.04, M.hipY + 0.03, y)) * smooth(M.hipX * 0.8, M.hipX * 1.8, ax);
@@ -256,8 +313,8 @@ function buildBody(B, look, M, R, T, items) {
     const rings = [];
     for (let i = 0; i <= 7; i++) {
       const y = lerp(y0, y1, i / 7);
-      const r = M.neckR * (1 + 0.35 * (1 - smooth(M.neckBaseY - 0.05 * sc, M.neckBaseY + 0.015 * sc, y)));
-      const z = lerp(-0.03 * sc, M.headZ - 0.012 * sc, i / 7);
+      const r = M.neckR * (1 + 0.15 * (1 - smooth(M.neckBaseY - 0.04 * sc, M.neckBaseY + 0.02 * sc, y)));
+      const z = lerp(-0.019 * sc, M.headZ - 0.012 * sc, i / 7);
       rings.push({ c: [0, y, z], ax: [1, 0, 0], az: [0, 0, 1], f: (th) => [r * 1.04 * Math.cos(th), r * 0.98 * Math.sin(th)], v: 0, s: y });
     }
     loft(B, rings, {
@@ -272,33 +329,41 @@ function buildBody(B, look, M, R, T, items) {
   }
   // shirt / polo / kurta collar band
   if (o.top === 'shirt' || o.top === 'polo' || (o.top === 'kurta' && look.sex === 'm') || o.top === 'jacket') {
-    const y0 = M.neckBaseY - 0.012 * sc, h = (o.top === 'kurta' ? 0.025 : 0.035) * sc;
+    const y0 = M.neckBaseY - 0.006 * sc, h = (o.top === 'kurta' ? 0.02 : 0.026) * sc;
     const rings = [];
     for (let i = 0; i <= 3; i++) {
       const t = i / 3;
       const y = y0 + h * t;
-      const r = M.neckR * (o.top === 'jacket' ? 1.55 : 1.32) + 0.004 + t * 0.003;
+      const r = M.neckR * (o.top === 'jacket' ? 1.4 : 1.12) + 0.003 + t * 0.002;
       rings.push({ c: [0, y, -0.026 * sc + t * 0.006 * sc], ax: [1, 0, 0], az: [0, 0, 1], f: (th) => { const fr = Math.max(0, Math.sin(th)); return [r * 1.08 * Math.cos(th), r * Math.sin(th) + fr * fr * fr * 0.012 * sc * (1 - t)]; }, s: t });
     }
     const cuv = swatchUV(o.top === 'jacket' ? 'top' : 'collar');
     loft(B, rings, { n: 20, uvAt: () => cuv, weights: (p, t) => W('chest', 1 - t * 0.6, 'neck', t * 0.6), color: (p, t) => [0.75 + 0.25 * t, 0.75 + 0.25 * t, 0.75 + 0.25 * t] });
   }
-  // hoodie hood bunched behind the neck
+  // hoodie hood: a flattened half-cone of fabric lying on the upper back, opening up
   if (o.top === 'hoodie') {
-    const pts = [];
-    for (let i = 0; i <= 8; i++) {
-      const a = lerp(-1.05, 1.05, i / 8); // around the back
-      const r = M.neckR + 0.035 * sc;
-      pts.push([Math.sin(a) * r * 1.6, M.neckBaseY + 0.005 * sc - 0.02 * sc * Math.abs(Math.sin(a)), -0.03 * sc - Math.cos(a) * r * 1.1]);
-    }
     const huv = swatchUV('top');
-    ribbon(B, pts, 12, (t) => (0.07 - 0.02 * Math.abs(t - 0.5)) * sc, (t) => (0.045 + 0.02 * (1 - Math.abs(t - 0.5) * 2)) * sc, (p) => [0, 1, 0], {
-      n: 12, e: 2.2, uvAt: () => huv, capStart: 0.01, capEnd: 0.01,
-      weights: () => W('chest', 0.8, 'neck', 0.2), color: (p, s, th) => { const a = 0.8 + 0.2 * Math.sin(th); return [a, a, a]; },
+    const yTop = M.neckBaseY + 0.01 * sc, yBot = M.shoulderY - 0.17 * sc;
+    const rings = [];
+    const nr = 6;
+    for (let i = 0; i <= nr; i++) {
+      const t = i / nr;
+      const y = lerp(yTop, yBot, t);
+      const zb = T.point(clamp(y, T.bot + 0.01, T.top - 0.01), 1.5 * PI, 0)[2];
+      // wide and rolled at the neck, narrowing to a soft point between the shoulder blades
+      const w = (0.115 - 0.085 * Math.pow(t, 1.3)) * sc;
+      const thk = (0.022 - 0.012 * t) * sc;
+      const lift = (0.012 + 0.006 * Math.sin(PI * t)) * sc;
+      rings.push({ c: [0, y, zb - lift], ax: [1, 0, 0], az: [0, 0, 1], f: (th) => { const c = Math.cos(th), sn = Math.sin(th); return [w * c, thk * (sn < 0 ? sn : sn * 0.35) + 0.016 * sc * c * c * (1 - 0.5 * t)]; }, v: t, s: t });
+    }
+    loft(B, rings, {
+      n: 16, uvAt: () => huv, capEnd: 0.004 * sc, capStart: 0.006 * sc,
+      weights: (p) => W('chest', 0.9, 'neck', 0.1),
+      color: (p, t, th) => { const a = 0.62 + 0.3 * Math.max(0, -Math.sin(th)) + 0.08 * (1 - t); return [a, a, a]; },
     });
   }
   // ================================================= HEAD
-  const face = buildHead(B, look, M);
+  const face = buildHead(B, look, M, T);
   // ================================================= ARMS + HANDS
   for (const s of [1, -1]) buildArm(B, look, M, R, s, items);
   // ================================================= LEGS + FEET
@@ -316,11 +381,11 @@ function buildBody(B, look, M, R, T, items) {
 const HEADP = keyed([
   // s, half-width (frac of B/2), front (frac of L), back (frac of L)
   [0.0, 0.12, 0.27, 0.16],
-  [0.035, 0.27, 0.355, 0.04],
-  [0.09, 0.44, 0.405, -0.05],
-  [0.16, 0.585, 0.43, -0.13],
-  [0.24, 0.72, 0.44, -0.23],
-  [0.32, 0.82, 0.435, -0.34],
+  [0.035, 0.33, 0.355, 0.04],
+  [0.09, 0.5, 0.405, -0.05],
+  [0.16, 0.64, 0.43, -0.13],
+  [0.24, 0.75, 0.44, -0.23],
+  [0.32, 0.83, 0.435, -0.34],
   [0.42, 0.905, 0.425, -0.45],
   [0.5, 0.96, 0.45, -0.51],
   [0.6, 0.995, 0.44, -0.54],
@@ -348,6 +413,10 @@ function headShape(M, look, F, s, extraFn) {
   const bk = P[2] * M.headL;
   const eF = s > 0.08 && s < 0.65 ? 2.7 : 2.2;
   const g = M.sc;
+  const cut = (v) => (v > 1e-5 ? v : 0);
+  const kEye = cut(0.003 * g * gauss(s - F.eyeS, 0.035)), kBrow = cut(0.004 * g * gauss(s - F.browS, 0.03));
+  const kCheek = cut(0.0035 * g * gauss(s - (F.noseS + 0.07), 0.05)), kLip = cut(0.0035 * g * gauss(s - F.mouthS, 0.025));
+  const kChin = cut(0.003 * g * gauss(s - 0.045, 0.03));
   return (th) => {
     const c = -Math.cos(th), sn = -Math.sin(th);
     const e = c > 0 ? eF : 2.1;
@@ -355,14 +424,17 @@ function headShape(M, look, F, s, extraFn) {
     // front uses fr (positive), back uses bk (negative) -> z negative behind the head axis
     const z0 = c > 0 ? fr * Math.pow(c, 2 / e) : bk * Math.pow(-c, 2 / e);
     let z = z0;
-    // face sculpt (radial push in metres)
-    const da = Math.atan2(Math.sin(th - PI), Math.cos(th - PI)); // 0 = front centre
+    // face sculpt (radial push in metres); s-only factors are hoisted below
+    let da = th - PI; da -= TAU * Math.round(da / TAU); // 0 = front centre
     let push = 0;
-    push -= 0.0055 * g * gauss(Math.abs(da) - 0.42, 0.17) * gauss(s - F.eyeS, 0.035);    // eye sockets
-    push += 0.004 * g * gauss(da, 0.55) * gauss(s - F.browS, 0.03);                     // brow ridge
-    push += 0.0035 * g * gauss(Math.abs(da) - 0.75, 0.22) * gauss(s - (F.noseS + 0.07), 0.05); // cheekbones
-    push += 0.0035 * g * gauss(da, 0.22) * gauss(s - F.mouthS, 0.025);                  // lips
-    push += 0.003 * g * gauss(da, 0.3) * gauss(s - 0.045, 0.03);                         // chin
+    if (c > 0) {
+      const ad = Math.abs(da);
+      if (kEye) push -= kEye * gauss(ad - 0.42, 0.17);   // eye sockets
+      if (kBrow) push += kBrow * gauss(da, 0.55);        // brow ridge
+      if (kCheek) push += kCheek * gauss(ad - 0.75, 0.22); // cheekbones
+      if (kLip) push += kLip * gauss(da, 0.22);          // lips
+      if (kChin) push += kChin * gauss(da, 0.3);         // chin
+    }
     if (extraFn) push += extraFn(th, s, da);
     const L = Math.hypot(x, z) || 1;
     x += x / L * push; z += z / L * push;
@@ -378,7 +450,7 @@ function headRings(M, look, F, s0, s1, nr, extraFn) {
   }
   return rings;
 }
-function buildHead(B, look, M) {
+function buildHead(B, look, M, T) {
   const F = headFace(M, look);
   const sc = M.sc;
   const beard = look.beard === 'full' ? (th, s, da) => 0.006 * sc * smooth(0.42, 0.3, s) * (1 - smooth(1.2, 1.7, Math.abs(da))) : null;
@@ -422,24 +494,12 @@ function buildHead(B, look, M) {
       if (look.sex === 'f') ellipsoid(B, [ep[0] + s * 0.004 * sc, ep[1] - 0.026 * sc, ep[2] + 0.004 * sc], [0.004 * sc, 0.004 * sc, 0.004 * sc], { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }, { n: 6, nLat: 4, uvAt: () => swatchUV('earring'), weights: () => W('head', 1) });
     }
   }
-  buildHair(B, look, M, F);
-  if (look.glasses) {
-    // thin frame ring across the eyes (rendered as a slim band in front of the face)
-    const gp = headPt(F.eyeS, 0, 0.012 * sc);
-    const w = M.headB * 0.47;
-    const rings = [];
-    for (let i = 0; i <= 2; i++) {
-      const y = gp[1] - 0.012 * sc + i * 0.012 * sc;
-      rings.push({ c: [0, y, M.headZ - 0.01 * sc], ax: [1, 0, 0], az: [0, 0, 1], f: (th) => { const p = headShape(M, look, F, (y - M.chinY) / M.headH)(th); const L = Math.hypot(p[0], p[1]) || 1; return [p[0] + p[0] / L * 0.006 * sc, p[1] + 0.01 * sc + p[1] / L * 0.006 * sc]; }, s: i });
-    }
-    // only the front arc is useful; build a thin full ring hugging the face (temples hidden by hair)
-    loft(B, rings.slice(0, 1).concat(rings.slice(2)), { n: 28, uvAt: () => swatchUV('glass'), weights: () => W('head', 1) });
-  }
+  buildHair(B, look, M, F, T);
   return F;
 }
 function norm3(a) { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
 
-function buildHair(B, look, M, F) {
+function buildHair(B, look, M, F, T) {
   const sc = M.sc;
   const style = look.hair;
   const vol = look.hairVol;
@@ -453,13 +513,13 @@ function buildHair(B, look, M, F) {
     let t;
     switch (style) {
       case 'crop': t = 0.004 + 0.003 * top; break;
-      case 'short': t = 0.005 + 0.011 * top * vol + 0.004 * front * top; break;
+      case 'short': t = 0.007 + 0.014 * top * vol + 0.005 * front * top; break;
       case 'receding': t = 0.003 + 0.007 * top; break;
-      case 'medium': t = 0.008 + 0.016 * top * vol + 0.006 * front * top; break;
-      case 'quiff': t = 0.006 + 0.012 * top + 0.022 * front * smooth(0.65, 0.85, s) * vol; break;
+      case 'medium': t = 0.009 + 0.014 * top * vol + 0.006 * front * top; break;
+      case 'quiff': t = 0.008 + 0.012 * top + 0.013 * front * smooth(0.62, 0.85, s) * vol; break;
       case 'bob': t = 0.01 + 0.008 * top + 0.012 * (1 - smooth(0.2, 0.5, s)); break;
-      case 'long': t = 0.008 + 0.006 * top + 0.008 * (1 - smooth(0.25, 0.6, s)); break;
-      default: t = 0.0045 + 0.004 * top; // pulled back
+      case 'long': t = 0.011 + 0.008 * top + 0.01 * (1 - smooth(0.25, 0.6, s)); break;
+      default: t = 0.006 + 0.005 * top; // pulled back
     }
     return t * sc * (M.k > 0 ? 0.85 : 1);
   };
@@ -467,7 +527,8 @@ function buildHair(B, look, M, F) {
   const rings = headRings(M, look, F, s0, 0.993, 30);
   // coverage: long hair & bob extend down the sides/back
   const cov = (u, s) => {
-    let c = hairCoverage(look, F, u, s);
+    let c = hairCoverage(look, F, u, s, 0.07);
+    c = c * c * (3 - 2 * c);
     if (style === 'long' || style === 'bob') {
       const a = Math.abs((u - 0.5) * TAU);
       if (a > 1.0) c = Math.max(c, smooth(0.12, 0.2, s));
@@ -475,17 +536,40 @@ function buildHair(B, look, M, F) {
     return c;
   };
   const n = 40;
+  const hseed = (look.seed * 29 + 11) | 0;
   loft(B, rings, {
     n, rect: huv, capEnd: (thick(0.5, 1) + 0.002 * sc),
     post: (P, N) => {
+      // long / bob: below the temples the hair falls straight down (does not follow the jaw inwards)
+      let refK = -1;
+      if (style === 'long' || style === 'bob') for (let k = 0; k < P.length; k++) if (rings[k].s >= 0.47) { refK = k; break; }
       for (let k = 0; k < P.length; k++) {
         const s = rings[k].s;
         for (let i = 0; i <= n; i++) {
           const u = i / n;
           const c = cov(u, s);
-          const off = c * thick(u, s) - (1 - c) * 0.004 * sc + (c > 0 ? 0.0006 : 0);
+          const p0 = P[k][i];
+          const clump = 1 + 0.22 * noise3(hseed, p0[0] * 55, p0[1] * 40, p0[2] * 55) + 0.1 * noise3(hseed + 9, p0[0] * 130, p0[1] * 90, p0[2] * 130);
+          const off = c * thick(u, s) * Math.max(0.4, clump) - (1 - c) * 0.004 * sc + (c > 0 ? 0.0006 : 0);
           const p = P[k][i], q = N[k][i];
           P[k][i] = [p[0] + q[0] * off, p[1] + q[1] * off, p[2] + q[2] * off];
+        }
+      }
+      if (refK >= 0) {
+        const cz = M.headZ;
+        for (let k = 0; k < refK; k++) {
+          const s = rings[k].s;
+          for (let i = 0; i <= n; i++) {
+            const u = i / n;
+            const a = Math.abs((u - 0.5) * TAU);
+            if (a < 0.9) continue; // not over the face
+            const c = cov(u, s);
+            if (c < 0.5) continue;
+            const pr = P[refK][i], p = P[k][i];
+            const rr = Math.hypot(pr[0], pr[2] - cz), rp = Math.hypot(p[0], p[2] - cz);
+            const want = rr * (1 + 0.04 * (rings[refK].s - s)) ;
+            if (rp < want) { const f = lerp(1, want / rp, smooth(0.9, 1.4, a) * c); P[k][i] = [p[0] * f, p[1], cz + (p[2] - cz) * f]; }
+          }
         }
       }
     },
@@ -509,8 +593,8 @@ function buildHair(B, look, M, F) {
   };
   if (style === 'long') {
     // hair curtain down the back
-    const len = look.hairLen * M.H / 1.6;
-    const yTop = M.chinY + 0.62 * M.headH;
+    const len = Math.min(look.hairLen * M.H / 1.6, (M.neckBaseY - M.waistY) * 0.85);
+    const yTop = M.chinY + 0.5 * M.headH;
     const rings2 = [];
     const nr = 14;
     for (let i = 0; i <= nr; i++) {
@@ -519,14 +603,14 @@ function buildHair(B, look, M, F) {
       // follow the back of the head, then the upper back
       let zb;
       if (y > M.chinY + 0.2 * M.headH) { const s = (y - M.chinY) / M.headH; zb = backPt(s)[2] - 0.004 * sc; }
-      else zb = Math.min(backPt(0.2)[2] - 0.004 * sc, -0.07 * sc - (M.neckBaseY - y > 0 ? 0.06 * sc * smooth(0, 0.15 * sc, M.neckBaseY - y) : 0));
-      const w = (0.5 * M.headB * lerp(0.92, 1.0, smooth(0, 0.3, t)) + 0.04 * sc * smooth(0.3, 1, t)) * (1 - 0.25 * smooth(0.8, 1, t));
-      const thk = (0.03 - 0.012 * t) * sc * vol;
-      rings2.push({ c: [0, y, zb - thk * 0.3], ax: [1, 0, 0], az: [0, 0, 1], f: (th) => { const c = Math.cos(th), s = Math.sin(th); return [w * c, thk * s - 0.035 * sc * c * c * (1 - smooth(0.0, 0.25, t) * 0.4)]; }, v: t * 0.9, s: t });
+      else zb = Math.min(backPt(0.2)[2] - 0.004 * sc, T.point(clamp(y, T.bot + 0.01, T.top - 0.01), 1.5 * PI, 0.03 * sc)[2] + 0.004 * sc);
+      const w = (0.5 * M.headB * lerp(0.95, 1.05, smooth(0, 0.3, t)) + 0.05 * sc * smooth(0.3, 1, t)) * (1 - 0.3 * smooth(0.82, 1, t));
+      const thk = (0.01 + 0.024 * smooth(0.0, 0.3, t) - 0.012 * t) * sc * vol;
+      rings2.push({ c: [0, y, zb - thk * 0.45 + 0.004 * sc * (1 - smooth(0, 0.2, t))], ax: [1, 0, 0], az: [0, 0, 1], f: (th) => { const c = Math.cos(th), s = Math.sin(th); return [w * c, thk * s + 0.016 * sc * c * c * (1 - smooth(0.0, 0.25, t) * 0.4)]; }, v: t * 0.9, s: t });
     }
     loft(B, rings2, {
       n: 20, rect: huv, capEnd: 0.005 * sc,
-      weights: (p) => { const y = p[1]; const wh = smooth(M.neckBaseY, M.chinY + 0.3 * M.headH, y); return W('head', wh, 'tail', (1 - wh) * 0.35, 'chest', (1 - wh) * 0.65); },
+      weights: (p) => { const y = p[1]; const wh = smooth(M.neckBaseY, M.chinY + 0.3 * M.headH, y); return W('head', wh, 'tail', (1 - wh) * 0.15, 'chest', (1 - wh) * 0.85); },
       color: (p, t, th) => { const a = 0.7 + 0.3 * Math.max(0, -Math.sin(th)); return [a, a, a]; },
     });
   }
@@ -558,26 +642,26 @@ function buildHair(B, look, M, F) {
         pts.push([x, y, z - (style === 'pony' ? 0.012 * sc * Math.sin(t * PI) : 0)]);
       }
       if (style === 'pony') {
-        ribbon(B, pts, 12, (t) => (0.04 - 0.025 * t) * sc * vol, (t) => (0.03 - 0.02 * t) * sc * vol, () => [1, 0, 0], {
+        ribbon(B, pts, 12, (t) => (0.058 - 0.03 * t) * sc * vol * (1 - 0.6 * Math.pow(t, 6)), (t) => (0.042 - 0.02 * t) * sc * vol, () => [1, 0, 0], {
           n: 10, e: 2.2, rect: huv, capEnd: 0.008 * sc, capStart: 0.004 * sc,
           weights: (p) => tailW(p), color: (p, s, th) => { const a = 0.75 + 0.25 * Math.max(0, -Math.sin(th)); return [a, a, a]; },
         });
       } else {
-        // braid: chain of small lobes
-        const segs = Math.max(6, Math.round(len / (0.032 * sc)));
-        const samples = pts;
-        for (let i = 0; i < segs; i++) {
-          const t = (i + 0.5) / segs;
-          const f = t * (samples.length - 1);
-          const j = Math.min(samples.length - 2, Math.floor(f));
-          const q = f - j;
-          const c = [lerp(samples[j][0], samples[j + 1][0], q), lerp(samples[j][1], samples[j + 1][1], q), lerp(samples[j][2], samples[j + 1][2], q)];
-          const r = (0.019 - 0.007 * t) * sc * (style === 'twoBraids' ? 0.8 : 1);
-          const tw = (i % 2 ? 1 : -1) * 0.35;
-          ellipsoid(B, c, [r * 1.05, r * 1.25, r * 0.85], { x: [Math.cos(tw), 0, Math.sin(tw)], y: [0, 1, 0], z: [-Math.sin(tw), 0, Math.cos(tw)] }, {
-            n: 8, nLat: 5, rect: huv, weights: (p) => tailW(p), color: (p) => { const a = 0.7 + 0.3 * clamp((p[1] - c[1]) / r + 0.5, 0, 1); return [a, a, a]; },
-          });
-        }
+        // braid: one tapered tube whose section bulges left / right alternately (three-strand look)
+        const r0 = (0.02 * (style === 'twoBraids' ? 0.8 : 1)) * sc;
+        const period = 0.032 * sc / len; // in t units
+        ribbon(B, pts, Math.max(24, Math.round(len / (0.006 * sc))), (t) => r0 * 2 * (1 - 0.45 * t), (t) => r0 * 1.7 * (1 - 0.45 * t), () => [1, 0, 0], {
+          n: 12, rect: huv, capEnd: 0.004 * sc, capStart: 0.004 * sc,
+          shape: (th, t, ww, tt) => {
+            const ph = (t / period) * Math.PI * 2;
+            const pl = 0.5 + 0.5 * Math.cos(ph), pr = 0.5 + 0.5 * Math.cos(ph + Math.PI);
+            const c = Math.cos(th), s = Math.sin(th);
+            const lobe = 1 + 0.28 * (Math.max(0, c) * pl + Math.max(0, -c) * pr) - 0.12 * Math.abs(s) * Math.abs(Math.sin(ph));
+            return [ww / 2 * c * lobe, tt / 2 * s * lobe];
+          },
+          weights: (p) => tailW(p),
+          color: (p, t, th) => { const ph = (t / period) * Math.PI * 2; const a = 0.72 + 0.2 * Math.abs(Math.cos(ph * 0.5 + th)) + 0.08 * Math.max(0, -Math.sin(th)); return [a, a, a]; },
+        });
         const endP = pts[pts.length - 1];
         ellipsoid(B, [endP[0], endP[1] - 0.008 * sc, endP[2]], [0.012 * sc, 0.025 * sc, 0.01 * sc], { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }, { n: 8, nLat: 5, rect: huv, weights: (p) => tailW(p) });
       }
@@ -588,16 +672,16 @@ function buildHair(B, look, M, F) {
 // ------------------------------------------------------------------ arms & hands
 const ARMP = keyed([
   // d / upperArm (0 shoulder joint, 1 elbow, 2 wrist), medial-lateral radius, front-back radius (m at 1.7m male)
-  [-0.2, 0.024, 0.03],
-  [-0.12, 0.043, 0.045],
-  [0.0, 0.05, 0.05],
-  [0.18, 0.047, 0.046],
-  [0.4, 0.04, 0.042],
-  [0.65, 0.037, 0.041],
-  [0.9, 0.034, 0.035],
-  [1.0, 0.033, 0.033],
-  [1.18, 0.034, 0.04],
-  [1.4, 0.031, 0.036],
+  [-0.09, 0.022, 0.026],
+  [-0.045, 0.034, 0.038],
+  [0.0, 0.039, 0.043],
+  [0.15, 0.042, 0.044],
+  [0.4, 0.039, 0.042],
+  [0.65, 0.036, 0.04],
+  [0.9, 0.033, 0.035],
+  [1.0, 0.032, 0.033],
+  [1.18, 0.034, 0.039],
+  [1.4, 0.031, 0.035],
   [1.75, 0.022, 0.028],
   [2.0, 0.019, 0.026],
   [2.06, 0.018, 0.025],
@@ -615,11 +699,11 @@ function buildArm(B, look, M, R, s, items) {
   const g = M.girth * (M.f ? 0.88 : 1) * (M.k > 0 ? 0.95 : 1);
   const sleeve = o.sleeve || 0;
   const sleeveD = sleeve * armLen;
-  const loose = { hoodie: 0.014, jacket: 0.016, kurta: 0.012, kameez: 0.01, kurti: 0.01, shirt: 0.01, tee: 0.012, polo: 0.01, top: 0.006, frock: 0.012, saree: 0.003 }[o.top] || 0.008;
+  const loose = { hoodie: 0.013, jacket: 0.015, kurta: 0.01, kameez: 0.007, kurti: 0.007, shirt: 0.008, tee: 0.007, polo: 0.007, top: 0.005, frock: 0.008, saree: 0.003 }[o.top] || 0.006;
   const dList = [];
   const pushD = (q) => dList.push(q);
-  for (let q = -0.2; q <= 2.06 + 1e-9; q += 0.08) pushD(q);
-  pushD(-0.16); pushD(-0.06); pushD(0.95); pushD(1.05); pushD(2.06);
+  for (let q = -0.09; q <= 2.06 + 1e-9; q += 0.08) pushD(q);
+  pushD(-0.065); pushD(-0.03); pushD(0.95); pushD(1.05); pushD(2.06);
   const sq = sleeveD / Lua;
   if (sleeve > 0 && sleeve < 0.98) { pushD(sq - 0.025); pushD(sq + 0.012); pushD(sq - 0.005); }
   dList.sort((a, b) => a - b);
@@ -631,16 +715,20 @@ function buildArm(B, look, M, R, s, items) {
     let ra = P[0] * sc * g, rb = P[1] * sc * g;
     let off = 0;
     if (sleeve > 0 && d <= sleeveD + 1e-6) {
-      off = loose * sc * (1 + (sleeve < 0.5 ? 0.6 * smooth(0, sleeveD, d) : 0)) + (q < 0 ? 0.002 : 0);
+      off = loose * sc * (1 + (sleeve < 0.5 ? 0.9 * smooth(0.5 * sleeveD, sleeveD, d) : 0)) + (q < 0 ? 0.001 : 0);
       if (sleeve >= 0.98 && q > 1.8) off *= 1 - 0.6 * smooth(1.8, 2.0, q); // cuff
     }
     // deltoid: centre shifted outward/up near the top
-    const cOff = 0.01 * sc * gauss(q + 0.05, 0.12);
+    const cOff = 0;
     const c = [sh[0] + dir[0] * d + lat[0] * cOff, sh[1] + dir[1] * d + lat[1] * cOff, sh[2] + dir[2] * d];
     rings.push({ c, ax: med, az: [0, 0, 1], f: (th) => [(ra + off) * Math.cos(th), (rb + off) * Math.sin(th)], v: clamp(d / armLen, 0, 1), s: d });
   }
   loft(B, rings, {
-    n: 18, arc: true, rect: rectUV('arms'), capStart: 0.012 * sc,
+    n: 18, arc: true, rect: rectUV('arms'), capStart: 0.007 * sc,
+    post: (P, N) => {
+      if (sleeve <= 0) return;
+      wrinkle(P, N, (look.seed * 17 + (s > 0 ? 1 : 2)) | 0, (p, k) => (rings[k].s < sleeveD - 0.005 ? (0.0025 + 0.002 * gauss(rings[k].s - Lua, 0.05 * sc)) * sc : 0), [16 / sc, 11 / sc, 16 / sc], 2);
+    },
     weights: (p, d) => {
       const wTop = smooth(-0.06 * sc, 0.06 * sc, d);
       const wFa = smooth(Lua - 0.035 * sc, Lua + 0.035 * sc, d);
@@ -660,7 +748,7 @@ function buildArm(B, look, M, R, s, items) {
   const W0 = R[BI['hand' + L]].toArray();
   const hl = M.handLen;
   const grip = items && items.gripSide === L;
-  const curl = grip ? 0.6 : 0.25;
+  const curl = grip ? 0.6 : 0.38;
   const hs = sc * (M.f ? 0.92 : 1) * (M.k > 0 ? 0.95 : 1);
   const HP = keyed([[0, 0.019, 0.026], [0.12, 0.021, 0.036], [0.35, 0.017, 0.043], [0.55, 0.015, 0.044], [0.68, 0.014, 0.041], [0.85, 0.012, 0.036], [0.97, 0.01, 0.028], [1.0, 0.008, 0.02]]);
   const hrings = [];
@@ -684,7 +772,7 @@ function buildArm(B, look, M, R, s, items) {
   });
   // thumb: from the palm base, forward and down
   const tb = [W0[0] + dir[0] * hl * 0.18 + med[0] * 0.008 * hs, W0[1] + dir[1] * hl * 0.18, W0[2] + 0.024 * hs];
-  const tdir = norm3([dir[0] * 0.8 + med[0] * (grip ? 0.45 : 0.25), dir[1] * 0.8, 0.55]);
+  const tdir = norm3([dir[0] * 0.9 + med[0] * (grip ? 0.5 : 0.3), dir[1] * 0.9, grip ? 0.4 : 0.28]);
   const tl = hl * 0.5;
   const trings = [];
   for (let i = 0; i <= 5; i++) {
@@ -713,11 +801,13 @@ function buildArm(B, look, M, R, s, items) {
 // ------------------------------------------------------------------ legs & feet
 const LEGP = keyed([
   // q (0 hip joint, 1 knee, 2 ankle), medial-lateral r, front-back r, centre z offset, centre x outward offset  (m at 1.7m)
-  [-0.25, 0.066, 0.07, 0.0, 0.012],
-  [0.0, 0.082, 0.087, 0.0, 0.01],
-  [0.18, 0.08, 0.084, 0.002, 0.004],
-  [0.45, 0.07, 0.074, 0.004, -0.002],
-  [0.78, 0.056, 0.058, 0.004, -0.007],
+  [-0.22, 0.04, 0.045, 0.0, -0.01],
+  [-0.1, 0.058, 0.062, 0.0, -0.006],
+  [0.0, 0.07, 0.075, 0.0, -0.004],
+  [0.1, 0.078, 0.083, 0.002, -0.004],
+  [0.2, 0.08, 0.085, 0.003, -0.004],
+  [0.45, 0.07, 0.074, 0.004, -0.005],
+  [0.78, 0.056, 0.058, 0.004, -0.008],
   [1.0, 0.049, 0.051, 0.003, -0.009],
   [1.12, 0.049, 0.056, -0.004, -0.008],
   [1.3, 0.049, 0.058, -0.008, -0.007],
@@ -741,7 +831,7 @@ function buildLeg(B, look, M, R, T, s) {
   // lowest y of the leg loft
   const yBot = trousers ? (bottom === 'salwar' ? M.ankleY - 0.0 : 0.03 * sc + M.soleH * 0.7) : shoes ? M.ankleY + 0.02 * sc : M.ankleY - 0.012 * sc;
   const ys = [];
-  for (let q = -0.25; q <= 2.0; q += 0.1) ys.push(yq(q));
+  for (let q = -0.22; q <= 2.0; q += 0.1) ys.push(yq(q));
   ys.push(yq(0.95), yq(1.05), yq(1.9), yq(1.96));
   if (bottom === 'shorts') { ys.push(yq(0.86) + 0.003, yq(0.86) - 0.004); }
   if (bottom === 'churidar') for (let q = 1.55; q < 2.0; q += 0.035) ys.push(yq(q));
@@ -764,7 +854,7 @@ function buildLeg(B, look, M, R, T, s) {
       off = 0.016 * sc;
       if (q > 1.0) { ra = Math.max(ra + off, 0.06 * sc); rb = Math.max(rb + off, 0.062 * sc); off = 0; }
     } else if (bottom === 'salwar') {
-      off = (0.03 + 0.03 * smooth(0, 1.4, q)) * sc * (1 - smooth(1.75, 1.98, q) * 0.85);
+      off = (0.012 + 0.048 * smooth(0.05, 1.3, q)) * sc * (1 - smooth(1.75, 1.98, q) * 0.85);
     } else if (bottom === 'churidar') {
       off = 0.004 * sc + (q > 1.55 ? 0.005 * sc * Math.abs(Math.sin((y / (0.017 * sc)) * PI)) : 0);
     } else if (bottom === 'leggings') {
@@ -783,8 +873,18 @@ function buildLeg(B, look, M, R, T, s) {
     rings.push({ c: [last.c[0], y, last.c[2]], ax: last.ax, az: last.az, f: (th) => { const q = f0(th); return [q[0] * 0.62, q[1] * 0.62]; }, v: 1, s: y });
     capEnd = 0.0;
   }
+  const clothLeg = !skinLeg && bottom !== 'leggings';
   loft(B, rings, {
     n: 22, arc: true, rect: rectUV('legs'), capEnd, capStart: 0.01 * sc,
+    post: (P, N) => {
+      if (!clothLeg) return;
+      const baggy = bottom === 'salwar' || bottom === 'pyjama' ? 2.2 : 1;
+      wrinkle(P, N, (look.seed * 19 + (s > 0 ? 3 : 4)) | 0, (p) => {
+        const y = p[1];
+        if (bottom === 'shorts' && y < yq(0.86)) return 0;
+        return (0.0018 + 0.0022 * gauss(y - M.kneeY, 0.07 * sc) + 0.0025 * smooth(0.2 * sc, 0.06 * sc, y)) * sc * baggy;
+      }, baggy > 1 ? [22 / sc, 6 / sc, 22 / sc] : [12 / sc, 16 / sc, 12 / sc], 2);
+    },
     weights: (p, y) => {
       const wPel = 0.6 * smooth(M.hipY - 0.06 * sc, M.hipY + 0.07 * sc, y);
       const wSh = 1 - smooth(M.kneeY - 0.05 * sc, M.kneeY + 0.05 * sc, y);
@@ -873,7 +973,7 @@ function buildFoot(B, look, M, R, s) {
       n: 20, arc: true, rect: rectUV('shoes'), capStart: 0.006 * sc, capEnd: 0.008 * sc,
       uvAt: (p) => (p[1] < sole ? suv : null),
       weights: footW(),
-      color: (p) => { const a = p[1] < 0.004 ? 0.55 : p[1] < sole ? 0.9 : 1; return [a, a, a]; },
+      color: (p) => { const a = p[1] < 0.01 ? 0.5 : p[1] < sole ? 0.75 : 1; return [a, a, a]; }, // dark sole edge
     });
   } else {
     // sole slab + bare/sandal foot on top
@@ -887,64 +987,97 @@ function buildFoot(B, look, M, R, s) {
       srings.push({ c: [x0, 0, z], ax: [1, 0, 0], az: [0, 1, 0], v: t, s: t, f: (th) => { const c = -Math.cos(th), sn = Math.sin(th); const x = w * Math.sign(sn) * Math.pow(Math.abs(sn), 0.4); const y = sole / 2 + sole / 2 * Math.sign(c) * Math.pow(Math.abs(c), 0.4); return [x, y]; } });
     }
     const suv = swatchUV('sole');
-    loft(B, srings, { n: 16, uvAt: () => suv, capStart: 0.003, capEnd: 0.004, weights: footW(), color: (p) => { const a = p[1] < 0.004 ? 0.5 : 0.9; return [a, a, a]; } });
+    loft(B, srings, { n: 16, uvAt: () => suv, capStart: 0.003, capEnd: 0.004, weights: footW(), color: (p) => { const a = p[1] < 0.006 ? 0.45 : 0.72; return [a, a, a]; } });
     const rings = ringsFor(BAREP, sole - 0.002, 0, o.shoes === 'flat' ? 1.05 : 1);
     loft(B, rings, { n: 16, arc: true, rect: rectUV('shoes'), capStart: 0.005 * sc, capEnd: 0.005 * sc, weights: footW(), color: (p) => { const a = p[1] < sole + 0.006 ? 0.8 : 1; return [a, a, a]; } });
+  }
+}
+
+// outer garment thickness over the bare leg at leg parameter q (0 hip, 1 knee, 2 ankle); used to keep skirts outside
+function trouserOff(bottom, q, sc) {
+  switch (bottom) {
+    case 'jeans': case 'chinos': return (q > 1 ? 0.014 : 0.008) * sc;
+    case 'pyjama': return (q > 1 ? 0.022 : 0.016) * sc;
+    case 'salwar': return (0.012 + 0.048 * smooth(0.05, 1.3, q)) * sc * (1 - smooth(1.75, 1.98, q) * 0.85) + 0.01 * sc;
+    case 'churidar': return 0.009 * sc;
+    case 'leggings': return 0.003 * sc;
+    case 'shorts': return q < 0.86 ? 0.03 * sc : 0;
+    default: return 0;
   }
 }
 
 // ------------------------------------------------------------------ skirt (kurta / kameez / frock / saree)
 function buildSkirt(B, look, M, R, T) {
   const o = look.outfit, sc = M.sc, H = M.H;
-  const saree = o.top === 'saree';
-  const yTop = saree ? T.sareeWaistY + 0.01 : T.mapY(0.54);
-  const yHem = saree ? 0.025 * sc : Math.max(o.skirtLen * H, 0.12);
-  const flare = saree ? 0.06 * sc : o.top === 'frock' ? 0.08 * sc : (o.top === 'kurta' && look.sex === 'm' ? 0.05 : 0.045) * sc;
-  const top = T.shapeAt(yTop);
-  const nr = 16;
+  const saree = o.top === 'saree', frock = o.top === 'frock';
+  const yTop = saree ? T.sareeWaistY + 0.008 * sc : T.mapY(0.548);
+  const yHem = saree ? 0.02 * sc : Math.max(o.skirtLen * H, 0.12);
+  const hipD = T.dims(M.hipY - 0.005 * sc);
+  const thighR = 0.084 * sc * M.girth * (M.f ? 1.05 : 1);
+  const legX = M.hipX - 0.004 * sc;
+  const ex = 2.4;
+  const w0 = hipD.w + T.cloth(M.hipY) + 0.006 * sc;
+  const need = (thighR + 0.01 * sc) / Math.pow(1 - Math.pow(Math.min(0.95, legX / w0), ex), 1 / ex);
+  const df0 = Math.max(hipD.df + 0.014 * sc, need);
+  const db0 = hipD.db + 0.014 * sc + T.cloth(M.hipY);
+  const flare = saree ? 0.045 * sc : frock ? 0.09 * sc : (o.top === 'kurta' && look.sex === 'm' ? 0.025 : 0.02) * sc;
+  const nr = 18;
   const rings = [];
-  const hipFn = T.shapeAt(M.hipY - 0.01);
   for (let i = 0; i <= nr; i++) {
     const t = i / nr;
     const y = lerp(yTop, yHem, t);
-    const add = 0.004 * sc + flare * Math.pow(t, 1.2) + (saree ? 0.006 * sc : 0);
-    const tb = smooth(0, 0.25, t);
+    const ft = Math.pow(t, 1.3);
+    // the legs (with trousers) at this height must fit inside with a margin
+    const q = y >= M.kneeY ? (M.hipY - y) / (M.hipY - M.kneeY) : 1 + (M.kneeY - y) / (M.kneeY - M.ankleY);
+    const LP = LEGP(q);
+    const lr = Math.max(LP[0], LP[1]) * sc * M.girth * (M.f ? 1.05 : 1) + trouserOff(o.bottom, q, sc) + 0.01 * sc;
+    const lcx = M.hipX + LP[3] * sc, lcz = LP[2] * sc;
+    const w = Math.max(w0 + flare * ft, lcx + lr + 0.022 * sc);
+    const needF = (lcz + lr + 0.024 * sc) / Math.pow(1 - Math.pow(Math.min(0.95, lcx / w), ex), 1 / ex);
+    const df = Math.max(df0 + flare * 0.75 * ft + 0.008 * sc * smooth(0.2, 0.8, t), needF) + 0.012 * sc * gauss(y - (M.hipY - 0.06 * sc), 0.06 * sc) + (saree ? 0.03 * sc * smooth(0.25, 0.6, t) + 0.03 * sc * smooth(0.6, 1, t) : 0);
+    const needB = (-lcz + lr + 0.024 * sc) / Math.pow(1 - Math.pow(Math.min(0.95, lcx / w), ex), 1 / ex);
+    const db = Math.max(db0 + flare * 0.6 * ft, needB);
+    const body = y > T.bot ? T.shapeAt(y) : null;
+    const k = lerp(0.9, 1, smooth(0, 0.3, t));
+    const dims = body ? T.dims(y) : null;
     rings.push({
-      c: [0, y, -0.005 * sc * t], ax: [1, 0, 0], az: [0, 0, 1], v: t, s: t,
+      c: [0, y, hipD.cz], ax: [1, 0, 0], az: [0, 0, 1], v: t, s: t,
       f: (th) => {
-        const a = top(th), b = hipFn(th);
-        // below the hips keep at least the hip width
-        let x = lerp(a[0], Math.sign(b[0]) * Math.max(Math.abs(a[0]), Math.abs(b[0])), tb);
-        let z = lerp(a[1], Math.sign(b[1]) * Math.max(Math.abs(a[1]), Math.abs(b[1])), tb);
-        // smooth to an ellipse lower down (drape hides the body shape)
-        const ex = Math.cos(th) * Math.max(Math.abs(b[0]), 0.0001), ez = Math.sin(th) * (Math.sin(th) > 0 ? Math.abs(hipFn(PI / 2)[1]) : Math.abs(hipFn(1.5 * PI)[1]));
-        const sm = smooth(0.2, 0.8, t);
-        x = lerp(x, ex, sm); z = lerp(z, ez, sm);
-        const L = Math.hypot(x, z) || 1;
-        let push = add;
-        if (saree) {
-          const dF = Math.atan2(Math.sin(th - PI / 2), Math.cos(th - PI / 2));
-          push += 0.007 * sc * Math.sin(dF * 16) * gauss(dF + 0.05, 0.3) * (0.4 + 0.6 * t);
-        } else push += 0.004 * sc * Math.sin(th * 9 + 1) * smooth(0.3, 1, t);
-        return [x + x / L * push, z + z / L * push];
+        const e = sellipse(th, w * k, (Math.sin(th) > 0 ? df : db) * k, ex);
+        let L = Math.hypot(e[0], e[1]) || 1;
+        let r = L;
+        if (body) {
+          const p = body(th);
+          const rb = Math.hypot(p[0], p[1] - dims.cz + (dims.cz - hipD.cz)) + 0.006 * sc;
+          // smooth max
+          r = 0.5 * (r + rb + Math.sqrt((r - rb) * (r - rb) + 0.0001 * sc * sc));
+        }
+        const dF = Math.atan2(Math.sin(th - PI / 2), Math.cos(th - PI / 2));
+        if (saree) r += 0.007 * sc * Math.sin(dF * 16) * Math.exp(-dF * dF / 0.18) * (0.3 + 0.7 * t);
+        else r += 0.0035 * sc * Math.sin(th * 9 + 1) * smooth(0.3, 1, t);
+        return [e[0] / L * r, e[1] / L * r];
       },
     });
   }
   // hem lip (turn inward)
   const last = rings[rings.length - 1];
-  rings.push({ c: [0, yHem + 0.01 * sc, last.c[2]], ax: [1, 0, 0], az: [0, 0, 1], v: 1, s: 1.02, f: (th) => { const q = last.f(th); return [q[0] * 0.93, q[1] * 0.93]; } });
-  const kmax = saree ? 0.85 : 0.82;
+  rings.push({ c: [0, yHem + 0.012 * sc, last.c[2]], ax: [1, 0, 0], az: [0, 0, 1], v: 1, s: 1.02, f: (th) => { const q = last.f(th); return [q[0] * 0.92, q[1] * 0.92]; } });
+  const kmax = saree ? 0.9 : 0.96;
   loft(B, rings, {
     n: 48, arc: true, rect: rectUV('skirt'),
+    post: (P, N) => {
+      wrinkle(P, N, (look.seed * 23 + 7) | 0, (p, k) => (k < nr + 1 ? (0.003 + 0.007 * (k / nr)) * sc : 0), [26 / sc, 3 / sc, 26 / sc], 2);
+    },
     weights: (p, t) => {
       const tt = Math.min(t, 1);
-      const k = kmax * smooth(0.0, 0.85, tt);
-      const side = clamp(p[0] / (M.hipX * 1.5), -1, 1);
-      const wl = 0.5 + 0.5 * side;
+      const yk = smooth(M.hipY + 0.02 * sc, M.hipY - 0.1 * sc, p[1]);
+      const k = kmax * yk;
+      const side = p[0] / (M.hipX * 1.2);
+      const wl = smooth(-0.55, 0.55, side);
       const ks = saree ? 0.28 * smooth(0.55, 1, tt) : 0;
       return W('pelvis', 1 - k, 'thighL', k * wl * (1 - ks), 'thighR', k * (1 - wl) * (1 - ks), 'shinL', k * wl * ks, 'shinR', k * (1 - wl) * ks);
     },
-    color: (p, t) => { const a = t > 1 ? 0.45 : 1 - 0.15 * smooth(0.8, 1, t) * 0; return [a, a, a]; },
+    color: (p, t) => { const a = t > 1 ? 0.5 : 1; return [a, a, a]; },
   });
 }
 
@@ -953,7 +1086,7 @@ function buildDrape(B, look, M, R, T) {
   const o = look.outfit, sc = M.sc;
   const F = (fa) => T.mapY(fa);
   const tp = (fa, th, off) => T.point(F(fa), th, off * sc);
-  const shTop = (s, off = 0) => [s * M.shoulderX * 0.62, M.shoulderY + (0.05 + off) * sc, -0.012 * sc];
+  const shTop = (s, off = 0) => [s * M.shoulderX * 0.6, M.shoulderY + (0.062 + off) * sc, -0.014 * sc];
   const outward = (p) => {
     const r = [p[0], 0, p[2] + 0.01 * sc];
     const up = 3 * smooth(M.shoulderY - 0.02 * sc, M.shoulderY + 0.04 * sc, p[1]);
@@ -964,18 +1097,46 @@ function buildDrape(B, look, M, R, T) {
   let pts, width, thick = 0.007 * sc;
   const BK = 1.5 * PI, FR = 0.5 * PI;
   if (o.top === 'saree') {
-    pts = [tp(0.74, FR - 0.5, 0.02), tp(0.79, FR - 0.85, 0.02), shTop(1, 0.005), tp(0.785, BK + 0.75, 0.02), tp(0.7, BK + 0.45, 0.025), tp(0.6, BK + 0.3, 0.03),
-      [0.07 * sc, F(0.5), T.point(F(0.5), BK + 0.25, 0.045 * sc)[2]], [0.06 * sc, F(0.42), T.point(F(0.5), BK + 0.2, 0.06 * sc)[2] - 0.01 * sc]];
-    width = (t) => lerp(0.13, 0.33, smooth(0.15, 0.6, t)) * sc;
+    pts = [tp(0.74, FR - 0.5, 0.016), tp(0.785, FR - 0.85, 0.014), shTop(1, -0.004), tp(0.785, BK + 0.7, 0.012), tp(0.7, BK + 0.42, 0.014), tp(0.6, BK + 0.3, 0.018),
+      [0.07 * sc, F(0.5), T.point(F(0.5), BK + 0.25, 0.04 * sc)[2]], [0.065 * sc, F(0.43), T.point(F(0.5), BK + 0.2, 0.05 * sc)[2] - 0.006 * sc]];
+    width = (t) => lerp(0.1, 0.3, smooth(0.15, 0.6, t)) * sc;
   } else if (o.dupattaStyle === 'one') {
-    pts = [tp(0.56, FR - 0.55, 0.03), tp(0.66, FR - 0.6, 0.03), tp(0.75, FR - 0.75, 0.025), shTop(1, 0), tp(0.78, BK + 0.6, 0.02), tp(0.68, BK + 0.45, 0.025), tp(0.55, BK + 0.45, 0.03)];
-    width = (t) => lerp(0.17, 0.1, gauss(t - 0.5, 0.12)) * sc;
+    pts = [tp(0.57, FR - 0.5, 0.022), tp(0.66, FR - 0.55, 0.02), tp(0.75, FR - 0.68, 0.016), shTop(1, -0.008), tp(0.775, BK + 0.6, 0.014), tp(0.68, BK + 0.45, 0.018), tp(0.56, BK + 0.45, 0.022)];
+    width = (t) => lerp(0.14, 0.065, gauss(t - 0.5, 0.12)) * sc;
   } else {
-    pts = [tp(0.55, BK + 0.6, 0.03), tp(0.67, BK + 0.6, 0.025), tp(0.775, BK + 0.65, 0.02), shTop(1, 0), tp(0.765, FR - 0.75, 0.025), tp(0.705, FR - 0.25, 0.035), tp(0.7, FR, 0.04), tp(0.705, FR + 0.25, 0.035), tp(0.765, FR + 0.75, 0.025), shTop(-1, 0), tp(0.775, BK - 0.65, 0.02), tp(0.67, BK - 0.6, 0.025), tp(0.55, BK - 0.6, 0.03)];
-    width = (t) => lerp(0.17, 0.09, Math.max(gauss(t - 0.25, 0.06), gauss(t - 0.75, 0.06), 0.5 * gauss(t - 0.5, 0.1))) * sc;
+    pts = [tp(0.55, BK + 0.3, 0.022), tp(0.66, BK + 0.36, 0.018), tp(0.77, BK + 0.52, 0.014), shTop(1, -0.008), tp(0.775, FR - 0.6, 0.016), tp(0.725, FR - 0.28, 0.02), tp(0.705, FR, 0.024), tp(0.725, FR + 0.28, 0.02), tp(0.775, FR + 0.6, 0.016), shTop(-1, -0.008), tp(0.77, BK - 0.52, 0.014), tp(0.66, BK - 0.36, 0.018), tp(0.55, BK - 0.3, 0.022)];
+    width = (t) => lerp(0.1, 0.055, Math.max(gauss(t - 0.25, 0.05), gauss(t - 0.75, 0.05), 0.5 * gauss(t - 0.5, 0.12))) * sc;
   }
-  ribbon(B, pts, o.top === 'saree' ? 26 : 34, width, thick, side, {
-    n: 12, e: 8, rect: duv, capStart: 0.0, capEnd: 0.0,
+  // the hanging ends sag away from the body (soft catenary) instead of lying flat on it
+  if (o.top !== 'saree') {
+    const n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      const low = smooth(M.chestY + 0.02 * sc, M.waistY, p[1]);
+      if (p[2] < -0.02 * sc) pts[i] = [p[0] * (1 + 0.08 * low), p[1] - 0.012 * sc * low, p[2] - 0.022 * sc * low];
+    }
+  }
+  // a slow twist along the length and a gentle bow / pleats across the width: cloth, not card
+  const dseed = (look.seed * 37 + 3) | 0;
+  const twisted = (p, t, tk) => {
+    const sd = side(p, t);
+    const a = 0.32 * Math.sin(tk * PI * 2.3 + (dseed % 7)) * smooth(0.0, 0.2, tk) * smooth(1.0, 0.8, tk);
+    const nn = norm3(v3.cross(t, sd));
+    return [sd[0] * Math.cos(a) + nn[0] * Math.sin(a), sd[1] * Math.cos(a) + nn[1] * Math.sin(a), sd[2] * Math.cos(a) + nn[2] * Math.sin(a)];
+  };
+  const sideFn = o.top === 'saree' ? () => [1, 0, 0] : twisted;
+  // pleats deepen toward the hanging ends (tk -> 0 / 1), the part over the shoulders stays smoother
+  const pleatPhase = (xn, tk) => xn * PI * 2.6 + tk * 11 + dseed;
+  const pleatAmp = (tk) => (0.004 + 0.009 * Math.pow(Math.abs(tk - 0.5) * 2, 1.5)) * sc * (0.7 + 0.3 * Math.sin(tk * 5.0 + dseed * 0.3));
+  const shape = (a, tk, ww, tt) => {
+    const c = Math.cos(a), sn = Math.sin(a);
+    const x = ww / 2 * Math.sign(c) * Math.pow(Math.abs(c), 0.3);
+    const xn = x / (ww / 2 || 1);
+    const pleat = pleatAmp(tk) * Math.sin(pleatPhase(xn, tk));
+    return [x * (1 - 0.18 * Math.pow(Math.abs(tk - 0.5) * 2, 2)), tt / 2 * Math.sign(sn) * Math.pow(Math.abs(sn), 0.3) + 0.009 * sc * xn * xn + pleat];
+  };
+  ribbon(B, pts, o.top === 'saree' ? 26 : 34, width, thick, sideFn, {
+    n: 12, e: 8, rect: duv, capStart: 0.0, capEnd: 0.0, shape,
     weights: (p, t) => {
       const y = p[1];
       const wd = (1 - smooth(F(0.55), F(0.74), y)) * (p[2] < -0.02 ? 1 : 0.3);
@@ -984,7 +1145,8 @@ function buildDrape(B, look, M, R, T) {
       const wp = o.top === 'saree' ? 0.5 * (1 - smooth(F(0.45), F(0.56), y)) : 0;
       return W('chest', (1 - wd) * (1 - wcl) * (1 - wp), 'clav' + sideL, (1 - wd) * wcl, 'drape', wd * (1 - wp), 'pelvis', wp);
     },
-    color: (p, t, th) => { const a = 0.82 + 0.18 * Math.abs(Math.sin(th)); return [a, a, a]; },
+    // folds shaded: ridges lighter, valleys darker (baked, reads at CCTV distance)
+    color: (p, t, th) => { const c = Math.cos(th); const xn = Math.sign(c) * Math.pow(Math.abs(c), 0.3); const k = pleatAmp(t) / (0.013 * sc); const a = (0.84 + 0.16 * Math.abs(Math.sin(th))) * (1 - 0.22 * k * (0.5 - 0.5 * Math.cos(pleatPhase(xn, t)))); return [a, a, a]; },
   });
 }
 
@@ -1021,7 +1183,8 @@ function buildBag(B, look, M, R, T) {
     ribbon(B, pts, 20, 0.022 * sc, 0.006 * sc, (p, t) => norm3(v3.cross(t, [s, 0.4, 0])), { n: 6, e: 6, uvAt: () => strapUV, weights: (p) => { const y = p[1]; const wb = 1 - smooth(F(0.62), F(0.76), y); return W('clav' + sideL, (1 - wb) * 0.6, 'chest', (1 - wb) * 0.4, 'bag', wb); } });
   } else if (look.bagStyle === 'sling') {
     const o = -s; // strap over the opposite shoulder, bag at this side's hip front
-    const c0 = T.point(F(0.56), FR - s * 0.75, 0.035 * sc);
+    const longTop = look.outfit.skirtLen && look.outfit.top !== 'saree';
+    const c0 = T.point(F(longTop ? 0.575 : 0.56), FR - s * 0.8, (longTop ? 0.065 : 0.035) * sc + (look.outfit.top === 'saree' ? 0.02 * sc : 0));
     const c = [c0[0], c0[1], c0[2]];
     box(c, 0.17 * sc, 0.14 * sc, 0.055 * sc, () => W('spine', 0.5, 'pelvis', 0.5));
     const pts = [[c[0] - s * 0.07 * sc, c[1] + 0.06 * sc, c[2]], T.point(F(0.64), FR - s * 0.35, 0.02 * sc), T.point(F(0.72), FR + s * 0.25, 0.02 * sc), T.point(F(0.785), FR + s * 0.75, 0.015 * sc), [o * M.shoulderX * 0.7, M.shoulderY + 0.05 * sc, -0.012 * sc], T.point(F(0.78), BK - s * 0.75, 0.015 * sc), T.point(F(0.68), BK - s * 0.1, 0.02 * sc), T.point(F(0.59), BK + s * 0.6, 0.025 * sc), [c[0] + s * 0.02 * sc, c[1] + 0.05 * sc, c[2] - 0.05 * sc]];
@@ -1137,6 +1300,11 @@ function buildItem(B, look, M, R, hand) {
 }
 
 // ------------------------------------------------------------------ shared resources
+let BLACK_TEX = null;
+function blackTexture() {
+  if (!BLACK_TEX) { BLACK_TEX = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat); BLACK_TEX.colorSpace = THREE.SRGBColorSpace; BLACK_TEX.needsUpdate = true; }
+  return BLACK_TEX;
+}
 let BLOB_TEX = null;
 function blobTexture() {
   if (BLOB_TEX) return BLOB_TEX;
@@ -1190,9 +1358,11 @@ export function createHuman(seed, opts = {}) {
   if (carry && hand) itemPts = buildItem(B, look, M, R, hand);
   const geom = B.build();
   // texture
-  const geoInfo = { H: M.H, torsoTop: T.top, torsoBot: T.bot, waistY: M.waistY, hipY: M.hipY, chestY: M.chestY, crotchY: M.crotchY, beltY: T.beltY, sareeWaistY: T.sareeWaistY, blouseY: T.hemY, face };
+  const geoInfo = { hemY: T.isLong ? T.bot - 0.01 : (look.outfit.tucked ? T.beltY + 0.002 : T.hemY), H: M.H, torsoTop: T.top, torsoBot: T.bot, waistY: M.waistY, hipY: M.hipY, chestY: M.chestY, crotchY: M.crotchY, beltY: T.beltY, sareeWaistY: T.sareeWaistY, blouseY: T.hemY, face };
   const painted = paintAtlas(look, geoInfo);
-  const matOpts = { vertexColors: true, roughness: 1, metalness: 0, alphaHash: true };
+  // every person gets the same material signature (map, roughnessMap, emissiveMap, sheen
+  // map) so all people share one shader program family: no mid-playback compiles
+  const matOpts = { vertexColors: true, roughness: 1, metalness: 0, alphaHash: true, emissiveMap: blackTexture(), emissive: new THREE.Color(0, 0, 0) };
   const disposables = [geom];
   if (painted) {
     const map = new THREE.CanvasTexture(painted.canvas);
@@ -1204,6 +1374,12 @@ export function createHuman(seed, opts = {}) {
     rmap.generateMipmaps = true;
     matOpts.map = map; matOpts.roughnessMap = rmap;
     disposables.push(map, rmap);
+    // soft cloth sheen (grazing-light rim on cotton / knit), masked to the garments
+    const smap = new THREE.CanvasTexture(painted.sheen);
+    smap.colorSpace = THREE.SRGBColorSpace;
+    smap.generateMipmaps = true;
+    matOpts.sheen = 1; matOpts.sheenColor = new THREE.Color(1, 1, 1); matOpts.sheenColorMap = smap; matOpts.sheenRoughness = 0.8;
+    disposables.push(smap);
     if (look.carry === 'phone') {
       // emissive screen
       const ec = document.createElement('canvas');
@@ -1221,7 +1397,7 @@ export function createHuman(seed, opts = {}) {
   } else {
     matOpts.color = new THREE.Color().setRGB(look.outfit.topC[0] / 255, look.outfit.topC[1] / 255, look.outfit.topC[2] / 255, THREE.SRGBColorSpace);
   }
-  const mat = new THREE.MeshStandardMaterial(matOpts);
+  const mat = painted ? new THREE.MeshPhysicalMaterial(matOpts) : new THREE.MeshStandardMaterial(matOpts);
   disposables.push(mat);
   const mesh = new THREE.SkinnedMesh(geom, mat);
   mesh.name = 'human';
@@ -1300,6 +1476,41 @@ export function createHuman(seed, opts = {}) {
     else { const s = look.carrySide === 'L' ? 1 : -1; addBP('bag', [s * (T.dims(M.hipY).w + 0.1 * sc), M.hipY - 0.06 * sc, 0]); }
   }
   for (const p of itemPts) addBP('hand' + look.carrySide, p);
+  const nNamed = bp.length;
+  // hull points: per bone (by dominant skin weight), the extreme vertices in 14 directions. These are
+  // skinned exactly in boxPoints so the box follows hair, skirts, bags and items in any pose.
+  const hullIdx = [];
+  {
+    const pos = geom.attributes.position, si = geom.attributes.skinIndex, sw = geom.attributes.skinWeight;
+    const D = [];
+    for (const d of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) D.push(d);
+    for (const a of [1, -1]) for (const b of [1, -1]) for (const c of [1, -1]) D.push([a * 0.577, b * 0.577, c * 0.577]);
+    const best = new Map();
+    for (let k = 0; k < pos.count; k++) {
+      let bi = si.getX(k), bw = sw.getX(k);
+      if (sw.getY(k) > bw) { bi = si.getY(k); bw = sw.getY(k); }
+      if (sw.getZ(k) > bw) { bi = si.getZ(k); bw = sw.getZ(k); }
+      if (sw.getW(k) > bw) { bi = si.getW(k); bw = sw.getW(k); }
+      const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
+      for (let d = 0; d < D.length; d++) {
+        const s = x * D[d][0] + y * D[d][1] + z * D[d][2];
+        const key = bi * 16 + d;
+        const cur = best.get(key);
+        if (!cur || s > cur[0]) best.set(key, [s, k]);
+      }
+    }
+    const seen = new Set(), cells = new Set();
+    const cell = 0.035;
+    for (const [, [, k]] of best) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const key = `${Math.round(pos.getX(k) / cell)},${Math.round(pos.getY(k) / cell)},${Math.round(pos.getZ(k) / cell)}`;
+      if (cells.has(key)) continue;
+      cells.add(key);
+      hullIdx.push(k);
+    }
+  }
+  const hullBase = hullIdx.map((k) => new THREE.Vector3().fromBufferAttribute(geom.attributes.position, k));
 
   // --------------------------------------------------- Human
   const tmp = new THREE.Vector3();
@@ -1312,20 +1523,33 @@ export function createHuman(seed, opts = {}) {
     strideLength: gait.S,
     look,
     seed,
-    setPose(phase, speed, turnRate, t) {
-      const pose = gait.pose(phase, speed, turnRate, t, carry);
+    // strideK (optional): stride factor for this speed (stride = strideK * strideLength);
+    // the caller must then advance phase at speed / (strideK * strideLength)
+    setPose(phase, speed, turnRate, t, strideK = 1) {
+      const pose = gait.pose(phase, speed, turnRate, t, carry, strideK);
       applyPose(bones, pose);
       updateContact(pose);
     },
+    // out[0 .. namedCount-1]: named points (head top, head front/back/sides, chin, per side: shoulder,
+    // shoulder top, elbow (2), hand (2), knee (2), toe, heel, foot side, hip side, chest side; waist
+    // front/back, seat, skirt hem, hair tail, drape, bag, carried item ends), then hull points.
     boxPoints(out) {
-      const n = bp.length;
+      const n = nNamed;
       for (let i = 0; i < n; i++) {
         if (!out[i]) out[i] = new THREE.Vector3();
         out[i].copy(bp[i].local).applyMatrix4(bones[bp[i].bi].matrixWorld);
       }
-      out.length = n;
+      const mw = mesh.matrixWorld;
+      for (let j = 0; j < hullIdx.length; j++) {
+        const o = out[n + j] || (out[n + j] = new THREE.Vector3());
+        o.copy(hullBase[j]);
+        mesh.applyBoneTransform(hullIdx[j], o);
+        o.applyMatrix4(mw);
+      }
+      out.length = n + hullIdx.length;
       return out;
     },
+    namedCount: nNamed,
     setAlpha(a) {
       alpha = clamp(a, 0, 1);
       mat.opacity = alpha;

@@ -19,6 +19,7 @@ const seconds = +(a.seconds || 30);
 const from = +(a.from || 0);
 const q = new URLSearchParams({ export: '1' });
 if (a.video) q.set('video', 'file://' + resolve(a.video));
+for (const [k, v] of new URLSearchParams(a.query || '')) q.set(k, v); // e.g. --query 'q=medium&blur=0'
 
 // 2D-only pages render ~4x faster without the GPU process; WebGL pages (--gl) need SwiftShader
 const gpu = a.gl ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] : ['--disable-gpu', '--disable-gpu-compositing'];
@@ -49,7 +50,7 @@ const t0 = Date.now();
 for (let i = 0; i < n; i++) {
   const T = from + i / fps;
   await page.evaluate((T) => window.__frame(T), T);
-  const buf = await page.screenshot({ type: 'jpeg', quality: 94 });
+  const buf = await page.screenshot({ type: 'jpeg', quality: 94, timeout: 0 });
   if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
   if (i % fps === 0) process.stdout.write(`\r${i}/${n} frames  ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 }

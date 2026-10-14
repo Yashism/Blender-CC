@@ -78,9 +78,16 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+// accumulate one shutter sub-frame (motion blur): running mean, ping-pong (no float blending)
+const ACC_FRAG = /* glsl */ `
+precision highp float;
+uniform sampler2D tSrc; uniform sampler2D tPrev; uniform float uW;
+varying vec2 vUv;
+void main() { gl_FragColor = vec4(mix(texture2D(tPrev, vUv).rgb, texture2D(tSrc, vUv).rgb, uW), 1.0); }`;
+
 const UP_FRAG = /* glsl */ `
 precision highp float;
-uniform sampler2D tSrc; uniform sampler2D tBase; uniform vec2 uTexel; uniform float uRadius;
+uniform sampler2D tSrc; uniform sampler2D tBase; uniform vec2 uTexel; uniform float uRadius; uniform float uMix;
 varying vec2 vUv;
 void main() {
   vec2 o = uTexel * uRadius;
@@ -90,7 +97,7 @@ void main() {
             + texture2D(tSrc, vUv + vec2(-o.x, 0.0)).rgb + texture2D(tSrc, vUv + vec2(o.x, 0.0)).rgb);
   c += 4.0 * texture2D(tSrc, vUv).rgb;
   c /= 16.0;
-  gl_FragColor = vec4(texture2D(tBase, vUv).rgb + c, 1.0);
+  gl_FragColor = vec4(texture2D(tBase, vUv).rgb + c * uMix, 1.0);
 }`;
 
 const FINAL_FRAG = /* glsl */ `
@@ -101,7 +108,7 @@ uniform vec2 uSrcTexel;    // 1 / scene target size
 uniform float uK1, uK2, uAspect;
 uniform float uTime, uFrame;
 uniform float uExposure, uBloom, uCA, uSoft, uSharpen, uVignette;
-uniform float uNoise, uChromaNoise, uBlack, uSat, uBlock;
+uniform float uNoise, uChromaNoise, uBlack, uSat, uBlock, uMottle;
 uniform vec3 uWB, uLift, uGain;
 uniform float uGamma;
 varying vec2 vUv;
@@ -146,9 +153,31 @@ vec3 wide(vec2 uv, vec2 t) {
 }
 
 vec3 tonemap(vec3 x) {
-  // camera-like curve: linear toe, smooth shoulder that clips around 1.0 out
-  vec3 a = x * (1.0 + x / 9.0) / (1.0 + x);
-  return clamp(a * 1.08, 0.0, 1.0);
+  // camera-like curve on luminance (keeps hue/saturation of warm highlights),
+  // then a soft per-channel clip so very bright sources burn toward white
+  x = max(x, 0.0);
+  float L = dot(x, vec3(0.2126, 0.7152, 0.0722));
+  float Lt = L * (1.0 + L / 6.0) / (1.0 + L) * 1.1;
+  vec3 c = x * (Lt / max(L, 1e-5));
+  float m = max(c.r, max(c.g, c.b));
+  if (m > 0.85) {
+    float k = smoothstep(0.85, 1.6, m);
+    c = mix(c / max(m, 1.0), vec3(1.0), k * 0.65);
+    c = min(c, vec3(1.0));
+  }
+  // gentle toe on luminance (keeps hue): deep shadows sink toward black, no milky floor
+  float Lc = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float Lto = mix(Lc * Lc / (Lc + 0.005), Lc, smoothstep(0.0, 0.035, Lc));
+  c *= Lto / max(Lc, 1e-6);
+  return clamp(c, 0.0, 1.0);
+}
+// smooth value noise on a cell grid, cross-faded between slowly changing keys
+float vnoise(vec2 p, float key) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash13(vec3(i, key)), b = hash13(vec3(i + vec2(1.0, 0.0), key));
+  float c = hash13(vec3(i + vec2(0.0, 1.0), key)), d = hash13(vec3(i + vec2(1.0, 1.0), key));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 vec3 toSRGB(vec3 c) {
@@ -213,12 +242,21 @@ void main() {
   // encode
   vec3 s = toSRGB(c);
 
-  // encoder feel: reduced chroma resolution + gentle 8x8 block DC wobble in flat darks
-  vec3 sw = toSRGB(pow(max(mix(vec3(luma(tonemap(w * uExposure * uWB))), tonemap(w * uExposure * uWB), uSat), 0.0), vec3(uGamma)) * uGain);
+  // encoder feel: reduced chroma resolution (keep this pixel's luma, take the hue
+  // ratio from the wider neighbourhood), gentle 8x8 block DC wobble in flat darks
+  vec3 cw = tonemap((w + bl * uBloom) * uExposure * uWB * max(vig, 0.0));
+  cw = mix(vec3(luma(cw)), cw, uSat);
+  vec3 sw = toSRGB(pow(max(cw, 0.0), vec3(uGamma)) * uGain);
   float yS = dot(s, vec3(0.299, 0.587, 0.114));
   float yW = dot(sw, vec3(0.299, 0.587, 0.114));
-  vec3 chromaS = s - yS, chromaW = sw - yW;
-  s = yS + mix(chromaS, chromaW, 0.55);
+  s = mix(s, sw * (yS / max(yW, 1e-3)), 0.5 * smoothstep(0.004, 0.03, yW));
+  // temporal noise reduction smears the shadows: fine grain gives way to soft mush
+  s = mix(s, sw, 0.5 * (1.0 - smoothstep(0.06, 0.15, yS)));
+  // low-frequency luma mottle in the darks (NR + H.264 at low bitrate), drifting every ~4 frames
+  float mk = uFrame / 4.0;
+  float m0 = vnoise(px / 18.0, floor(mk)), m1 = vnoise(px / 18.0, floor(mk) + 1.0);
+  float mot = (mix(m0, m1, smoothstep(0.0, 1.0, fract(mk))) - 0.5) * 2.0;
+  s += mot * uMottle * (1.0 - smoothstep(0.04, 0.3, yS));
   vec2 blk = floor(px / 8.0);
   float gop = floor(uFrame / 12.0);
   float dc = (hash13(vec3(blk, gop)) - 0.5) * uBlock * (1.0 - smoothstep(0.05, 0.35, yS));
@@ -230,26 +268,28 @@ void main() {
 }`;
 
 export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
-  const renderScale = opts.renderScale ?? 1.25;
+  let renderScale = opts.renderScale ?? 1.25;
   const samples = opts.samples ?? 4;
   const params = {
     exposure: 1.0,
-    bloom: 0.16,
+    bloom: 0.2,
+    bloomFalloff: 0.5,
     bloomThreshold: 1.1,
     bloomKnee: 0.6,
-    ca: 0.0045,
+    ca: 0.0012,
     soft: 0.6,
     sharpen: 0.35,
-    vignette: 0.32,
-    noise: 1.0,
+    vignette: 0.42,
+    noise: 0.45,
     chromaNoise: 0.6,
-    black: 0.006,
+    black: 0.002,
     sat: 0.92,
     gamma: 1.0,
-    wb: new THREE.Vector3(1.0, 1.0, 0.96),
-    lift: new THREE.Vector3(0.004, 0.004, 0.006),
+    wb: new THREE.Vector3(1.0, 1.0, 1.0),
+    lift: new THREE.Vector3(0.0, 0.0, 0.001),
     gain: new THREE.Vector3(1.0, 1.0, 1.0),
-    block: 0.006,
+    block: 0.005,
+    mottle: 0.006,
     fps: 25,
     ...(opts.params || {}),
   };
@@ -258,6 +298,12 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
   const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
   const rtScene = new THREE.WebGLRenderTarget(4, 4, { ...rtOpts, depthBuffer: true, samples });
   rtScene.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  // shutter accumulation target (only allocated when motion blur is used)
+  let rtAcc = null;
+  const accMat = new THREE.ShaderMaterial({
+    vertexShader: VERT, fragmentShader: ACC_FRAG, depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+    uniforms: { tSrc: { value: null }, tPrev: { value: null }, uW: { value: 1 } },
+  });
   const LEVELS = 6;
   const down = [], up = [];
   for (let i = 0; i < LEVELS; i++) {
@@ -271,7 +317,7 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
   });
   const upMat = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: UP_FRAG, depthTest: false, depthWrite: false,
-    uniforms: { tSrc: { value: null }, tBase: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 1.0 } },
+    uniforms: { tSrc: { value: null }, tBase: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 1.0 }, uMix: { value: 0.6 } },
   });
   const finalMat = new THREE.ShaderMaterial({
     vertexShader: VERT, fragmentShader: FINAL_FRAG, depthTest: false, depthWrite: false,
@@ -282,7 +328,7 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
       uTime: { value: 0 }, uFrame: { value: 0 },
       uExposure: { value: 1 }, uBloom: { value: 0.1 }, uCA: { value: 0.004 }, uSoft: { value: 0.6 }, uSharpen: { value: 0.3 },
       uVignette: { value: 0.3 }, uNoise: { value: 1 }, uChromaNoise: { value: 0.6 }, uBlack: { value: 0.01 }, uSat: { value: 0.85 },
-      uBlock: { value: 0.006 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uLift: { value: new THREE.Vector3() }, uGain: { value: new THREE.Vector3(1, 1, 1) },
+      uBlock: { value: 0.006 }, uMottle: { value: 0.006 }, uWB: { value: new THREE.Vector3(1, 1, 1) }, uLift: { value: new THREE.Vector3() }, uGain: { value: new THREE.Vector3(1, 1, 1) },
       uGamma: { value: 1 },
     },
   });
@@ -293,6 +339,7 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
     SW = Math.max(16, Math.round(W * renderScale));
     SH = Math.max(9, Math.round(H * renderScale));
     rtScene.setSize(SW, SH);
+    if (rtAcc) for (const r of rtAcc) r.setSize(SW, SH);
     let bw = Math.max(8, Math.round(SW / 2)), bh = Math.max(4, Math.round(SH / 2));
     for (let i = 0; i < LEVELS; i++) {
       down[i].setSize(bw, bh); up[i].setSize(bw, bh);
@@ -303,9 +350,9 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
   }
   setSize(w, h);
 
-  function bloomChain() {
+  function bloomChain(srcTex) {
     // downsample
-    let src = rtScene.texture, sw = SW, sh = SH;
+    let src = srcTex, sw = SW, sh = SH;
     for (let i = 0; i < LEVELS; i++) {
       downMat.uniforms.tSrc.value = src;
       downMat.uniforms.uTexel.value.set(1 / sw, 1 / sh);
@@ -324,6 +371,7 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
       upMat.uniforms.tBase.value = down[i].texture;
       upMat.uniforms.uTexel.value.set(1 / down[i + 1].width, 1 / down[i + 1].height);
       upMat.uniforms.uRadius.value = 1.0;
+      upMat.uniforms.uMix.value = params.bloomFalloff;
       quad.material = upMat;
       renderer.setRenderTarget(up[i]);
       quad.render(renderer);
@@ -332,18 +380,47 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
     return acc;
   }
 
-  function render(T, target = null) {
+  // render(T, target, shutter): shutter = { n, at(i) } renders n sub-frames (at(i) poses the
+  // scene for sub-frame i) and averages them in HDR before the post: real motion blur.
+  function render(T, target = null, shutter = null) {
     const prevTM = renderer.toneMapping;
     renderer.toneMapping = THREE.NoToneMapping;
-    renderer.setRenderTarget(rtScene);
-    renderer.clear(true, true, true);
-    renderer.render(scene, camera);
-    const bloomTex = bloomChain();
+    let sceneTex = rtScene.texture;
+    if (shutter && shutter.n > 1) {
+      if (!rtAcc) rtAcc = [0, 1].map(() => { const r = new THREE.WebGLRenderTarget(SW, SH, rtOpts); r.texture.colorSpace = THREE.LinearSRGBColorSpace; return r; });
+      let cur = 0;
+      const autoShadow = renderer.shadowMap.autoUpdate;
+      for (let i = 0; i < shutter.n; i++) {
+        shutter.at(i);
+        // shadow maps are drawn once per frame (the shutter is far too short for them to change)
+        if (i > 0) { renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = false; }
+        renderer.setRenderTarget(rtScene);
+        renderer.clear(true, true, true);
+        renderer.render(scene, camera);
+        accMat.uniforms.tSrc.value = rtScene.texture;
+        accMat.uniforms.tPrev.value = rtAcc[1 - cur].texture;
+        accMat.uniforms.uW.value = 1 / (i + 1);
+        quad.material = accMat;
+        renderer.setRenderTarget(rtAcc[cur]);
+        quad.render(renderer);
+        cur = 1 - cur;
+      }
+      renderer.shadowMap.autoUpdate = autoShadow;
+      sceneTex = rtAcc[1 - cur].texture;
+    } else {
+      renderer.setRenderTarget(rtScene);
+      renderer.clear(true, true, true);
+      renderer.render(scene, camera);
+    }
+    const bloomTex = bloomChain(sceneTex);
 
     const u = finalMat.uniforms;
+    u.tScene.value = sceneTex;
     u.tBloom.value = bloomTex;
     u.uTime.value = T;
-    u.uFrame.value = Math.floor(T * params.fps + 1e-6);
+    // wrapped so the float stays exact for days of playback (multiple of 12 keeps the GOP phase)
+    u.uFrame.value = Math.floor(T * params.fps + 1e-6) % (12 * 4999);
+    u.uTime.value = T % 3600;
     u.uK1.value = DISTORTION.k1; u.uK2.value = DISTORTION.k2;
     u.uExposure.value = params.exposure;
     u.uBloom.value = params.bloom;
@@ -357,6 +434,7 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
     u.uSat.value = params.sat;
     u.uGamma.value = params.gamma;
     u.uBlock.value = params.block;
+    u.uMottle.value = params.mottle;
     u.uWB.value.copy(params.wb);
     u.uLift.value.copy(params.lift);
     u.uGain.value.copy(params.gain);
@@ -368,10 +446,22 @@ export function createCCTVPasses(renderer, scene, camera, w, h, opts = {}) {
 
   function dispose() {
     rtScene.dispose();
+    if (rtAcc) for (const r of rtAcc) r.dispose();
+    accMat.dispose();
     for (const r of down) r.dispose();
     for (const r of up) r.dispose();
     downMat.dispose(); upMat.dispose(); finalMat.dispose(); quad.dispose();
   }
 
-  return { render, setSize, params, dispose, get renderSize() { return [SW, SH]; } };
+  // setQuality: change the internal render scale / MSAA without rebuilding the shaders
+  function setQuality(scale, msaa) {
+    renderScale = scale;
+    if (msaa !== rtScene.samples) {
+      rtScene.dispose();
+      rtScene.samples = msaa;
+    }
+    setSize(W, H);
+  }
+
+  return { render, setSize, setQuality, params, dispose, sceneTarget: rtScene, get renderSize() { return [SW, SH]; } };
 }

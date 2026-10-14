@@ -21,7 +21,8 @@ export const REG = {
 };
 export function rectUV(name) {
   const r = REG[name];
-  return [r[0] / ATLAS, r[1] / ATLAS, r[2] / ATLAS, r[3] / ATLAS];
+  const p = 0.75;
+  return [(r[0] + p) / ATLAS, (r[1] + p) / ATLAS, (r[2] - p) / ATLAS, (r[3] - p) / ATLAS];
 }
 // Item sub-rects inside REG.items (128 x 56): tub sides, cup side, bag, phone
 export const ITEM_REG = {
@@ -32,7 +33,8 @@ export const ITEM_REG = {
 };
 export function itemUV(name) {
   const r = ITEM_REG[name];
-  return [r[0] / ATLAS, r[1] / ATLAS, r[2] / ATLAS, r[3] / ATLAS];
+  const p = 1;
+  return [(r[0] + p) / ATLAS, (r[1] + p) / ATLAS, (r[2] - p) / ATLAS, (r[3] - p) / ATLAS];
 }
 
 const SW_CELL = 16;
@@ -85,7 +87,7 @@ const P = {
 const pk = (rng, arr) => arr[Math.floor(rng() * arr.length) % arr.length];
 
 // South-Asian skin tones (sRGB albedo), light wheatish -> deep brown
-const SKIN = [[0, '#d2a07c'], [0.35, '#bb855f'], [0.65, '#9c6a48'], [1, '#6c4630']];
+const SKIN = [[0, '#c99d80'], [0.35, '#b08166'], [0.65, '#8f664d'], [1, '#62453a']];
 function skinTone(t, warm) {
   let i = 0;
   while (i < SKIN.length - 2 && t > SKIN[i + 1][0]) i++;
@@ -102,7 +104,7 @@ export function sampleLook(seed, opts = {}) {
   const kind = opts.kind === 'child' ? 'child' : 'adult';
   const sex = opts.sex === 'm' || opts.sex === 'f' ? opts.sex : (r() < 0.5 ? 'm' : 'f');
   const child = kind === 'child';
-  const age = child ? 4 + r() * 8 : 18 + Math.pow(r(), 1.5) * 50;
+  const age = child ? 4 + r() * 8 : 18 + Math.pow(r(), 2) * 47;
   let H;
   if (child) H = 1.02 + (age - 4) * 0.058 + nrm() * 0.06;
   else H = (sex === 'm' ? 1.69 : 1.555) + nrm() * (sex === 'm' ? 0.105 : 0.085);
@@ -127,9 +129,9 @@ export function sampleLook(seed, opts = {}) {
   // hair
   const grey = !child && age > 45 ? clamp((age - 45) / 25 + nrm() * 0.25, 0, 1) : 0;
   const hennaed = !child && sex === 'f' && age > 40 && r() < 0.25;
-  let hairC = mix(hex('#0d0b0a'), hex('#2a1d16'), r() * (r() < 0.25 ? 1 : 0.4));
+  let hairC = mix(hex('#17120f'), hex('#33241b'), r() * (r() < 0.25 ? 1 : 0.45));
   if (hennaed) hairC = mix(hairC, hex('#5a2416'), 0.6);
-  if (grey > 0) hairC = mix(hairC, hex('#a9a7a3'), grey * 0.75);
+  if (grey > 0) hairC = mix(hairC, hex('#8d8a86'), grey * 0.62);
   look.hairColor = hairC;
   look.grey = grey;
   if (sex === 'm') {
@@ -186,7 +188,8 @@ export function sampleLook(seed, opts = {}) {
     o.shoes = (o.top === 'saree' || o.top === 'kameez') ? (s < 0.75 ? 'flat' : 'sandal') : (s < 0.45 ? 'sneaker' : s < 0.8 ? 'flat' : 'sandal');
   }
   // colours and patterns
-  const C = (h) => jitter(hex(h), rng, 0.08);
+  const muted = 0.1 + r() * 0.22; // per-person garment desaturation (worn, dyed fabric)
+  const C = (h) => { const c = jitter(hex(h), rng, 0.08); const l = c[0] * 0.3 + c[1] * 0.55 + c[2] * 0.15; return mix(c, [l, l, l], muted); };
   o.pattern = 'plain';
   switch (o.top) {
     case 'tee': o.topC = C(pk(rng, P.tee)); o.pattern = r() < 0.3 ? 'graphic' : r() < 0.2 ? 'stripes' : 'plain'; o.top2C = C(pk(rng, P.tee)); o.sleeve = child ? 0.32 : 0.3 + r() * 0.08; break;
@@ -209,7 +212,7 @@ export function sampleLook(seed, opts = {}) {
       break;
     }
     case 'kameez': case 'kurti': {
-      o.topC = C(pk(rng, P.kurtaF)); o.top2C = C(pk(rng, P.kurtaF)); o.top3C = C(pk(rng, P.kurtaF));
+      o.topC = C(pk(rng, P.kurtaF)); o.top2C = mix(C(pk(rng, P.kurtaF)), o.topC, 0.25); o.top3C = mix(C(pk(rng, P.kurtaF)), [235, 225, 205], 0.3);
       o.pattern = r() < 0.75 ? 'print' : 'plain';
       o.sleeve = r() < 0.6 ? 0.72 : r() < 0.5 ? 1.0 : 0.4;
       o.skirtLen = o.top === 'kameez' ? lerp(0.27, 0.33, r()) : lerp(0.36, 0.42, r());
@@ -221,6 +224,7 @@ export function sampleLook(seed, opts = {}) {
       const s = pk(rng, P.saree);
       o.topC = C(s[0]); o.borderC = C(s[1]);
       o.blouseC = r() < 0.6 ? mul(o.topC, 0.8 + r() * 0.3) : C(s[1]);
+      o.top2C = o.borderC;
       o.sleeve = 0.24;
       o.skirtLen = 0.02;
       o.pattern = r() < 0.5 ? 'buti' : 'plain';
@@ -240,7 +244,7 @@ export function sampleLook(seed, opts = {}) {
   if (o.dupatta) {
     o.drapeC = r() < 0.5 ? (o.top2C || o.topC) : C(pk(rng, P.kurtaF));
     o.drapeBorderC = r() < 0.6 ? C(pk(rng, ['#d6ac4a', '#e9e3d6', '#c9c9cf', '#9e1c2b'])) : o.drapeC;
-    o.dupattaStyle = r() < 0.55 ? 'both' : 'one';
+    o.dupattaStyle = r() < 0.4 ? 'both' : 'one';
   }
   if (o.top === 'saree') { o.drapeC = o.topC; o.drapeBorderC = o.borderC; }
   // shoes
@@ -248,6 +252,10 @@ export function sampleLook(seed, opts = {}) {
   else if (o.shoes === 'formal') { const s = pk(rng, P.formal); o.shoeC = C(s[0]); o.soleC = C(s[1]); }
   else if (o.shoes === 'sandal') { const s = pk(rng, P.sandal); o.shoeC = C(s[0]); o.soleC = C(s[1]); }
   else { const s = pk(rng, P.flat); o.shoeC = C(s[0]); o.soleC = C(s[1]); }
+  // keep albedos physical: bright whites and pale shoes otherwise glow under the downlights
+  const cap = (c, m) => { if (!c) return c; const mx = Math.max(c[0], c[1], c[2]); return mx > m ? mul(c, m / mx) : c; };
+  for (const k of ['topC', 'top2C', 'top3C', 'bottomC', 'drapeC', 'drapeBorderC', 'blouseC', 'borderC']) o[k] = cap(o[k], 195);
+  o.shoeC = cap(o.shoeC, 165); o.soleC = cap(o.soleC, 165);
   // tops that cover the hips (untucked)
   o.hemH = o.tucked ? null : (o.top === 'hoodie' ? 0.505 : o.top === 'jacket' ? 0.51 : o.top === 'top' ? 0.55 : 0.515);
 
@@ -268,10 +276,12 @@ export function sampleLook(seed, opts = {}) {
     lean: (r() - 0.3) * 0.05,
     bob: 0.9 + r() * 0.25,
     toeOut: 0.06 + r() * 0.1,
-    lookDown: 0.05 + r() * 0.16 + (carry === 'phone' ? 0.35 : 0),
+    lookDown: carry === 'phone' ? 0.42 + r() * 0.12 : r() * 0.1,
     sway: (sex === 'f' ? 1.15 : 0.95) + r() * 0.2,
     idleLeg: r() < 0.5 ? 1 : -1,
     noiseSeed: (seed * 31 + 7) | 0,
+    slouch: clamp(nrm() * 0.6 + (child ? -0.2 : 0.2) + Math.max(0, age - 45) / 40, -0.4, 1),
+    droop: (r() - 0.5) * 0.06,
   };
   look.wrist = r() < 0.4 ? (sex === 'f' ? 'bangles' : 'watch') : null;
   return look;
@@ -331,15 +341,24 @@ function tiles() {
       return [v, v * 0.995, v * 0.99];
     }),
     hair: (() => {
+      const W = 256, Hh = 64;
+      const cols = new Float32Array(W);
+      for (let i = 0; i < W; i++) cols[i] = rng();
+      const sm = new Float32Array(W);
+      for (let i = 0; i < W; i++) sm[i] = (cols[i] * 2 + cols[(i + 1) % W] + cols[(i + W - 1) % W]) / 4;
+      return tileFrom(W, Hh, (x, y) => {
+        const s = sm[x] * 0.7 + cols[x] * 0.3;
+        const v = 214 + (s - 0.5) * 52 + Math.sin(y * 0.2 + cols[(x * 7) % W] * 6) * 6;
+        return [v, v, v];
+      });
+    })(),
+    greyStrands: (() => {
       const W = 128, Hh = 64;
       const cols = new Float32Array(W);
       for (let i = 0; i < W; i++) cols[i] = rng();
       return tileFrom(W, Hh, (x, y) => {
-        const a = cols[x], b = cols[(x + 1) % W], c = cols[(x + W - 1) % W];
-        const s = (a * 0.6 + (b + c) * 0.2);
-        const wav = Math.sin(y * 0.15 + a * 6) * 0.08;
-        const v = 150 + (s + wav) * 120 + (val[(y % N) * N + (x % N)] - 0.5) * 25;
-        return [v, v, v];
+        const a = cols[x] > 0.55 ? (cols[x] - 0.55) * 2.2 : 0;
+        return [215, 212, 208, Math.round(a * 150 * (0.7 + 0.3 * Math.sin(y * 0.3 + x)))];
       });
     })(),
   };
@@ -430,18 +449,30 @@ export function paintAtlas(look, geo) {
       const per = opt.per || 6;
       for (let i = x; i < x + w; i += per) fill(opt.c2, i, y, 1, h, 0.5);
     } else if (pat === 'print') {
-      // block-print motifs on a grid with offset rows
-      const per = opt.per || 14;
+      // block-print style motifs: small flowers / paisleys / dots with jitter, 2-3 colours
+      const per = opt.per || 15;
       const c2 = opt.c2, c3 = opt.c3 || opt.c2;
+      const style = opt.printStyle || 0;
+      const pr = mulberry32(opt.seed || 7);
       let row = 0;
-      for (let j = y + 3; j < y + h; j += per * 0.9, row++) {
+      for (let j = y + 2; j < y + h + per; j += per * 0.86, row++) {
         for (let i = x + (row % 2 ? per / 2 : 0); i < x + w + per; i += per) {
-          g.fillStyle = rgb(c2, 0.9);
-          g.beginPath(); g.ellipse(i, j, per * 0.22, per * 0.3, 0, 0, Math.PI * 2); g.fill();
-          g.fillStyle = rgb(c3, 0.9);
-          g.beginPath(); g.arc(i, j, per * 0.1, 0, Math.PI * 2); g.fill();
-          g.fillStyle = rgb(c2, 0.7);
-          for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2 + 0.78; g.beginPath(); g.arc(i + Math.cos(a) * per * 0.34, j + Math.sin(a) * per * 0.34, per * 0.07, 0, Math.PI * 2); g.fill(); }
+          const jx = i + (pr() - 0.5) * per * 0.25, jy = j + (pr() - 0.5) * per * 0.25;
+          const rot = pr() * Math.PI * 2;
+          g.save(); g.translate(jx, jy); g.rotate(rot);
+          if (style === 0) { // five-petal flower
+            g.fillStyle = rgb(c2, 0.85);
+            for (let q = 0; q < 5; q++) { const a = q * 1.2566; g.beginPath(); g.ellipse(Math.cos(a) * per * 0.16, Math.sin(a) * per * 0.16, per * 0.12, per * 0.07, a, 0, Math.PI * 2); g.fill(); }
+            g.fillStyle = rgb(c3, 0.95); g.beginPath(); g.arc(0, 0, per * 0.07, 0, Math.PI * 2); g.fill();
+          } else if (style === 1) { // paisley
+            g.fillStyle = rgb(c2, 0.85);
+            g.beginPath(); g.moveTo(0, -per * 0.3); g.bezierCurveTo(per * 0.3, -per * 0.15, per * 0.2, per * 0.3, 0, per * 0.18); g.bezierCurveTo(-per * 0.2, per * 0.1, -per * 0.1, -per * 0.1, 0, -per * 0.3); g.fill();
+            g.fillStyle = rgb(c3, 0.9); g.beginPath(); g.arc(per * 0.04, per * 0.05, per * 0.06, 0, Math.PI * 2); g.fill();
+          } else { // leafy sprig
+            g.strokeStyle = rgb(c2, 0.85); g.lineWidth = 1.2; g.beginPath(); g.moveTo(-per * 0.25, 0); g.quadraticCurveTo(0, -per * 0.12, per * 0.25, 0); g.stroke();
+            g.fillStyle = rgb(c3, 0.85); for (let q = -1; q <= 1; q++) { g.beginPath(); g.ellipse(q * per * 0.13, -per * 0.07, per * 0.07, per * 0.035, 0.6 * q, 0, Math.PI * 2); g.fill(); }
+          }
+          g.restore();
         }
       }
     } else if (pat === 'buti') {
@@ -479,6 +510,35 @@ export function paintAtlas(look, geo) {
     }
     g.restore();
   };
+  // large soft fold shading (blurred multiply strokes): diagonal pull lines from the armpits
+  // to the waist, compression at the waist, vertical drape shadows on long skirts
+  const clothFolds = (x, y, w, h, kind, isLong = false) => {
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.filter = 'blur(3px)';
+    g.globalCompositeOperation = 'multiply';
+    g.lineCap = 'round';
+    const stroke = (pts, width, k) => { g.strokeStyle = `rgba(${255 * k | 0},${255 * k | 0},${255 * k | 0},1)`; g.lineWidth = width; g.beginPath(); g.moveTo(pts[0], pts[1]); g.quadraticCurveTo(pts[2], pts[3], pts[4], pts[5]); g.stroke(); };
+    if (kind === 'torso') {
+      const yA = ty(geo.chestY + 0.07), yW = ty(geo.waistY);
+      for (const [u, s] of [[0.0, 1], [0.5, -1], [0.5, 1], [1.0, -1]]) {
+        // from under the arm (side seam) diagonally toward the waist front / back
+        for (let i = 0; i < 2; i++) {
+          const x0 = tu(u) + s * (4 + i * 6), x1 = tu(u) + s * (34 + 16 * i + r() * 10);
+          stroke([x0, yA + i * 6, (x0 + x1) / 2, (yA + yW) / 2, x1, yW + 6 + r() * 6], 5 + r() * 3, 0.8 + 0.06 * r());
+        }
+      }
+      // horizontal compression at the waist
+      for (let i = 0; i < 3; i++) { const yy = ty(geo.waistY + 0.01) + (r() - 0.5) * 10; const xx = x + r() * w; stroke([xx - 30, yy, xx, yy + (r() - 0.5) * 6, xx + 30, yy], 4, 0.84); }
+      if (isLong) for (let i = 0; i < 5; i++) { const xx = x + r() * w; stroke([xx, ty(geo.waistY - 0.02), xx + (r() - 0.5) * 8, (ty(geo.waistY) + y + h) / 2, xx + (r() - 0.5) * 12, y + h], 6 + r() * 4, 0.82); }
+    } else if (kind === 'skirt') {
+      for (let i = 0; i < 5; i++) { const xx = x + (i + 0.3 + 0.4 * r()) * w / 5; stroke([xx, y, xx + (r() - 0.5) * 10, y + h * 0.5, xx + (r() - 0.5) * 18, y + h], 7 + r() * 5, 0.8); }
+    } else if (kind === 'sleeve') {
+      for (let i = 0; i < 3; i++) { const yy = y + h * (0.55 + 0.1 * i) ; stroke([x, yy, x + w * 0.5, yy + 3, x + w, yy], 3, 0.86); }
+    } else if (kind === 'knee') {
+      for (let i = 0; i < 3; i++) { const yy = y + h * 0.45 + i * 5; stroke([x + w * 0.62, yy, x + w * 0.75, yy + 2, x + w * 0.88, yy], 3, 0.84); }
+    }
+    g.restore();
+  };
   const line = (x0, y0, x1, y1, c, a, w = 1) => { g.strokeStyle = rgb(c, a); g.lineWidth = w; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
   const vgrad = (x, y, w, h, c0, a0, c1, a1) => {
     const gg = g.createLinearGradient(0, y, 0, y + h);
@@ -488,7 +548,7 @@ export function paintAtlas(look, geo) {
   const skinFill = (x, y, w, h) => { fill(skin, x, y, w, h); tex(T.skin, x, y, w, h, 'multiply', 1); };
 
   // ======================================================= TORSO
-  const topOpt = { pattern: o.pattern, c2: o.top2C, c3: o.top3C || o.top2C, melange: o.melange, per: o.pattern === 'checks' ? TW / Math.round(TW / (14 + r() * 8)) : undefined };
+  const topOpt = { pattern: o.pattern, c2: o.top2C, c3: o.top3C || o.top2C, melange: o.melange, seed: look.seed, printStyle: Math.floor(r() * 3), per: o.pattern === 'checks' ? TW / Math.round(TW / (14 + r() * 8)) : o.pattern === 'print' ? 13 + r() * 8 : undefined };
   if (o.top === 'hoodie' || o.top === 'tee' || o.top === 'polo') topOpt.tile = T.knit;
   const waistY = geo.waistY, hipY = geo.hipY;
   const beltY = geo.beltY;
@@ -569,16 +629,15 @@ export function paintAtlas(look, geo) {
     g.restore();
   } else if (o.top !== 'none') {
     // top garment from neckline to hem
-    const hemY = o.hemH ? Math.min(o.hemH * H, geo.torsoBot + 0.001) : beltY - 0.005;
+    const hemY = geo.hemY !== undefined ? geo.hemY : (o.hemH ? o.hemH * H : beltY - 0.005);
     const isLong = o.top === 'kurta' || o.top === 'kameez' || o.top === 'kurti' || o.top === 'frock';
     const yh = isLong ? TR[3] : ty(o.tucked ? beltY + 0.01 : hemY);
     fabric(TR[0], TR[1], TW, yh - TR[1], o.topC, topOpt);
     // hem band
     if (!isLong) {
       if (o.top === 'hoodie') { fill(mul(o.topC, 0.85), TR[0], yh - 10, TW, 10); tex(T.knit, TR[0], yh - 10, TW, 10, 'multiply', 0.8); }
-      else { fill(mul(o.topC, 0.75), TR[0], yh - 2, TW, 2); }
-      // shadow under the hem onto the trousers
-      vgrad(TR[0], yh, TW, 6, [0, 0, 0], 0.35, [0, 0, 0], 0);
+      // shadow under the hem onto the trousers (soft, no painted outline)
+      vgrad(TR[0], yh, TW, 4, [0, 0, 0], 0.25, [0, 0, 0], 0);
     }
     // neckline / collars
     const nx = tu(0.25);
@@ -650,6 +709,7 @@ export function paintAtlas(look, geo) {
     }
     // fold shading on top garment: armpit/side creases and waist
     folds(TR[0], ty(geo.chestY + 0.06), TW, ty(geo.waistY - 0.05) - ty(geo.chestY + 0.06), 18, 'h', 0.1, 0.6);
+    clothFolds(TR[0], TR[1], TW, yh - TR[1], 'torso', isLong);
     for (const su of [0.0, 0.5, 1.0]) { const x = tu(su); const gg = g.createLinearGradient(x - 26, 0, x + 26, 0); gg.addColorStop(0, 'rgba(0,0,0,0)'); gg.addColorStop(0.5, 'rgba(0,0,0,0.14)'); gg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gg; g.fillRect(x - 26, TR[1], 52, yh - TR[1]); }
     // side seams
     for (const su of [0.0, 0.5, 1.0]) line(tu(su), TR[1] + 8, tu(su), yh, mul(o.topC, 0.7), 0.35);
@@ -675,6 +735,8 @@ export function paintAtlas(look, geo) {
   // ======================================================= SKIRT (kurta lower / saree / frock)
   const SR = REG.skirt;
   const SW = SR[2] - SR[0], SH = SR[3] - SR[1];
+  fill(o.topC, SR[0], SR[1], SW, SH);
+  fill(o.drapeC || o.topC, REG.drape[0], REG.drape[1], REG.drape[2] - REG.drape[0], REG.drape[3] - REG.drape[1]);
   if (o.top === 'saree') {
     fabric(SR[0], SR[1], SW, SH, o.topC, { pattern: o.pattern, c2: o.borderC, tile: T.weave });
     // pleat folds at the front (u .15-.35)
@@ -696,10 +758,12 @@ export function paintAtlas(look, geo) {
     folds(SR[0], SR[1], SW, SH, 26, 'v', 0.12, 1.2);
     // hem border
     if (o.top === 'kameez' || o.top === 'kurti' || (o.top === 'kurta' && look.sex === 'f')) {
-      fill(o.top2C, SR[0], SR[3] - 9, SW, 7); fill(o.top3C || o.top2C, SR[0], SR[3] - 6, SW, 2);
-    } else fill(mul(o.topC, 0.8), SR[0], SR[3] - 3, SW, 2);
-    // side slits darker lines at u .0 and .5
-    for (const su of [0, 0.5, 1]) line(SR[0] + su * SW, SR[1] + SH * 0.15, SR[0] + su * SW, SR[3], mul(o.topC, 0.5), 0.6, 2);
+      fill(o.top2C, SR[0], SR[3] - 9, SW, 7, 0.85); fill(o.top3C || o.top2C, SR[0], SR[3] - 6, SW, 2, 0.7);
+    }
+    // side slits: soft shadow lines at u .0 and .5
+    for (const su of [0, 0.5, 1]) line(SR[0] + su * SW, SR[1] + SH * 0.15, SR[0] + su * SW, SR[3], mul(o.topC, 0.78), 0.35, 2);
+    // long vertical drape shadows down the skirt (large, low-contrast)
+    clothFolds(SR[0], SR[1], SW, SH, 'skirt');
     rough('skirt', 0.92);
   }
 
@@ -707,7 +771,11 @@ export function paintAtlas(look, geo) {
   const LR = REG.legs;
   const LW = LR[2] - LR[0], LH = LR[3] - LR[1];
   const lv = (frac) => LR[1] + frac * LH;
-  if (o.bottom === 'saree' || o.bottom === 'bare') {
+  if (o.bottom === 'saree') {
+    // petticoat (inskirt) colour under the saree, skin at the ankles
+    skinFill(LR[0], LR[1], LW, LH);
+    fabric(LR[0], LR[1], LW, lv(0.82) - LR[1], mul(o.topC, 0.75), { tile: T.weave });
+  } else if (o.bottom === 'bare') {
     skinFill(LR[0], LR[1], LW, LH);
     // knee shading
     vgrad(LR[0], lv(0.45), LW, 10, [0, 0, 0], 0, [0, 0, 0], 0.06);
@@ -748,11 +816,13 @@ export function paintAtlas(look, geo) {
       folds(LR[0], lv(0.88), LW, lv(0.97) - lv(0.88), 10, 'h', 0.2, 0.6);
       rough('legs', 0.93);
     } else if (o.bottom === 'churidar' || o.bottom === 'leggings') {
-      if (o.bottom === 'churidar') for (let k = 0; k < 9; k++) { const y = lv(0.7 + k * 0.032); line(LR[0], y, LR[2], y + (k % 2 ? 2 : -1), mul(o.bottomC, 0.62), 0.6, 2); line(LR[0], y + 2, LR[2], y + 3, mul(o.bottomC, 1.2), 0.3, 1); }
+      // churidar bunching at the calf: soft, low-contrast (the geometry ripples carry most of it)
+      if (o.bottom === 'churidar') { g.save(); g.filter = 'blur(1.5px)'; for (let k = 0; k < 9; k++) { const y = lv(0.7 + k * 0.032); line(LR[0], y, LR[2], y + (k % 2 ? 2 : -1), mul(o.bottomC, 0.85), 0.5, 3); line(LR[0], y + 3, LR[2], y + 4, mul(o.bottomC, 1.06), 0.35, 2); } g.restore(); }
       folds(LR[0], LR[1], LW, LH * 0.6, 10, 'h', 0.08, 0.8);
       rough('legs', o.bottom === 'leggings' ? 0.7 : 0.9);
     }
   }
+  if (o.bottom !== 'saree' && o.bottom !== 'bare' && o.bottom !== 'shorts') clothFolds(LR[0], LR[1], LW, LH, 'knee');
   // ======================================================= ARMS (u: 0 medial, .25 front, .5 lateral, .75 back; v shoulder->wrist)
   const AR = REG.arms;
   const AW = AR[2] - AR[0], AH = AR[3] - AR[1];
@@ -765,12 +835,13 @@ export function paintAtlas(look, geo) {
     let sc = o.top === 'saree' ? o.blouseC : (o.top === 'jacket' ? o.topC : o.topC);
     if (sl > 0) {
       const ys = AR[1] + sl * AH;
-      fabric(AR[0], AR[1], AW, ys - AR[1], sc, Object.assign({}, topOpt, { per: topOpt.per ? topOpt.per * 0.6 : undefined }));
+      fabric(AR[0], AR[1], AW, ys - AR[1], sc, o.top === 'saree' ? { pattern: 'plain' } : Object.assign({}, topOpt, { per: topOpt.per ? topOpt.per * 0.6 : undefined }));
       folds(AR[0], AR[1] + AH * 0.35, AW, Math.max(4, ys - AR[1] - AH * 0.35), 10, 'h', 0.14, 0.7);
+      if (sl > 0.6) clothFolds(AR[0], AR[1], AW, ys - AR[1], 'sleeve');
       // hem/cuff
       if (rolled) { fill(mul(sc, 0.9), AR[0], ys - 9, AW, 9); line(AR[0], ys - 9, AR[2], ys - 9, mul(sc, 0.6), 0.7, 1.5); }
       else if (sl >= 0.95) { fill(mul(sc, o.top === 'hoodie' ? 0.85 : 0.9), AR[0], ys - 9, AW, 9); if (o.top === 'hoodie') tex(T.knit, AR[0], ys - 9, AW, 9, 'multiply', 0.9); }
-      else fill(mul(sc, 0.75), AR[0], ys - 2, AW, 2);
+      else fill(mul(sc, 0.88), AR[0], ys - 2, AW, 2);
       if (o.pattern === 'print' && (o.top === 'kameez' || o.top === 'kurti' || o.top === 'kurta')) fill(o.top2C, AR[0], ys - 6, AW, 4);
       vgrad(AR[0], ys, AW, 5, [0, 0, 0], 0.3, [0, 0, 0], 0);
       // underarm seam
@@ -832,32 +903,55 @@ export function paintAtlas(look, geo) {
   const DR = REG.drape;
   const DW = DR[2] - DR[0], DH = DR[3] - DR[1];
   if (o.drapeC) {
-    fabric(DR[0], DR[1], DW, DH, o.drapeC, { pattern: o.top === 'saree' ? o.pattern : (r() < 0.5 ? 'buti' : 'plain'), c2: o.drapeBorderC, per: 12 });
-    // borders along both long edges (u 0 and .5 in ring param: the ribbon's width edges)
-    for (const su of [0.0, 0.5, 1.0]) fill(o.drapeBorderC, DR[0] + su * DW - 4, DR[1], 8, DH);
-    folds(DR[0], DR[1], DW, DH, 20, 'v', 0.18, 1.2);
-    // end tassels / pallu end band
-    fill(o.drapeBorderC, DR[0], DR[3] - 10, DW, 10);
+    const sareeD = o.top === 'saree';
+    if (!sareeD) r(); // keep the random sequence of the looks after this point unchanged
+    fabric(DR[0], DR[1], DW, DH, o.drapeC, { pattern: sareeD ? o.pattern : 'plain', c2: o.drapeBorderC, per: 12 });
+    // thin borders along both long edges (u 0 and .5: the ribbon's width edges), toned into the cloth
+    const bC = sareeD ? o.drapeBorderC : mix(o.drapeBorderC, o.drapeC, 0.45);
+    for (const su of [0.0, 0.5, 1.0]) fill(bC, DR[0] + su * DW - 2.5, DR[1], 5, DH, 0.9);
+    folds(DR[0], DR[1], DW, DH, 20, 'v', 0.14, 1.2);
+    // short, dark fringe at the end (~1.5 cm)
+    fill(mul(bC, 0.8), DR[0], DR[3] - 4, DW, 4, 0.85);
     rough('drape', o.top === 'saree' ? 0.7 : 0.88);
   }
   // ======================================================= HEAD (u around, .5 = face centre; v top->chin)
   paintHead(g, look, geo, rng, T, skinFill, fill, tex);
-  rough('head', 0.6);
+  rough('head', 0.68);
   // ======================================================= HAIR
   const HaR = REG.hair;
   fill(look.hairColor, HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1]);
-  tex(T.hair, HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1], 'multiply', 0.85);
-  if (look.grey > 0) tex(T.speck, HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1], 'source-over', look.grey);
-  // sheen band
-  { const gg = g.createLinearGradient(0, HaR[1], 0, HaR[3]); gg.addColorStop(0.15, 'rgba(255,255,255,0)'); gg.addColorStop(0.3, `rgba(255,240,220,${0.07})`); gg.addColorStop(0.45, 'rgba(255,255,255,0)'); g.fillStyle = gg; g.fillRect(HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1]); }
+  g.save(); g.globalCompositeOperation = 'multiply'; g.drawImage(T.hair, HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1]); g.restore();
+  if (look.grey > 0) tex(T.greyStrands, HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1], 'source-over', Math.min(0.45, look.grey * 0.5));
+  // strand streaks running from the crown (v = 0) down and around (lighter / darker combed lines)
+  {
+    const hw = HaR[2] - HaR[0], hh = HaR[3] - HaR[1];
+    g.save(); g.beginPath(); g.rect(HaR[0], HaR[1], hw, hh); g.clip();
+    for (let i = 0; i < 70; i++) {
+      const x = HaR[0] + r() * hw, y0 = HaR[1] + r() * hh * 0.3, len = hh * (0.3 + 0.6 * r());
+      const light = r() < 0.45;
+      g.strokeStyle = light ? `rgba(255,235,210,${0.05 + 0.05 * r()})` : `rgba(0,0,0,${0.10 + 0.12 * r()})`;
+      g.lineWidth = 0.6 + r() * 0.9;
+      g.beginPath(); g.moveTo(x, y0); g.quadraticCurveTo(x + (r() - 0.5) * 6, y0 + len * 0.5, x + (r() - 0.5) * 10, y0 + len); g.stroke();
+    }
+    // crown whorl: a small darker spiral where the strands part (top of the head, v ~ 0)
+    const wx = HaR[0] + (0.5 + (r() - 0.5) * 0.3) * hw, wy = HaR[1] + 3;
+    for (let k = 0; k < 7; k++) {
+      const a0 = k * 0.9;
+      g.strokeStyle = `rgba(0,0,0,${0.16})`; g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(wx, wy); g.quadraticCurveTo(wx + Math.cos(a0) * 6, wy + Math.abs(Math.sin(a0)) * 4, wx + Math.cos(a0 + 0.8) * 12, wy + Math.abs(Math.sin(a0 + 0.8)) * 9); g.stroke();
+    }
+    g.restore();
+  }
+  // highlight band where the downlights catch the top of the head (anisotropic-looking stripe)
+  { const gg = g.createLinearGradient(0, HaR[1], 0, HaR[3]); gg.addColorStop(0.05, 'rgba(255,255,255,0)'); gg.addColorStop(0.18, `rgba(255,236,210,${0.13})`); gg.addColorStop(0.24, `rgba(255,236,210,${0.06})`); gg.addColorStop(0.36, 'rgba(255,255,255,0)'); g.fillStyle = gg; g.fillRect(HaR[0], HaR[1], HaR[2] - HaR[0], HaR[3] - HaR[1]); }
   // parting line (front centre u = .5 from the crown v=0 down a bit)
-  if (look.sex === 'f' || look.hair === 'quiff' || r() < 0.3) {
-    const px = HaR[0] + (look.parting === 'side' || look.sex === 'm' ? 0.5 + 0.06 : 0.5) * (HaR[2] - HaR[0]);
-    const ph = (HaR[3] - HaR[1]) * 0.42;
-    g.strokeStyle = rgb(mix(skin, look.hairColor, 0.35), 0.9); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px, HaR[1]); g.lineTo(px, HaR[1] + ph); g.stroke();
+  if (look.sex === 'f' || (look.hair === 'medium' && r() < 0.5)) {
+    const px = HaR[0] + (look.parting === 'side' || look.sex === 'm' ? 0.5 + 0.07 : 0.5) * (HaR[2] - HaR[0]);
+    const ph = (HaR[3] - HaR[1]) * 0.4;
+    g.strokeStyle = rgb(mix(skin, look.hairColor, 0.45), look.sex === 'm' ? 0.5 : 0.8); g.lineWidth = 1.1; g.beginPath(); g.moveTo(px, HaR[1] + ph * 0.32); g.lineTo(px, HaR[1] + ph); g.stroke();
     if (look.sindoor) { g.strokeStyle = 'rgba(170,25,30,0.95)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px, HaR[1] + ph * 0.55); g.lineTo(px, HaR[1] + ph); g.stroke(); }
   }
-  rough('hair', 0.5);
+  rough('hair', 0.74);
   // ======================================================= ITEMS
   const IT = ITEM_REG;
   { // popcorn tub sides: vertical stripes
@@ -865,9 +959,8 @@ export function paintAtlas(look, geo) {
     fill(look.tubC[1], x0, y0, w, h);
     const n = 8;
     for (let i = 0; i < n; i++) if (i % 2 === 0) fill(look.tubC[0], x0 + (i / n) * w, y0, w / n, h);
-    fill(look.tubC[0], x0, y0 + h * 0.4, w, h * 0.22); // label band
-    fill([240, 236, 226], x0 + w * 0.3, y0 + h * 0.45, w * 0.15, h * 0.12);
-    fill([240, 236, 226], x0 + w * 0.8, y0 + h * 0.45, w * 0.15, h * 0.12);
+    fill(look.tubC[0], x0, y0, w, h * 0.08); // rim band
+    for (const cx of [0.25, 0.75]) { g.fillStyle = rgb(look.tubC[0]); g.beginPath(); g.ellipse(x0 + cx * w, y0 + h * 0.5, w * 0.07, h * 0.12, 0, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(245,240,230,0.95)'; g.fillRect(x0 + cx * w - w * 0.04, y0 + h * 0.48, w * 0.08, h * 0.04); }
     tex(T.weave, x0, y0, w, h, 'multiply', 0.5);
   }
   { // cup
@@ -890,7 +983,18 @@ export function paintAtlas(look, geo) {
   gr.fillStyle = 'rgb(60,60,60)'; gr.fillRect(IT.phone[0] / 4, IT.phone[1] / 4, 8, 7);
   gr.fillStyle = 'rgb(170,170,170)'; gr.fillRect(IT.tub[0] / 4, IT.tub[1] / 4, 16, 14);
   gr.fillStyle = 'rgb(130,130,130)'; gr.fillRect(IT.bag[0] / 4, IT.bag[1] / 4, 8, 7);
-  return { canvas: cv, rough: rc };
+  // cloth sheen mask (grey = sheen strength) at roughness-map resolution
+  const shc = makeCanvas(ATLAS / 4, ATLAS / 4);
+  const shg = shc.getContext('2d');
+  shg.fillStyle = '#000'; shg.fillRect(0, 0, ATLAS / 4, ATLAS / 4);
+  const shR = (reg, v, y0f = 0, y1f = 1) => { const R = REG[reg]; const y0 = R[1] + (R[3] - R[1]) * y0f, y1 = R[1] + (R[3] - R[1]) * y1f; shg.fillStyle = `rgb(${v * 255 | 0},${v * 255 | 0},${v * 255 | 0})`; shg.fillRect(R[0] / 4, y0 / 4, (R[2] - R[0]) / 4, (y1 - y0) / 4); };
+  const knit = o.top === 'hoodie' || o.top === 'tee' || o.top === 'polo';
+  shR('torso', knit ? 0.45 : 0.32);
+  if (o.skirtLen || o.top === 'saree') shR('skirt', 0.35);
+  shR('drape', 0.4);
+  if (o.bottom !== 'saree' && o.bottom !== 'bare') shR('legs', o.bottom === 'jeans' ? 0.22 : 0.32, 0, o.bottom === 'shorts' ? 0.5 : 1);
+  if (o.sleeve > 0) shR('arms', knit ? 0.45 : 0.32, 0, o.sleeve);
+  return { canvas: cv, rough: rc, sheen: shc };
 }
 
 function paintHead(g, look, geo, rng, T, skinFill, fill, tex) {
@@ -919,16 +1023,16 @@ function paintHead(g, look, geo, rng, T, skinFill, fill, tex) {
   // eye sockets (shadowed), eyes, brows
   for (const s of [-1, 1]) {
     const ex = 0.5 + s * du;
-    blob(ex, F.eyeS + 0.01, 7, 5, [60, 30, 20], 0.35);
-    // eye: dark almond
+    blob(ex, F.eyeS + 0.01, 6, 4, [70, 38, 28], 0.09);
+    // eye: small dark almond (at CCTV scale the whites barely register)
     const cx = X(ex), cy = Y(s2v(F.eyeS));
-    g.fillStyle = 'rgba(225,215,205,0.75)'; g.beginPath(); g.ellipse(cx, cy, 3.2, 1.3, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = 'rgba(25,15,12,0.95)'; g.beginPath(); g.arc(cx + s * -0.3, cy, 1.25, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = 'rgba(20,12,10,0.8)'; g.lineWidth = 0.9; g.beginPath(); g.ellipse(cx, cy, 3.4, 1.5, 0, Math.PI, Math.PI * 2); g.stroke();
+    g.fillStyle = 'rgba(225,215,205,0.25)'; g.beginPath(); g.ellipse(cx, cy, 3.0, 1.2, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(25,15,12,0.6)'; g.beginPath(); g.arc(cx + s * -0.3, cy, 1.15, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(20,12,10,0.5)'; g.lineWidth = 0.8; g.beginPath(); g.ellipse(cx, cy, 3.3, 1.4, 0, Math.PI, Math.PI * 2); g.stroke();
     // brow
     const by = Y(s2v(F.browS));
-    g.strokeStyle = `rgba(${look.hairColor.map((v) => v | 0).join(',')},${look.sex === 'm' ? 0.95 : 0.85})`;
-    g.lineWidth = look.sex === 'm' ? 2.2 : 1.5; g.lineCap = 'round';
+    g.strokeStyle = `rgba(${look.hairColor.map((v) => v | 0).join(',')},${look.sex === 'm' ? 0.8 : 0.6})`;
+    g.lineWidth = look.sex === 'm' ? 1.9 : 1.1; g.lineCap = 'round';
     g.beginPath(); g.moveTo(cx - s * 3.6, by + 0.8); g.quadraticCurveTo(cx + s * 0.5, by - 1.4, cx + s * 4.2, by + 0.6); g.stroke();
   }
   // nose: shading on sides and nostrils
@@ -945,18 +1049,18 @@ function paintHead(g, look, geo, rng, T, skinFill, fill, tex) {
   // beard
   if (look.beard !== 'none') {
     const hc = look.hairColor;
-    const a = look.beard === 'stubble' ? 0.35 : 0.88;
+    const a = look.beard === 'stubble' ? 0.26 : 0.72;
     g.save();
     g.fillStyle = `rgba(${hc[0] | 0},${hc[1] | 0},${hc[2] | 0},${a})`;
     if (look.beard === 'full' || look.beard === 'stubble') {
       // jaw region: from below the cheekbones to the chin, around to the ears
       g.beginPath();
-      g.moveTo(X(0.5 - 0.24), Y(s2v(0.36)));
-      g.quadraticCurveTo(X(0.5 - 0.15), Y(s2v(F.noseS - 0.02)), X(0.5 - du * 1.5), Y(s2v(F.mouthS + 0.08)));
+      g.moveTo(X(0.5 - 0.235), Y(s2v(0.34)));
+      g.quadraticCurveTo(X(0.5 - 0.16), Y(s2v(F.noseS - 0.06)), X(0.5 - du * 1.4), Y(s2v(F.mouthS + 0.05)));
       g.lineTo(X(0.5 - du * 0.9), Y(s2v(F.mouthS + 0.1)));
       g.quadraticCurveTo(X(0.5), Y(s2v(F.mouthS + 0.14)), X(0.5 + du * 0.9), Y(s2v(F.mouthS + 0.1)));
-      g.lineTo(X(0.5 + du * 1.5), Y(s2v(F.mouthS + 0.08)));
-      g.quadraticCurveTo(X(0.5 + 0.15), Y(s2v(F.noseS - 0.02)), X(0.5 + 0.24), Y(s2v(0.36)));
+      g.lineTo(X(0.5 + du * 1.4), Y(s2v(F.mouthS + 0.05)));
+      g.quadraticCurveTo(X(0.5 + 0.16), Y(s2v(F.noseS - 0.06)), X(0.5 + 0.235), Y(s2v(0.34)));
       g.lineTo(X(0.5 + 0.26), Y(1)); g.lineTo(X(0.5 - 0.26), Y(1)); g.closePath(); g.fill();
       // keep lips visible
       g.fillStyle = `rgba(${mul3(skin, 0.65).map((v) => v | 0).join(',')},${look.beard === 'full' ? 0.9 : 0.5})`;
@@ -970,8 +1074,8 @@ function paintHead(g, look, geo, rng, T, skinFill, fill, tex) {
   // glasses
   if (look.glasses) {
     const c = look.glassesColor;
-    g.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.95)`; g.lineWidth = 1.3;
-    for (const s of [-1, 1]) { g.beginPath(); g.ellipse(X(0.5 + s * du), Y(s2v(F.eyeS)) , 4.6, 3.2, 0, 0, Math.PI * 2); g.stroke(); }
+    g.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.7)`; g.lineWidth = 0.8;
+    for (const s of [-1, 1]) { g.beginPath(); g.ellipse(X(0.5 + s * du), Y(s2v(F.eyeS)), 4.2, 2.8, 0, 0, Math.PI * 2); g.stroke(); }
     g.beginPath(); g.moveTo(X(0.5 - du) + 4.6, Y(s2v(F.eyeS)) - 1); g.lineTo(X(0.5 + du) - 4.6, Y(s2v(F.eyeS)) - 1); g.stroke();
     for (const s of [-1, 1]) { g.beginPath(); g.moveTo(X(0.5 + s * du) + s * 4.6, Y(s2v(F.eyeS)) - 1); g.lineTo(X(0.5 + s * 0.24), Y(s2v(F.eyeS + 0.02))); g.stroke(); }
   }
@@ -979,20 +1083,24 @@ function paintHead(g, look, geo, rng, T, skinFill, fill, tex) {
   // scalp / hair region painted with hair colour (soft hairline)
   const hc = look.hairColor;
   const bald = look.hair === 'receding';
-  g.save();
-  const rows = 64;
-  for (let j = 0; j < rows; j++) {
-    const v = j / rows;
-    const s = 1 - v;
-    for (let i = 0; i < 64; i++) {
-      const u = i / 64;
-      const cov = hairCoverage(look, F, u, s);
-      if (cov <= 0.01) continue;
-      g.fillStyle = `rgba(${hc[0] | 0},${hc[1] | 0},${hc[2] | 0},${Math.min(1, cov) * (bald && s > 0.8 && Math.abs(u - 0.5) < 0.22 ? 0.25 : 1)})`;
-      g.fillRect(X(u), Y(v), W / 64 + 0.6, Hh / rows + 0.6);
+  {
+    const N = 64;
+    const sm = makeCanvas(N, N);
+    const sg = sm.getContext('2d');
+    const im = sg.createImageData(N, N);
+    for (let j = 0; j < N; j++) {
+      const s = 1 - (j + 0.5) / N;
+      for (let i = 0; i < N; i++) {
+        const u = (i + 0.5) / N;
+        let cov = hairCoverage(look, F, u, s);
+        if (bald && s > 0.8 && Math.abs(u - 0.5) < 0.22) cov *= 0.25;
+        const k = (j * N + i) * 4;
+        im.data[k] = hc[0]; im.data[k + 1] = hc[1]; im.data[k + 2] = hc[2]; im.data[k + 3] = Math.round(clamp(cov, 0, 1) * 255);
+      }
     }
+    sg.putImageData(im, 0, 0);
+    g.save(); g.imageSmoothingEnabled = true; g.drawImage(sm, R[0], R[1], W, Hh); g.restore();
   }
-  g.restore();
   tex(T.hair, R[0], R[1], W, Y(s2v(F.hairS - 0.15)) - R[1], 'multiply', 0.5);
   // ears region shading (behind ears)
   for (const s of [-1, 1]) blob(0.5 + s * 0.25, F.eyeS - 0.08, 6, 10, [60, 30, 20], 0.18);
@@ -1001,7 +1109,7 @@ function mul3(c, k) { return [c[0] * k, c[1] * k, c[2] * k]; }
 
 // Hair coverage on the head surface at (u around, .5 = front; s = height fraction from chin).
 // Shared by the painter and the hair-shell geometry so they agree.
-export function hairCoverage(look, F, u, s) {
+export function hairCoverage(look, F, u, s, softness = 0.03) {
   const a = (u - 0.5) * Math.PI * 2; // 0 = front, +-pi = back
   const ca = Math.cos(a);
   // hairline height (in s) as a function of angle: forehead high, temples, around ears, nape low
@@ -1017,6 +1125,5 @@ export function hairCoverage(look, F, u, s) {
   if (look.sex === 'm' || look.hair === 'bun' || look.hair === 'braid' || look.hair === 'pony') {
     if (earA < 0.35 && s < F.eyeS + 0.1) line = Math.max(line, F.eyeS + 0.1);
   }
-  const soft = 0.03;
-  return clamp((s - line) / soft + 0.5, 0, 1);
+  return clamp((s - line) / softness + 0.5, 0, 1);
 }
