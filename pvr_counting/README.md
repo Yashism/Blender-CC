@@ -11,7 +11,7 @@ There are two versions. Both use the same dashboard.
 | --- | --- | --- |
 | `PVR_Entry_Counter_AI_Footage.html` | Photoreal CCTV clip (AI-generated, 34 s seamless loop) | Every box, ID and count comes from running a real detector + tracker (YOLO11 + ByteTrack) over the clip |
 | `PVR_Entry_Counter_Pure_Code.html` | A three.js 3D scene rendered live in the browser | 100 % code: room, people, walk cycles and camera look are procedural. Endless, never repeats |
-| `out/*.mp4` | Recordings of the two slides | For PowerPoint: Insert > Video > This Device, then Playback > Start: Automatically and Loop until Stopped |
+| `out/*.mp4`, `out/PVR_Entry_Counter.pptx` | Recordings of the two slides, and a deck with both already set to autoplay and loop | For PowerPoint: Insert > Video > This Device, then Playback > Start: Automatically and Loop until Stopped |
 
 Each HTML file is self-contained (fonts, logo, video, data inlined) and works offline.
 Open it in Chrome or Edge, press F11 for full screen. It scales to any screen size.
@@ -38,7 +38,8 @@ Rebuild:
 ```bash
 cd pvr_counting/web && npm install
 node build.mjs                                   # both HTML files
-node tools/export_mp4.mjs --html ../PVR_Entry_Counter_Pure_Code.html --out ../out/pure_code.mp4 --seconds 45
+node tools/export_mp4.mjs --gl 1 --query 'q=medium&blur=0' --html ../PVR_Entry_Counter_Pure_Code.html \
+     --out ../out/pure_code.mp4 --seconds 36 --fps 25   # slow in software WebGL; split with --from across processes
 node tools/export_mp4.mjs --html ../PVR_Entry_Counter_AI_Footage.html --out ../out/ai_footage.mp4 --seconds 45 \
      --video /path/to/audi_entry_loop.webm       # headless Chromium can't decode H.264; give it a VP9 copy
 ```
