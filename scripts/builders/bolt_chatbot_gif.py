@@ -1,22 +1,28 @@
-"""Bolt chatbot avatar: RGBA frames (bolt_chatbot.py) -> website-ready loops.
+"""Bolt chatbot avatar: frames from bolt_chatbot.py -> website-ready loops.
 
-    python3 scripts/builders/bolt_chatbot_gif.py --src renders/bolt_chatbot/frames --out renders/bolt_chatbot
+    python3 scripts/builders/bolt_chatbot_gif.py --src renders/bolt_chatbot/frames_v2 --out renders/bolt_chatbot
+
+The source is base.png (Bolt rendered once) + f_####.png (the tail box only, see region.json); each frame is the base
+with that box replaced. All GIF frames share one palette (built from the base), so the static body is identical frame
+to frame and gifsicle stores only the moving tail: full 256 colours, no lossy pass.
 
 Writes
-  bolt_chatbot.gif          320 px, transparent background (GIF has 1-bit alpha: edges matted for light pages)
-  bolt_chatbot.webp         320 px, true alpha + soft ground shadow (crisp on any page colour; all modern browsers)
-  bolt_chatbot_badge.gif    160 px round launcher badge: Bolt's head and chest on a warm circle with an orange ring
-  bolt_chatbot_poster.png   still (first frame, true alpha) for reduced-motion / no-animation fallbacks
+  bolt_chatbot.gif          480 px, transparent background (GIF has 1-bit alpha: edges matted for light pages)
+  bolt_chatbot.webp         480 px, true alpha + soft ground shadow (crisp on any page colour; all modern browsers)
+  bolt_chatbot_badge.gif    256 px round launcher badge: Bolt's head and chest on a warm circle with an orange ring
+  bolt_chatbot_poster.png   still (true alpha) for reduced-motion / no-animation fallbacks
+Display them at half their pixel size (240 / 128 CSS px) for sharp results on high-density screens.
 """
 import argparse
 import glob
+import json
 import os
 import shutil
 import subprocess
 
 from PIL import Image, ImageDraw, ImageFilter
 
-FPS = 12
+FPS = 24
 ORANGE = (255, 112, 20)
 CREAM = (255, 239, 224)
 MATTE = (255, 255, 255)
@@ -24,7 +30,17 @@ MATTE = (255, 255, 255)
 
 def load(src):
     fs = sorted(glob.glob(os.path.join(src, "f_*.png")))
-    return [Image.open(f).convert("RGBA") for f in fs]
+    rj = os.path.join(src, "region.json")
+    if not os.path.exists(rj):
+        return [Image.open(f).convert("RGBA") for f in fs]
+    box = tuple(json.load(open(rj))["box"])
+    base = Image.open(os.path.join(src, "base.png")).convert("RGBA")
+    out = []
+    for f in fs:                                           # the base with the tail box replaced
+        c = base.copy()
+        c.paste(Image.open(f).convert("RGBA").crop(box), box[:2])
+        out.append(c)
+    return out
 
 
 def bbox_all(frames):
@@ -57,32 +73,38 @@ def shadow(size, box):
     return out
 
 
-def gif_frame(im):
-    """RGBA -> palette frame with one transparent index (alpha cut at 50%, edge colours matted to MATTE)."""
-    a = im.getchannel("A")
+def matte(im):
     bg = Image.new("RGBA", im.size, MATTE + (255,))
     bg.alpha_composite(im)
-    p = bg.convert("RGB").quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-    mask = a.point(lambda v: 255 if v < 128 else 0)
-    p.paste(255, mask=mask)
+    return bg.convert("RGB")
+
+
+def gif_frame(im, palette):
+    """RGBA -> palette frame (shared palette, light dither) with one transparent index (alpha cut at 50%)."""
+    p = matte(im).quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG)
+    p.paste(255, mask=im.getchannel("A").point(lambda v: 255 if v < 128 else 0))
     p.info["transparency"] = 255
     return p
 
 
-def save_gif(frames, path, colors=128, lossy=30):
-    pal = [gif_frame(f) for f in frames]
+def save_gif(frames, path):
+    strip = Image.new("RGB", (frames[0].width * 3, frames[0].height))    # palette from a few frames of the loop
+    for i, k in enumerate((0, len(frames) // 3, 2 * len(frames) // 3)):
+        strip.paste(matte(frames[k]), (i * frames[0].width, 0))
+    palette = strip.quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    pal = [gif_frame(f, palette) for f in frames]
     pal[0].save(path, save_all=True, append_images=pal[1:], duration=int(1000 / FPS), loop=0, disposal=2,
                 transparency=255, optimize=False)
-    if shutil.which("gifsicle"):                           # shared palette, frame deltas, light lossy pass
-        subprocess.run(["gifsicle", "-b", "-O3", f"--colors={colors}", f"--lossy={lossy}", path], check=True)
+    if shutil.which("gifsicle"):                           # frame deltas only (lossless)
+        subprocess.run(["gifsicle", "-b", "-O3", path], check=True)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--size", type=int, default=320)
-    ap.add_argument("--badge", type=int, default=160)
+    ap.add_argument("--size", type=int, default=480)
+    ap.add_argument("--badge", type=int, default=256)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     frames = load(a.src)
@@ -101,7 +123,7 @@ def main():
         c.alpha_composite(im)
         soft.append(c.crop(crop).resize((S, S), Image.LANCZOS))
     soft[0].save(os.path.join(a.out, "bolt_chatbot.webp"), save_all=True, append_images=soft[1:],
-                 duration=int(1000 / FPS), loop=0, quality=68, method=6, minimize_size=True)
+                 duration=int(1000 / FPS), loop=0, quality=90, method=6)
     soft[0].save(os.path.join(a.out, "bolt_chatbot_poster.png"))
 
     # round launcher badge: head + chest (upper ~62% of the body), on a warm disc with an orange ring

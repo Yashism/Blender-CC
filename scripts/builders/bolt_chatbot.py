@@ -1,10 +1,15 @@
-"""Bolt, the mascot, as a website chatbot avatar: a seamless 3 s loop (on twos, 12 fps) of Bolt waving hello
-with his front paw, tail wagging, ears flopping, head tilt and a blink, rendered on a transparent background.
+"""Bolt, the mascot, as a website chatbot avatar: a seamless 2 s loop (24 fps) of Bolt wagging his tail, smiling
+at the viewer, on a transparent background.
 
-    blender -b --factory-startup -P scripts/builders/bolt_chatbot.py -- --out DIR [--res 720 --samples 48]
-        [--frames 1,19,37] (test frames)
-Writes DIR/f_####.png (RGBA). scripts/builders/bolt_chatbot_gif.py turns them into the GIF / WebP set.
+The sculpt's tail is a thin blade (it read as paper edge-on), so the tail bones are scaled up across their width
+(lengthwise unchanged). Only the tail moves: Bolt is rendered once in full (base.png), then each frame only the box
+the tail sweeps through (region.json) is rendered and pasted over the base by bolt_chatbot_gif.py.
+
+    blender -b --factory-startup -P scripts/builders/bolt_chatbot.py -- --out DIR [--res 1024 --samples 64]
+        [--frames 1,7,13] (test: full frames)
+Writes DIR/base.png, DIR/region.json and DIR/f_####.png (RGBA, the tail box only).
 """
+import json
 import math
 import os
 import sys
@@ -16,8 +21,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from builders import bolt  # noqa: E402
 from lib import geo, studio  # noqa: E402
 
-N = 72                                     # loop length (24 fps frames); rendered on twos -> 36 frames
-SMILE, BLINK = 7, 1
+N = 48                                     # loop length: 2 s at 24 fps, four wags
+SMILE = 7
+TAIL_THICK = (3.3, 1.0, 1.5)               # tail bone scale across its width (x, z); y = along the bone
 
 
 def smooth(t):
@@ -55,33 +61,36 @@ def ik(arm, bone, loc, rot_x=0.0, rot_y=0.0):
 
 def animate(root):
     arm = next(o for o in root.children_recursive if o.type == "ARMATURE")
-    X, Y, Z = (1, 0, 0), (0, 1, 0), (0, 0, 1)
+    X, Z = (1, 0, 0), (0, 0, 1)
+    for i in range(1, 6):                                  # a round felt tail instead of a paper blade
+        b = f"tail.{i:02d}"
+        arm.data.bones[b].inherit_scale = "NONE" if i > 1 else arm.data.bones[b].inherit_scale
+        arm.pose.bones[b].scale = (TAIL_THICK[0] if i > 1 else 1.8, 1.0, TAIL_THICK[2] if i > 1 else 1.2)
+    rot(arm, "neck.02", (X, -4))                           # static: head turned to the viewer, smiling
+    rot(arm, "head", (Z, 22))
+    bolt.set_face(root, SMILE)
     for f in range(1, N + 1):
-        up = env(f, 6, 16, 50, 62)                         # the paw comes up, waves twice, goes down
-        wv = math.sin(2 * math.pi * 2 * (f - 16) / 34) * up if 16 <= f <= 50 else 0.0
-        # front-left paw: forward, up, and waving side to side
-        ik(arm, "IK_FL", (0.075 * up + 0.035 * wv, -0.15 * up, 0.30 * up), rot_x=-95 * up, rot_y=38 * wv)   # beside the chest
-        # weight shifts onto the planted front paw; chest breathes
-        rot(arm, "spine.04", (Y, 4.0 * up), (X, 1.2 * wave(f, 1)))
-        rot(arm, "spine.03", (X, 0.8 * wave(f, 1, 0.1)))
-        # head: looks at the viewer, a friendly tilt that leans into the wave
-        rot(arm, "neck.02", (X, -4 - 2 * up))
-        rot(arm, "head", (Z, 22), (Y, -7 * up + 3 * wave(f, 1, 0.25)))
-        # ears flop with a little lag behind the head
-        for side, sgn in (("L", 1), ("R", -1)):
-            rot(arm, f"ear.01.{side}", (Y, sgn * (5 * wave(f, 2, -0.12) - 4 * up)))
-            rot(arm, f"ear.02.{side}", (Y, sgn * (9 * wave(f, 2, -0.2) - 6 * up)))
-        # tail wags (4 per loop), each bone a little later
+        for i in range(1, 6):                              # four wags per loop, each bone a little later
+            rot(arm, f"tail.{i:02d}", (Z, (6 + 3 * i) * wave(f, 4, -0.07 * i)), (X, -4))
+            arm.pose.bones[f"tail.{i:02d}"].keyframe_insert("rotation_quaternion", frame=f)
+    bpy.context.view_layer.update()
+    return arm
+
+
+def tail_region(s, arm, margin=0.05):
+    """Normalised camera-view box the tail sweeps through over the loop (+ margin), for border renders."""
+    from bpy_extras.object_utils import world_to_camera_view
+    xs, ys = [], []
+    for f in range(1, N + 1):
+        s.frame_set(f)
         for i in range(1, 6):
-            rot(arm, f"tail.{i:02d}", (Z, (7 + 3 * i) * wave(f, 4, -0.07 * i)), (X, -4))
-        for b in arm.pose.bones:
-            b.keyframe_insert("rotation_quaternion" if b.rotation_mode == "QUATERNION" else "rotation_euler", frame=f)
-            b.keyframe_insert("location", frame=f)
-        # face: smiling, one blink near the end of the loop (back to the smile for the seamless loop)
-        bolt.set_face(root, BLINK if f in (63, 64, 65, 66) else SMILE, frame=f)
-    for fc in arm.animation_data.action.fcurves if hasattr(arm.animation_data.action, "fcurves") else []:
-        for k in fc.keyframe_points:
-            k.interpolation = "LINEAR"
+            pb = arm.pose.bones[f"tail.{i:02d}"]
+            for p in (pb.head, pb.tail):
+                q = world_to_camera_view(s, s.camera, arm.matrix_world @ p)
+                xs.append(q.x)
+                ys.append(q.y)
+    return (max(0.0, min(xs) - margin), min(1.0, max(xs) + margin),
+            max(0.0, min(ys) - margin), min(1.0, max(ys) + margin))
 
 
 def stage(res, samples):
@@ -113,12 +122,29 @@ def main():
     s = stage(a.res, a.samples)
     root = bolt.build(geo.collection("BOLT"))
     root.rotation_euler = (0, 0, math.radians(a.spin))
-    animate(root)
+    arm = animate(root)
     os.makedirs(a.out, exist_ok=True)
-    frames = [int(v) for v in a.frames.split(",")] if a.frames else list(range(1, N + 1, 2))
-    for fr in frames:
+    if a.frames:                                           # test: full frames
+        for fr in (int(v) for v in a.frames.split(",")):
+            s.frame_set(fr)
+            s.render.filepath = os.path.join(a.out, f"t_{fr:04d}.png")
+            bpy.ops.render.render(write_still=True)
+        return
+    x0, x1, y0, y1 = tail_region(s, arm)
+    with open(os.path.join(a.out, "region.json"), "w") as fh:  # pixel box (top-left origin) for the paste
+        json.dump(dict(size=a.res, box=[int(x0 * a.res), int((1 - y1) * a.res), int(x1 * a.res) + 1,
+                                        int((1 - y0) * a.res) + 1]), fh)
+    s.frame_set(1)
+    s.render.filepath = os.path.join(a.out, "base.png")
+    bpy.ops.render.render(write_still=True)
+    s.render.use_border, s.render.use_crop_to_border = True, False
+    s.render.border_min_x, s.render.border_max_x, s.render.border_min_y, s.render.border_max_y = x0, x1, y0, y1
+    for fr in range(1, N + 1):
+        p = os.path.join(a.out, f"f_{fr:04d}.png")
+        if os.path.exists(p):
+            continue
         s.frame_set(fr)
-        s.render.filepath = os.path.join(a.out, f"f_{fr:04d}.png")
+        s.render.filepath = p
         bpy.ops.render.render(write_still=True)
         print(f"[bolt_chat] frame {fr}", flush=True)
 
