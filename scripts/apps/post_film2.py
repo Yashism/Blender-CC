@@ -40,6 +40,7 @@ GREEN = (60, 230, 110)
 CYAN = (120, 210, 255)
 LINE = np.array([0.62, 0.76, 0.98], np.float32)
 COUNT_Y = -11.1
+DOOR_WALL_Y = -12.75                    # world Y just inside the door wall (people beyond it are hidden)
 
 # perception windows: (scan-in start, scan-out start, instant_out)
 SCANS = [
@@ -548,6 +549,9 @@ def overlay(W, H, fr, rec, anchors, scan_amt):
                 continue
             x0, y0, x1, y1 = v[:4]
             if x1 - x0 < 6 * s or x1 < 0 or x0 > W:
+                continue
+            yw = rec.get("Y:" + k[2:])
+            if sid == "s3_door" and yw and yw[0] < DOOR_WALL_Y:   # still outside, behind the wall: not seen yet
                 continue
             pad = 6 * s
             box = (x0 - pad, y0 - pad, x1 + pad, y1 + pad)
