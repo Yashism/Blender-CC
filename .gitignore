@@ -19,3 +19,9 @@ renders/final/logs/
 renders/final/calibration/*.png
 renders/final/_encoding_*
 renders/final/STOP
+
+# RTLS film animatic: per-frame renders and logs (the encoded MP4 is committed)
+renders/rtls/animatic/frames/
+renders/rtls/animatic/comp/
+renders/rtls/animatic/render.log
+renders/rtls/final/

@@ -123,60 +123,89 @@ def _twin_for(mat):
 
 
 _SAVED = {}
+MODE = ["real"]
 
 
-def twin_on():
-    """Swap every non-FX mesh / curve material to its twin version (instance sources included)."""
+def _percept_for(mat):
+    """LiDAR view: the building goes graphite so only the scanned points read; the trucks keep their colour."""
+    n = mat.name if mat else ""
+    if n.startswith(TRUCK_MATS) or n.startswith("rt_bracket"):
+        return mat
+    if n.startswith("rt_floor"):
+        return _clay("pc_floor", (0.010, 0.011, 0.013), 0.6)
+    return _clay("pc_dark", (0.016, 0.017, 0.02), 0.7)
+
+
+def _swap(mapper):
     for data in list(bpy.data.meshes) + list(bpy.data.curves):
-        if data.get(FX_TAG) or data.name in _SAVED:
+        if data.get(FX_TAG):
             continue
-        mats = list(data.materials)
-        if not mats:
-            continue
-        _SAVED[data.name] = mats
-        for i, m in enumerate(mats):
-            data.materials[i] = _twin_for(m)
-    sun = bpy.data.objects.get("rt_sun")
-    fill = bpy.data.objects.get("rt_fill")
-    for o, k in ((sun, 0.85), (fill, 0.6)):              # high, soft light: short shadows, a model on a table
-        if o:
-            o.data["base_energy"] = o.data.get("base_energy", o.data.energy)
-            o.data["base_angle"] = o.data.get("base_angle", o.data.angle)
-            o["base_rot"] = o.get("base_rot", tuple(o.rotation_euler))
-            o.data.energy = o.data["base_energy"] * k
-    if sun:
-        sun.data.angle = math.radians(14.0)
-        el, az = math.radians(66.0), math.radians(150.0)
-        d = Vector((math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)))
-        sun.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
-    w = bpy.context.scene.world
-    for n in w.node_tree.nodes:
-        if n.type == "BACKGROUND":
-            n["base"] = n.get("base", n.inputs["Strength"].default_value)
-            n.inputs["Strength"].default_value = n["base"] * 1.15
-    bpy.context.scene.view_settings.look = "AgX - High Contrast"
-    bpy.context.scene.view_settings.exposure = -0.55
+        if data.name not in _SAVED:
+            mats = list(data.materials)
+            if not mats:
+                continue
+            _SAVED[data.name] = mats
+        for i, m in enumerate(_SAVED[data.name]):
+            data.materials[i] = mapper(m)
 
 
-def twin_off():
+def _restore():
     for name, mats in _SAVED.items():
         data = bpy.data.meshes.get(name) or bpy.data.curves.get(name)
         if data:
             for i, m in enumerate(mats):
                 data.materials[i] = m
     _SAVED.clear()
-    for n in ("rt_sun", "rt_fill"):
-        o = bpy.data.objects.get(n)
-        if o and "base_energy" in o.data:
-            o.data.energy = o.data["base_energy"]
+
+
+def _lights(sun_k, fill_k, world_k, sun_elev=None, sun_angle=None, look="AgX - Medium High Contrast", exposure=0.0):
+    sun = bpy.data.objects.get("rt_sun")
+    fill = bpy.data.objects.get("rt_fill")
+    for o, k in ((sun, sun_k), (fill, fill_k)):
+        if o:
+            o.data["base_energy"] = o.data.get("base_energy", o.data.energy)
+            o.data["base_angle"] = o.data.get("base_angle", o.data.angle)
+            o["base_rot"] = o.get("base_rot", tuple(o.rotation_euler))
+            o.data.energy = o.data["base_energy"] * k
             o.data.angle = o.data["base_angle"]
             o.rotation_euler = o["base_rot"]
-    bpy.context.scene.view_settings.look = "AgX - Medium High Contrast"
-    bpy.context.scene.view_settings.exposure = 0.0
+    if sun and sun_elev is not None:
+        sun.data.angle = math.radians(sun_angle or 14.0)
+        el, az = math.radians(sun_elev), math.radians(150.0)
+        d = Vector((math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)))
+        sun.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
     w = bpy.context.scene.world
     for n in w.node_tree.nodes:
-        if n.type == "BACKGROUND" and "base" in n:
-            n.inputs["Strength"].default_value = n["base"]
+        if n.type == "BACKGROUND":
+            n["base"] = n.get("base", n.inputs["Strength"].default_value)
+            n.inputs["Strength"].default_value = n["base"] * world_k
+    vs = bpy.context.scene.view_settings
+    vs.look = look
+    vs.exposure = exposure
+
+
+def set_mode(mode):
+    """'real', 'twin' (light model, data in colour) or 'percept' (LiDAR view: graphite, points glow)."""
+    if MODE[0] == mode:
+        return
+    _restore()
+    if mode == "twin":
+        _swap(_twin_for)
+        _lights(0.85, 0.6, 1.15, sun_elev=66.0, sun_angle=14.0, look="AgX - High Contrast", exposure=-0.55)
+    elif mode == "percept":
+        _swap(_percept_for)
+        _lights(0.12, 0.1, 0.12, look="AgX - Medium High Contrast", exposure=0.0)
+    else:
+        _lights(1.0, 1.0, 1.0)
+    MODE[0] = mode
+
+
+def twin_on():
+    set_mode("twin")
+
+
+def twin_off():
+    set_mode("real")
 
 
 # ------------------------------------------------------------------------------------ trails
@@ -296,7 +325,8 @@ HEAT_STOPS = [  # (t, r, g, b, alpha): the classic heat-map scale, blue (quiet) 
 ]
 
 
-def heat_grid(tracks, t_end, cell=0.2, sigma=0.9, include=("moving", "waiting", "idle", "fork", "drop")):
+def heat_grid(tracks, t_end, cell=0.2, sigma=0.9, include=("moving", "waiting", "idle", "fork", "drop"),
+              normalise=True, ref=None):
     x0, x1, y0, y1 = L.X0, L.X1 + 6.0, L.Y0, L.Y1                 # 6 m past the east wall: into the trailer
     w, h = int((x1 - x0) / cell), int((y1 - y0) / cell)
     g = np.zeros((h, w), dtype=np.float64)
@@ -321,24 +351,32 @@ def heat_grid(tracks, t_end, cell=0.2, sigma=0.9, include=("moving", "waiting", 
     nz = np.apply_along_axis(lambda v: np.convolve(v, kk, mode="same"), 0, nz)
     nz = (nz - nz.min()) / max(1e-9, nz.max() - nz.min())
     g = g * (0.65 + 0.7 * nz)
-    hi = np.percentile(g[g > 0], 99.3) if np.any(g > 0) else 1.0
+    if not normalise:
+        return g, (x0, x1, y0, y1)
+    hi = ref if ref else (np.percentile(g[g > 0], 99.3) if np.any(g > 0) else 1.0)
     g = np.clip(g / hi, 0, 1) ** 0.6
     return g, (x0, x1, y0, y1)
 
 
-def heatmap(tracks, t_end, coll, z=0.032, strength=1.0):
-    g, (x0, x1, y0, y1) = heat_grid(tracks, t_end)
+_HEAT_N = [0]
+
+
+def heatmap(tracks, t_end, coll, z=0.032, strength=1.0, ref=None):
+    g, (x0, x1, y0, y1) = heat_grid(tracks, t_end, ref=ref)
     h, w = g.shape
     st = np.array(HEAT_STOPS)
     rgba = np.zeros((h, w, 4), dtype=np.float32)
     for c in range(4):
         rgba[..., c] = np.interp(g, st[:, 0], st[:, c + 1])
-    img = bpy.data.images.get("rt_heat") or bpy.data.images.new("rt_heat", w, h, alpha=True)
-    if img.size[0] != w or img.size[1] != h:
-        img.scale(w, h)
+    for old in [im for im in bpy.data.images if im.name.startswith("rt_heat")]:
+        bpy.data.images.remove(old)                     # a fresh image with a fresh name every time: the renderer
+    _HEAT_N[0] += 1                                     # caches images by name across frames
+    img = bpy.data.images.new(f"rt_heat_{_HEAT_N[0]:05d}", w, h, alpha=True)
     img.pixels.foreach_set(rgba.ravel())
     img.pack()
-    m = bpy.data.materials.get("tw_heat") or bpy.data.materials.new("tw_heat")
+    for om in [mm for mm in bpy.data.materials if mm.name.startswith("tw_heat")]:
+        bpy.data.materials.remove(om)
+    m = bpy.data.materials.new(f"tw_heat_{_HEAT_N[0]:05d}")
     m.use_nodes = True
     nt = m.node_tree
     nt.nodes.clear()

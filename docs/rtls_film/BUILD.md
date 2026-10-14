@@ -37,3 +37,29 @@ blender -b --factory-startup -P scripts/rtls/stills.py -- --res 1920x1080 --samp
 
 On 4 CPU cores a preview still takes about 20 s, after a one-minute scene build. On a GPU, set
 `scene.cycles.device = "GPU"` and render at 1920x1080.
+
+## The film (animatic and final)
+
+| File | What it does |
+|---|---|
+| `timeline.py` | The master timing (outline v3): 19 shots over 72 s, every caption and story event in film seconds |
+| `scene.py` | The shared scene build (stills and film use the same warehouse, fleet, people and simulated shift) |
+| `film.py` | Renders the shots frame by frame. Every frame sets the clock, moves the forklifts from the simulation (hand-placed trucks are kept clear of the others) and rebuilds the live effects. Writes `anchors.jsonl` (the trucks' screen positions) for the overlays |
+| `pc.py` | The LiDAR point cloud, made the way a LiDAR makes it: 360° ray fans cast from the sensor head (a BVH of the scene), with a reveal sphere for the sweep and a live horizontal scan that locks onto the map |
+| `post_film.py` | Overlays (captions in the site's style, chips, "?" markers, the knock flash, live readout, offline counter, shift clock and heat legend, pilot steps, the white flash into the twin, the end card) and the MP4 encode |
+
+Modes per shot: `real` (the warehouse as built), `percept` (LiDAR view: graphite, only the points glow; the
+trucks keep their colour), `twin` (the light model, data in colour).
+
+```
+# animatic in this container: every 2nd frame at 640x360 (the post pass holds each render for two frames)
+blender -b --factory-startup -P scripts/rtls/film.py -- --res 640x360 --samples 6 --step 2
+python3 scripts/rtls/post_film.py
+
+# final on the GPU PC: every frame at 1080p
+blender -b --factory-startup -P scripts/rtls/film.py -- --res 1920x1080 --samples 128 --step 1 --gpu \
+    --out renders/rtls/final/frames
+python3 scripts/rtls/post_film.py --frames renders/rtls/final/frames --out renders/rtls/final/rtls_film.mp4 --size 1920x1080
+
+# one shot only (re-render after a change):  --only s04a_scan
+```
