@@ -11,6 +11,8 @@ Writes
 import argparse
 import glob
 import os
+import shutil
+import subprocess
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -67,10 +69,12 @@ def gif_frame(im):
     return p
 
 
-def save_gif(frames, path):
+def save_gif(frames, path, colors=128, lossy=30):
     pal = [gif_frame(f) for f in frames]
     pal[0].save(path, save_all=True, append_images=pal[1:], duration=int(1000 / FPS), loop=0, disposal=2,
                 transparency=255, optimize=False)
+    if shutil.which("gifsicle"):                           # shared palette, frame deltas, light lossy pass
+        subprocess.run(["gifsicle", "-b", "-O3", f"--colors={colors}", f"--lossy={lossy}", path], check=True)
 
 
 def main():
@@ -97,7 +101,7 @@ def main():
         c.alpha_composite(im)
         soft.append(c.crop(crop).resize((S, S), Image.LANCZOS))
     soft[0].save(os.path.join(a.out, "bolt_chatbot.webp"), save_all=True, append_images=soft[1:],
-                 duration=int(1000 / FPS), loop=0, quality=88, method=6)
+                 duration=int(1000 / FPS), loop=0, quality=68, method=6, minimize_size=True)
     soft[0].save(os.path.join(a.out, "bolt_chatbot_poster.png"))
 
     # round launcher badge: head + chest (upper ~62% of the body), on a warm disc with an orange ring
