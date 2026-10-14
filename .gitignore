@@ -53,3 +53,4 @@ assets/music/*_film2.wav
 renders/apps/
 assets/music/film2_sfx.wav
 renders/inside/
+renders/bolt_chatbot/*.log
