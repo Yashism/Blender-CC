@@ -146,7 +146,7 @@ class Film:
         if pcc:
             SC.show(pcc, dots)
         if not dots:
-            SC.show(self.C["roof"], key != "v08_map")
+            SC.show(self.C["roof"], key not in ("v07_line", "v08_map"))     # v07's crane rises past the eaves
             SC.show(self.C["walls_near_up"], key != "v08_map")
         self.rim.hide_render = key != "v04_sensor"
         N.set_sweep(amount=0.0)
