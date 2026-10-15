@@ -105,8 +105,8 @@ def persp_camera(name, loc, target, lens=50.0, dof=None):
     cd.lens = lens
     cd.clip_start = 0.05
     cd.clip_end = 400.0
+    cd.dof.use_dof = bool(dof)      # the camera data is shared: never inherit focus blur from an earlier shot
     if dof:
-        cd.dof.use_dof = True
         cd.dof.focus_distance = (Vector(target) - Vector(loc)).length
         cd.dof.aperture_fstop = dof
     co = bpy.data.objects.get(name) or bpy.data.objects.new(name, cd)
