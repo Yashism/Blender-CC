@@ -26,3 +26,8 @@ renders/rtls/animatic/comp/
 renders/rtls/animatic/render.log
 renders/rtls/final/
 renders/rtls/animatic/anchors.jsonl
+renders/rtls/v2/animatic/frames/
+renders/rtls/v2/animatic/comp/
+renders/rtls/v2/animatic/render.log
+renders/rtls/v2/animatic/anchors.jsonl
+renders/rtls/v2/final/

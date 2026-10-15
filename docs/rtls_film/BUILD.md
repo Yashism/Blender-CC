@@ -63,3 +63,24 @@ python3 scripts/rtls/post_film.py --frames renders/rtls/final/frames --out rende
 
 # one shot only (re-render after a change):  --only s04a_scan
 ```
+
+## The film, v2 ("Every move leaves a line", see TREATMENT_v2.md)
+
+| File | What it does |
+|---|---|
+| `timeline2.py` | 10 shots over 65 s, captions (with the accent word) and story events |
+| `night.py` | The look: the warehouse under its own high-bays with a cool skylight fill, the yard lamps; safety-yellow forklifts; the line materials (RAMS-orange hero, warm-white fleet) |
+| `pc.py` (`lattice_cloud`, `set_radar`) | The website's dot world: every surface around the hero sampled and snapped to an even 3D lattice, shaded teal, painted in and swept by a rotating radar beam |
+| `film2.py` | The shot renderer: real cameras (dolly, crane, orbit, chase, top view), the fleet from the simulated shift, the lines and the heat map rebuilt per frame |
+| `post2.py` | Word-by-word type with the accent word, bloom and vignette, GPS ring, "?" tags, lock card and readout, fleet labels, map call-outs, heat legend and shift clock, the Digital Twin app window, the end card; muxes the temp audio |
+| `sfx2.py` | The TEMP sound bed (synthesised) |
+
+```
+python3 scripts/rtls/sfx2.py
+blender -b --factory-startup -P scripts/rtls/film2.py -- --res 640x360 --samples 8 --step 2      # animatic
+python3 scripts/rtls/post2.py
+# final on the GPU PC
+blender -b --factory-startup -P scripts/rtls/film2.py -- --res 1920x1080 --samples 128 --step 1 --gpu \
+    --out renders/rtls/v2/final/frames
+python3 scripts/rtls/post2.py --frames renders/rtls/v2/final/frames --out renders/rtls/v2/final/rtls_v2.mp4 --size 1920x1080
+```
