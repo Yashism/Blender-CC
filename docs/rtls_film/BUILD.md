@@ -79,6 +79,7 @@ python3 scripts/rtls/post_film.py --frames renders/rtls/final/frames --out rende
 python3 scripts/rtls/sfx2.py
 blender -b --factory-startup -P scripts/rtls/film2.py -- --res 640x360 --samples 8 --step 2      # animatic
 python3 scripts/rtls/post2.py
+python3 scripts/rtls/board2.py          # storyboard.jpg next to the MP4
 # final on the GPU PC
 blender -b --factory-startup -P scripts/rtls/film2.py -- --res 1920x1080 --samples 128 --step 1 --gpu \
     --out renders/rtls/v2/final/frames
