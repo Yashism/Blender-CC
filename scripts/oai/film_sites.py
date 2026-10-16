@@ -36,7 +36,7 @@ SKELETON = ("Bip01 Head", "Bip01 Neck", "Bip01 Pelvis", "Bip01 L UpperArm", "Bip
 
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    o = dict(res="640x360", samples="12", step="1", only=None, out=os.path.join(ROOT, "renders", "omnibox_ai", "sites"))
+    o = dict(res="640x360", samples="8", bounces="4", step="1", only=None, out=os.path.join(ROOT, "renders", "omnibox_ai", "sites"))
     for i in range(0, len(a) - 1, 2):
         o[a[i].lstrip("-")] = a[i + 1]
     o["res"] = tuple(int(v) for v in o["res"].split("x"))
@@ -79,6 +79,9 @@ def main():
     t0 = time.time()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     S.render_settings(o["res"], int(o["samples"]))
+    scn0 = bpy.context.scene
+    scn0.render.use_persistent_data = True              # the hall stays built between frames
+    scn0.cycles.max_bounces = int(o["bounces"])
     site = ST.Site()
     print(f"[oai] site built in {time.time() - t0:.0f}s", flush=True)
     scn = bpy.context.scene

@@ -32,3 +32,8 @@ renders/rtls/v2/animatic/render.log
 renders/rtls/v2/animatic/anchors.jsonl
 renders/rtls/v2/final/
 renders/rtls/v2/temp_audio.wav
+renders/omnibox_ai/sites/
+renders/omnibox_ai/product/
+renders/omnibox_ai/style/
+renders/omnibox_ai/comp/
+renders/omnibox_ai/temp_audio.wav
