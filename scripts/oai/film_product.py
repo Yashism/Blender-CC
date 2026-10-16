@@ -141,9 +141,12 @@ class Stage:
                  (1.0 - ease((t - 6.2) / 0.5)), show_cam=False)
         az = lerp(-58.0, -26.0, ease_io(t / 8.0))
         el = lerp(20.0, 28.0, k)
-        dist = lerp(0.42, 0.86, k)
-        tz = lerp(0.022, 0.112, k)
-        return orbit((0.0, 0.015, tz), dist, el, az), (0.0, 0.015, tz), 55, 8.0
+        dist = lerp(0.44, 0.9, k)
+        tz = lerp(0.022, 0.106, k)
+        c = orbit((0.0, 0.015, tz), dist, el, az)
+        side = Vector((-math.sin(math.radians(az)), math.cos(math.radians(az)), 0.0))   # camera-left on the floor
+        tgt = Vector((0.0, 0.015, tz)) + side * 0.045 * k                           # the stack sits right of centre
+        return tuple(Vector(c) + side * 0.045 * k), tuple(tgt), 55, 8.0
 
     def P3(self, t):
         self.set(light=1.0, led_box=6.0, led_cam=4.0, cam_xy=(-0.13, 0.0), cam_rot=0.0)
@@ -153,8 +156,8 @@ class Stage:
     def P4(self, t):
         self.set(light=1.0, led_box=6.0, led_cam=4.0, sweep=ease_io((t - 0.5) / 3.5) * 0.6 + 0.2)
         az = lerp(-40.0, -55.0, ease_io(t / 5.0))
-        pos = orbit((-0.06, 0.0, 0.035), 0.56, 18.0, az)
-        return pos, (0.075, 0.0, 0.045), 60, 6.0
+        pos = orbit((-0.06, 0.0, 0.035), 0.64, 18.0, az)
+        return pos, (0.035, 0.0, 0.045), 60, 6.0
 
 
 def main():

@@ -26,7 +26,7 @@ UNIT = 0.1206                      # metres per file unit
 PARTS = ("Enclosure", "Carrier board", "Fasteners", "NVMe SSD", "Wi-Fi", "Jetson Orin Nano", "Cooling", "Lid")
 # the teardown: where each part goes when the box comes apart (metres, plus a tilt for the lid)
 EXPLODE = {        # the enclosure stays on the table; everything else lifts out of it, in a stack
-    "Lid": (0.0, 0.055, 0.175, math.radians(-10)),
+    "Lid": (0.0, 0.055, 0.158, math.radians(-10)),
     "Cooling": (0.0, 0.032, 0.132, 0.0),
     "Jetson Orin Nano": (0.0, 0.0, 0.095, 0.0),
     "Carrier board": (0.0, 0.0, 0.062, 0.0),
