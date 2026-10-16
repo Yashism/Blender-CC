@@ -59,7 +59,8 @@ def layer(size):
 
 
 def shadowed(img, lay, blur=6, k=0.6):
-    a = lay.split()[3].filter(ImageFilter.GaussianBlur(blur)).point(lambda v: int(v * k))
+    """Composite a graphics layer with a soft drop shadow (from its solid parts only, not the light tints)."""
+    a = lay.split()[3].point(lambda v: v if v > 90 else 0).filter(ImageFilter.GaussianBlur(blur)).point(lambda v: int(v * k))
     sh = Image.new("RGBA", img.size, (0, 0, 0, 255))
     sh.putalpha(a)
     img.alpha_composite(sh)
@@ -667,13 +668,15 @@ def s_idle(tl, size):
         full = cctv(shot, f, size, tl)
         crop = full.crop((W // 4, 0, W // 4 + W // 2, H))
         r = anc(shot, f)
-        d = ImageDraw.Draw(crop)
+        lay = layer(crop.size)
+        d = ImageDraw.Draw(lay)
         if r and r["objects"].get(key):
             b = r["objects"][key]
             bx = (b[0] * W - W // 4, b[1] * H, b[2] * W - W // 4, b[3] * H)
             bracket(d, bx, ORANGE, 1.0, s, fill=ORANGE)
             secs = base + int(tl)
             chip(d, bx[0], bx[1] - 4 * s, label, ORANGE, 1.0, s, sub=f"idle {secs // 60:02d}:{secs % 60:02d}", size=13)
+        shadowed(crop, lay, 4, 0.5)
         out.alpha_composite(crop, (i * W // 2, 0))
     d = ImageDraw.Draw(out)
     d.line((W // 2, 0, W // 2, H), fill=(10, 10, 12, 255), width=max(3, int(4 * s)))
@@ -701,18 +704,22 @@ def s_grid(tl, size):
             continue
         tile = cctv(shot, f, size, tl, night=shot.endswith("night"))
         r = anc(shot, f)
-        d = ImageDraw.Draw(tile)
+        lay = layer(tile.size)
+        d = ImageDraw.Draw(lay)
         if r:
             boxes = list(r["people"].values()) if what == "people" else [r["objects"].get(what)]
             for b in boxes:
                 if b:
                     bracket(d, px(b, W, H, 6 * s), col, 1.0, s * 1.6, w=2.5, fill=col)
+        shadowed(tile, lay, 4, 0.5)
         tile = tile.resize((gw - 6, gh - 6), Image.BICUBIC)
-        d = ImageDraw.Draw(tile)
+        lay = layer(tile.size)
+        d = ImageDraw.Draw(lay)
         d.rectangle((0, gh - 6 - 52 * s, gw, gh), fill=(10, 11, 14, 210))
         d.rectangle((0, gh - 6 - 52 * s, 5 * s, gh), fill=col)
         d.text((16 * s, gh - 6 - 46 * s), title, font=font("b", 17 * s), fill=WHITE)
         d.text((16 * s, gh - 6 - 24 * s), sub, font=font("r", 13 * s), fill=(200, 205, 212))
+        tile.alpha_composite(lay)
         if k < 1:
             tile = tile.resize((max(1, int((gw - 6) * (0.9 + 0.1 * k))), max(1, int((gh - 6) * (0.9 + 0.1 * k)))))
             tile.putalpha(int(255 * k))
