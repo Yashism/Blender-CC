@@ -37,6 +37,8 @@ from rtls import twin as TW  # noqa: E402
 
 HERO_POSE = (L.LANE_X, -4.5, 90.0)
 HIT_XY = (-4.85, -11.05)                       # the rack end that takes the knock (aisle C/D line, south end)
+DRONE = ((-7.0, -3.5, 40.0), (-3.0, 0.5, 35.0))  # iso drone: (target x, y, ortho scale) at the start and the end
+DRONE_AZIM = -45.0                              # from the south-west, looking north-east
 
 
 def args():
@@ -146,8 +148,9 @@ class Film:
         if pcc:
             SC.show(pcc, dots)
         if not dots:
-            SC.show(self.C["roof"], key not in ("v07_line", "v08_map"))     # v07's crane rises past the eaves
-            SC.show(self.C["walls_near_up"], key != "v08_map")
+            SC.show(self.C["roof"], key not in ("v02_dark", "v07_line", "v08_map"))   # drone, crane, top view
+            SC.show(self.C["walls_near_up"], key not in ("v02_dark", "v08_map"))
+        SC.show(self.S["fl"]["coll"], True)
         self.rim.hide_render = key != "v04_sensor"
         N.set_sweep(amount=0.0)
         N.dim(1.0)
@@ -159,17 +162,28 @@ class Film:
             SC.clear_fx()
         bpy.context.scene.render.use_persistent_data = key not in ("v08_map",)
 
-    def sim(self, ts, skip=(), avoid=(), r=7.0):
+    def sim(self, ts, skip=(), avoid=(), r=7.0, span=None):
+        """Place the fleet at shift time ts. Trucks that would come within r of an `avoid` point at any moment of
+        the shot (`span`: its first and last shift time) run on a time offset, chosen once for the whole shot."""
+        if not hasattr(self, "_offsets"):
+            self._offsets = {}
         poses = {}
-        for n, p in SC.sim_poses(self.tr, ts).items():
+        for n, track in self.tr.items():
             if n in skip:
                 continue
             k = 0
-            while avoid and any(math.dist(p[:2], a) < r for a in avoid) and k < 40:
-                k += 1
-                x, y, h, _ = R.pose_at(self.tr[n], (ts + 97.0 * k) % R.SHIFT)
-                p = (x, y, math.degrees(h))
-            poses[n] = p
+            if avoid:
+                key = (n, span or ts, tuple(avoid), r)
+                if key not in self._offsets:
+                    a0, a1 = span or (ts, ts)
+                    times = [a0 + (a1 - a0) * i / 24.0 for i in range(25)]
+                    while k < 40 and any(math.dist(R.pose_at(track, (tt + 97.0 * k) % R.SHIFT)[:2], a) < r
+                                         for tt in times for a in avoid):
+                        k += 1
+                    self._offsets[key] = k
+                k = self._offsets[key]
+            x, y, h, _ = R.pose_at(track, (ts + 97.0 * k) % R.SHIFT)
+            poses[n] = (x, y, math.degrees(h))
         SC.place_fleet(self.S["fl"], poses)
 
     def place(self, n, x, y, h):
@@ -187,18 +201,21 @@ class Film:
         persp(cam[:3], cam[3:6], cam[6], fstop=8.0)
 
     def v02_dark(self, t, u):
-        N.dim(0.22)
+        """The isometric drone: the roof off, the whole working floor at once, drifting slowly across it."""
+        N.dim(0.9)
         self.beacons(t)
-        self.sim(self.T0 - 600.0 + t * 1.5)
-        cam = path([(7.0, (22.0, -16.0, 12.5, -3.0, 4.0, 0.0, 24.0)),
-                    (11.0, (17.0, -13.0, 8.0, -4.0, 3.0, 0.0, 26.0))], t)
-        persp(cam[:3], cam[3:6], cam[6])
+        self.sim(self.T0 - 600.0 + t)
+        k = T.ease_io(u)
+        tgt = (lerp(DRONE[0][0], DRONE[1][0], k), lerp(DRONE[0][1], DRONE[1][1], k), 0.0)
+        cam = look.iso_camera("cam_iso", tgt, lerp(DRONE[0][2], DRONE[1][2], k), azim=DRONE_AZIM)
+        bpy.context.scene.camera = cam
 
     def v03_hit(self, t, u):
         N.dim(0.45)
         self.beacons(t)
         hx, hy = HIT_XY
-        self.sim(self.T0 - 560.0 + t, skip=("MHE-03",), avoid=[(hx, hy - 2.5)])
+        self.sim(self.T0 - 560.0 + t, skip=("MHE-03",), avoid=[(hx, hy - 2.5)],
+                 span=(self.T0 - 549.0, self.T0 - 546.0))
         k = T.prog(t, (11.0, T.EV["knock"]))                     # creeps in, taps the end, backs away
         back = T.prog(t, (T.EV["knock"] + 0.35, 14.0))
         y = lerp(hy - 4.8, hy - 2.45, k) - 3.2 * back
@@ -209,7 +226,8 @@ class Film:
     def v04_sensor(self, t, u):
         N.dim(0.55)
         self.beacons(t)
-        self.sim(self.T0 - 500.0 + t, skip=(L.HERO,), avoid=[HERO_POSE[:2]], r=9.0)
+        self.sim(self.T0 - 500.0 + t, skip=(L.HERO,), avoid=[HERO_POSE[:2]], r=9.0,
+                 span=(self.T0 - 486.0, self.T0 - 478.0))
         self.place(L.HERO, *HERO_POSE)
         led = T.EV["led_on"]
         set_led(t >= led and not (led + 0.12 < t < led + 0.3))
@@ -255,7 +273,8 @@ class Film:
         self.beacons(t)
         self.dots()
         self.ring.hide_render = True
-        self.sim(self.T0 - 420.0 + t * 0.4, skip=(L.HERO,), avoid=[HERO_POSE[:2]], r=9.0)
+        self.sim(self.T0 - 420.0 + t * 0.4, skip=(L.HERO,), avoid=[HERO_POSE[:2]], r=9.0,
+                 span=(self.T0 - 411.2, self.T0 - 407.6))
         self.place(L.HERO, *HERO_POSE)
         head = lidar_head()
         if head:
@@ -272,7 +291,8 @@ class Film:
     def v06_lock(self, t, u):
         self.beacons(t)
         self.dots()
-        self.sim(self.T0 - 400.0 + t * 0.4, skip=(L.HERO,), avoid=[HERO_POSE[:2]], r=9.0)
+        self.sim(self.T0 - 400.0 + t * 0.4, skip=(L.HERO,), avoid=[HERO_POSE[:2]], r=9.0,
+                 span=(self.T0 - 387.6, self.T0 - 385.6))
         self.place(L.HERO, *HERO_POSE)
         mw, obx, lid = self.kit_points()
         self.radar(t, lid)
@@ -318,6 +338,7 @@ class Film:
         tl = T.prog(t, T.EV["timelapse"])
         ts = max(30.0, R.SHIFT * tl)
         self.sim(min(ts, R.SHIFT - 1))
+        SC.show(self.S["fl"]["coll"], not (0.0 < tl < 1.0))
         SC.clear_fx()
         TW.shift_lines(self.tr, ts, self.fx)
         for o in self.fx.objects:

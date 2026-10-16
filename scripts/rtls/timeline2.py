@@ -10,7 +10,7 @@ LENGTH = 65.0
 
 SHOTS = [
     ("v01_door",    0.0,  7.0),   # night yard: MHE-07 drives to the open door; the GPS ring breaks at the door
-    ("v02_dark",    7.0, 11.0),   # inside, at night: eight beacons moving in the dark, nobody knows where
+    ("v02_dark",    7.0, 11.0),   # isometric drone over the working floor: eight forklifts, nobody knows where
     ("v03_hit",    11.0, 14.0),   # a rack end takes a knock; the forklift reverses away into the dark
     ("v04_sensor", 14.0, 22.0),   # the product moment: the LiDAR and the OmniBox wake up
     ("v05_scan",   22.0, 31.0),   # the laser wave draws the warehouse out of the dark

@@ -291,7 +291,7 @@ def simulate(seed=5, shift=SHIFT):
                 raw.append((t, *cur_xy, h, "idle"))
                 t += 720.0
                 raw.append((t, *cur_xy, h, "idle"))
-        tracks[name] = resample(raw)
+        tracks[name] = body_heading(resample(raw))
     return tracks
 
 
@@ -313,10 +313,51 @@ def resample(raw, dt=DT):
     return out
 
 
+def _wrap(a):
+    return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def body_heading(track, turn_rate=2.2, reverse_for=4.5):
+    """The body's heading, not just the direction of travel: the body turns at a limited rate, and a truck that
+    sets off the way it came reverses out for a few metres before turning, instead of spinning on the spot."""
+    out = []
+    h = track[0][3]
+    rev = None                                     # metres left to reverse, or None
+    for i, s in enumerate(track):
+        if i == 0:
+            out.append((*s[:3], h, s[4]))
+            continue
+        p = track[i - 1]
+        step = math.dist(p[1:3], s[1:3])
+        if step > 1e-4:
+            d = math.atan2(s[2] - p[2], s[1] - p[1])
+            if p[4] != "moving" and s[4] == "moving" and abs(_wrap(d - h)) > math.radians(100):
+                rev = reverse_for
+            if rev is not None:
+                rev -= step
+                if rev <= 0:
+                    rev = None
+            want = d + math.pi if rev is not None else d
+            h += max(-turn_rate * DT, min(turn_rate * DT, _wrap(want - h)))
+            h = _wrap(h)
+        out.append((*s[:3], h, s[4]))
+    return out
+
+
 def pose_at(track, t):
-    i = max(0, min(len(track) - 1, int(round((t - track[0][0]) / DT))))
-    s = track[i]
-    return s[1], s[2], s[3], s[4]
+    """Pose at any time, blended between the samples (so the trucks glide at any frame rate)."""
+    u = (t - track[0][0]) / DT
+    i = int(math.floor(u))
+    if i < 0:
+        s = track[0]
+        return s[1], s[2], s[3], s[4]
+    if i >= len(track) - 1:
+        s = track[-1]
+        return s[1], s[2], s[3], s[4]
+    a, b = track[i], track[i + 1]
+    f = u - i
+    return (a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, _wrap(a[3] + _wrap(b[3] - a[3]) * f),
+            a[4] if f < 0.5 else b[4])
 
 
 def window(track, t0, t1):
