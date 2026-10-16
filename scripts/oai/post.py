@@ -561,7 +561,7 @@ def s_fork(tl, size, shot="C", ai=True):
             bracket(d, bx, col, 1.0, s)
             chip(d, bx[0], bx[1] - 3 * s, "PERSON", col if col != WHITE else (30, 32, 38), 1.0, s, size=11)
     shadowed(img, lay, 4, 0.5)
-    alert(img, tl, 1.4, "FORKLIFT ⇄ PERSON", "Aisle C × 4  ·  warning to driver and light", ORANGE)
+    alert(img, tl, 1.4, "COLLISION RISK", "Forklift + person  ·  Aisle C × 4  ·  driver warned", ORANGE)
     chapter(img, tl, 0.0, "fork")
     return img
 
@@ -805,7 +805,7 @@ def s_dash(tl, size):
     ex1 = x0 + (x1 - x0) * 0.58
     d.text((x0 + 22 * s, ey), "LIVE EVENTS", font=font("b", 13 * s), fill=rgba(GREY, k))
     events = [("A", 70, "No hi-vis vest", "Entry A", "09:14", RED), ("B", 60, "Person in danger zone · machine stopped",
-              "Robot cell 2", "10:02", RED), ("C", 60, "Forklift ⇄ person warning", "Aisle C × 4", "11:37", ORANGE),
+              "Robot cell 2", "10:02", RED), ("C", 60, "Forklift + person warning", "Aisle C × 4", "11:37", ORANGE),
               ("D", 80, "Person down · supervisor alerted", "Plant walkway", "13:21", RED),
               ("F", 40, "Truck waiting 38 min", "Dock 4", "14:05", ORANGE)]
     for i, (shot, fr, what, where, when, col) in enumerate(events):
@@ -888,6 +888,7 @@ def frame(fi, size):
 
 
 def main():
+    global SRC
     ap = argparse.ArgumentParser()
     ap.add_argument("--size", default="1280x720")
     ap.add_argument("--out", default=os.path.join(SRC, "omnibox_ai_animatic.mp4"))
@@ -896,7 +897,6 @@ def main():
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--src", default=None, help="folder holding product/ and sites/ (default renders/omnibox_ai)")
     o = ap.parse_args()
-    global SRC
     if o.src:
         SRC = o.src
     size = tuple(int(v) for v in o.size.split("x"))
