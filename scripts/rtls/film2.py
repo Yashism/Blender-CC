@@ -37,7 +37,8 @@ from rtls import twin as TW  # noqa: E402
 
 HERO_POSE = (L.LANE_X, -4.5, 90.0)
 HIT_XY = (-4.85, -11.05)                       # the rack end that takes the knock (aisle C/D line, south end)
-DRONE = ((-7.0, -3.5, 40.0), (-3.0, 0.5, 35.0))  # iso drone: (target x, y, ortho scale) at the start and the end
+DRONE = ((2.0, -2.5, 44.0), (5.0, 0.5, 38.0))   # iso drone: (target x, y, ortho scale) at the start and the end
+DRONE_TS = 4635.0                               # a busy moment: all eight trucks on the floor, six of them driving
 DRONE_AZIM = -45.0                              # from the south-west, looking north-east
 
 
@@ -204,11 +205,14 @@ class Film:
         """The isometric drone: the roof off, the whole working floor at once, drifting slowly across it."""
         N.dim(0.9)
         self.beacons(t)
-        self.sim(self.T0 - 600.0 + t)
+        self.sim(DRONE_TS + (t - 7.0))
         k = T.ease_io(u)
         tgt = (lerp(DRONE[0][0], DRONE[1][0], k), lerp(DRONE[0][1], DRONE[1][1], k), 0.0)
         cam = look.iso_camera("cam_iso", tgt, lerp(DRONE[0][2], DRONE[1][2], k), azim=DRONE_AZIM)
         bpy.context.scene.camera = cam
+        bpy.context.view_layer.update()
+        if not look.frame_inside(cam, L.BX0, L.BX1, L.BY0, L.BY1, hidden=16.0):
+            print(f"[rtls] warning: the drone frame at {t:.2f} s shows past the walls", flush=True)
 
     def v03_hit(self, t, u):
         N.dim(0.45)
