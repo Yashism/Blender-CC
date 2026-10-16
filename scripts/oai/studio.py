@@ -129,3 +129,21 @@ def camera(loc, target, lens=85.0, fstop=None, name="cam"):
     co.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
     bpy.context.scene.camera = co
     return co
+
+
+def use_gpu():
+    """Render on the GPU if there is one (OptiX, CUDA, HIP, oneAPI or Metal)."""
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    for kind in ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL"):
+        try:
+            prefs.compute_device_type = kind
+            prefs.get_devices()
+            if any(d.type != "CPU" for d in prefs.devices):
+                for d in prefs.devices:
+                    d.use = d.type != "CPU"
+                bpy.context.scene.cycles.device = "GPU"
+                print(f"[oai] rendering on {kind}", flush=True)
+                return True
+        except TypeError:
+            continue
+    return False

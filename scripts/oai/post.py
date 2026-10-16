@@ -894,7 +894,11 @@ def main():
     ap.add_argument("--audio", default=os.path.join(SRC, "temp_audio.wav"))
     ap.add_argument("--test", default=None)
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--src", default=None, help="folder holding product/ and sites/ (default renders/omnibox_ai)")
     o = ap.parse_args()
+    global SRC
+    if o.src:
+        SRC = o.src
     size = tuple(int(v) for v in o.size.split("x"))
     comp = os.path.join(SRC, "comp")
     os.makedirs(comp, exist_ok=True)

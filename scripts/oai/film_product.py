@@ -57,6 +57,9 @@ def orbit(target, dist, elev, azim):
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     o = dict(res="640x360", samples="20", bounces="6", step="1", only=None, out=os.path.join(ROOT, "renders", "omnibox_ai", "product"))
+    if "--gpu" in a:
+        o["gpu"] = True
+        a = [v for v in a if v != "--gpu"]
     for i in range(0, len(a) - 1, 2):
         o[a[i].lstrip("-")] = a[i + 1]
     o["res"] = tuple(int(v) for v in o["res"].split("x"))
@@ -160,6 +163,8 @@ def main():
     S.render_settings(o["res"], int(o["samples"]))
     bpy.context.scene.render.use_persistent_data = True
     bpy.context.scene.cycles.max_bounces = int(o["bounces"])
+    if o.get("gpu"):
+        S.use_gpu()
     st = Stage()
     scn = bpy.context.scene
     for shot, n in SHOTS.items():
