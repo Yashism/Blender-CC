@@ -1,4 +1,4 @@
-# OmniBox AI film: outline v1 (for approval)
+# OmniBox AI film: outline v2 (for approval)
 
 **Working title:** *Your cameras, now they understand.*
 
@@ -38,11 +38,11 @@ glance, and seeing the AI work on that picture is the proof.
 | 17–21 | **On site** | The camera and the box, linked by a line of light. A cloud icon above them fades out and a lock appears. | *No cloud. No internet.* / *Your video never leaves your site.* |
 | 21–25 | **01 PPE** | A factory entry, seen through the camera. Workers walk in. One has a hard hat but no vest: green ticks, then a red tag. | *PPE check* · HELMET ✓ VEST ✗ |
 | 25–29 | **02 Danger zones** | A robot cell or machine with a red zone on the floor. A person steps in: the zone flashes, the light bar turns red and the machine stops. | *People tracking & danger zones* |
-| 29–33 | **03 Forklift near-miss** | A blind corner in a warehouse aisle. A forklift and a person on a collision course are both tracked, and the warning fires before they meet. | *Forklift–pedestrian alerts* |
+| 29–33 | **03 Forklift–pedestrian** | A fixed camera over a blind aisle crossing. A forklift and a person on a collision course are both tracked; the light at the crossing flashes before they meet. | *Forklift–pedestrian alerts* |
 | 33–37 | **04 Fall** | A plant walkway. A worker slips and falls; the skeleton overlay turns red and the alert goes straight to the supervisor. | *Fall detection* · PERSON DOWN · 3 s |
-| 37–41 | **05 Fire & smoke** | The battery-charging bay at night. A thin wisp of smoke appears, outlined before any flame. | *Fire & smoke, seconds earlier* |
-| 41–45 | **06 Attendance** | The shift gate. People walk through; ID tags tick in, with faces blurred. A counter climbs. | *Attendance, hands-free* · IN 142 |
-| 45–49 | **And more** | A fast grid of six feeds, each with its own detection: people counting, intrusion after hours, idle machine, smoking, spill, truck number plates. | *One box. Dozens of use cases.* |
+| 37–42 | **05 Fire, then headcount** | The battery-charging bay at night. A thin wisp of smoke is outlined before any flame and the alarm goes off. Cut to the assembly point: the count ticks down until it stops at 2. | *Fire & smoke, seconds earlier* / *2 people still inside · Zone C* |
+| 42–46 | **06 Docks & lines** | A dock where a truck has waited 40 min with the door open and nobody loading; a factory station sitting idle. Timers climb in orange. | *See idle time as it happens* · DOCK 4 · IDLE 40 MIN |
+| 46–49 | **And more** | A fast grid of six feeds, each with its own detection: daily attendance, intrusion after hours, smoking, blocked fire exit, spill, truck number plates. | *One box. Dozens of use cases.* |
 | 49–55 | **The result** | The feeds fly into a clean RAMS dashboard: today's alerts, PPE compliance %, near-misses, response times. | *Every event caught. Logged. Acted on.* |
 | 55–60 | **End card** | The OmniBox AI and the camera side by side, then the logo. | *See. Understand. Act.* / RAMS DIGITAL · **Book a demo** · rams.digital |
 
@@ -73,9 +73,22 @@ glance, and seeing the AI work on that picture is the proof.
 1. The **3D file** of the OmniBox AI (not uploaded yet), and whether it includes the internal parts.
 2. **Spec lines:** "NVIDIA Jetson inside", "up to 67 TOPS", and how many cameras one box runs. Please also check
    NVIDIA's partner branding rules if we want their logo; text alone is safer.
-3. **The six hero use cases:** PPE, danger zones, forklift near-miss, fall, fire & smoke, attendance. Also which
-   of the "and more" six are real.
-4. **Attendance:** is it face recognition? If so, faces stay blurred on screen, for privacy optics on LinkedIn.
+3. **The six hero use cases:** PPE, danger zones, forklift–pedestrian, fall, fire with emergency headcount, and
+   docks & lines. Also which of the "and more" six are real.
+4. **Attendance:** is it face recognition? It now appears as the headcount after the fire and in the grid, with
+   faces blurred on screen, for privacy optics on LinkedIn.
 5. **Alerts:** what the system triggers (light bar or buzzer, machine stop, phone or app alert, dashboard) and
    whether the dashboard is a real RAMS screen we should match.
 6. **Voice-over:** with or without.
+
+## Changes in v2
+
+- **Attendance moved.** Face-recognition attendance on its own is the weakest visual and the most privacy-sensitive
+  for a LinkedIn audience. It now carries the fire scene as the **emergency headcount**: who is still inside. Daily
+  attendance stays in the grid.
+- **Docks & lines added.** v1 was all safety. Executives also buy on productivity, so one use case shows **idle
+  time** (a truck waiting at a dock, an idle station). It leads naturally into the results dashboard.
+- **Forklift–pedestrian kept, as a fixed camera at a crossing.** That keeps it clearly separate from the OmniBox Edge
+  on the forklift.
+- **The grid** now shows attendance, after-hours intrusion, smoking, a blocked fire exit, a spill and truck number
+  plates (people counting is covered by the headcount).
