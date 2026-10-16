@@ -77,7 +77,7 @@ python3 scripts/rtls/post_film.py --frames renders/rtls/final/frames --out rende
 
 ```
 python3 scripts/rtls/sfx2.py
-blender -b --factory-startup -P scripts/rtls/film2.py -- --res 640x360 --samples 8 --step 2      # animatic
+blender -b --factory-startup -P scripts/rtls/film2.py -- --res 640x360 --samples 8 --step 1      # animatic (~5 h on 4 CPU cores)
 python3 scripts/rtls/post2.py
 python3 scripts/rtls/board2.py          # storyboard.jpg next to the MP4
 # final on the GPU PC
