@@ -1,5 +1,9 @@
 # Bolt's Night Shift, Ep. 5 "Blind Corner"
 
+> **Also in this repo:** the RAMS rack-inspection video calendar (`content-plan/`) and its first
+> film, **W01 "One Weak Rack"**, a photoreal Cycles build (`scripts/w01/`, see
+> [docs/W01_ONE_WEAK_RACK.md](docs/W01_ONE_WEAK_RACK.md)).
+
 A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS project in a handmade felt-and-cardboard stop-motion look. Every model, rig and render comes from Python in `scripts/`, so the whole episode can be rebuilt from a fresh checkout.
 
 ## Status: Stages 1, 2 and 3 approved, Stage 4 final render ready to run on the client laptop
