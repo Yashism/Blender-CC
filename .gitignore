@@ -19,3 +19,8 @@ renders/final/logs/
 renders/final/calibration/*.png
 renders/final/_encoding_*
 renders/final/STOP
+# W01 hero film: generated sets, per-frame renders, post frames
+blender/w01_*.blend
+renders/w01/post/
+renders/w01/logs/
+renders/w01/*.wav
