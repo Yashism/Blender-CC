@@ -809,7 +809,29 @@ def parse():
     ap.add_argument("--out", default="")
     ap.add_argument("--still", type=int, default=0)
     ap.add_argument("--save", default="")
+    ap.add_argument("--device", default="cpu", help="cpu | gpu (OptiX/CUDA/HIP/oneAPI/Metal, first found)")
+    ap.add_argument("--slice", default="", help="i/n: render every n-th frame starting at i (multi-GPU)")
     return ap.parse_args(argv)
+
+
+def use_gpu(scene):
+    """Enable the first available GPU backend for Cycles. Returns the backend name or None."""
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    for backend in ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL"):
+        try:
+            prefs.compute_device_type = backend
+        except TypeError:
+            continue
+        prefs.get_devices()
+        devs = [d for d in prefs.devices if d.type == backend]
+        if devs:
+            for d in prefs.devices:
+                d.use = d.type == backend
+            scene.cycles.device = "GPU"
+            log(f"GPU: {backend} " + ", ".join(d.name for d in devs))
+            return backend
+    log("no GPU found, rendering on CPU")
+    return None
 
 
 def main():
@@ -818,6 +840,8 @@ def main():
     SHOTS[a.shot]()
     w, h = (int(v) for v in a.res.split("x"))
     scene.render.resolution_x, scene.render.resolution_y = w, h
+    if a.device == "gpu":
+        use_gpu(scene)
     scene.cycles.samples = a.samples
     scene.render.fps = FPS
     scene.render.image_settings.file_format = "PNG"
@@ -840,7 +864,11 @@ def main():
         _bake_rigid(scene)
     if scene.get("freeze_at"):
         _bake_rigid(scene)
-    for f in range(f0, f1 + 1):
+    frames = list(range(f0, f1 + 1))
+    if a.slice:
+        i, n = (int(v) for v in a.slice.split("/"))
+        frames = frames[i::n]
+    for f in frames:
         path = os.path.join(out, f"f_{f:04d}.png")
         if os.path.exists(path):
             continue

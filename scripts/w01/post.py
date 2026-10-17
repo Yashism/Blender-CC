@@ -381,10 +381,10 @@ def run(vertical, jobs, scale):
     tag = "9x16" if vertical else "16x9"
     src = (W, H)
     if vertical:
-        size_out = (int(540 * scale), int(960 * scale))
+        size_out = (int(H * scale) // 2 * 2, int(H * 16 / 9 * scale) // 2 * 2)
     else:
         size_out = (int(W * scale), int(H * scale))
-    k = size_out[0] / (W if not vertical else 540)
+    k = size_out[0] / (960 if not vertical else 540)
     out_dir = os.path.join(RENDERS, "post", tag)
     os.makedirs(out_dir, exist_ok=True)
     cfg = dict(vertical=vertical, size_src=src, size_out=size_out, out_dir=out_dir, k=k)
@@ -408,7 +408,10 @@ def main():
     ap.add_argument("--jobs", type=int, default=3)
     ap.add_argument("--only", default="")
     ap.add_argument("--scale", type=float, default=1.0)
+    ap.add_argument("--src", default="960x540", help="resolution the shots were rendered at")
     a = ap.parse_args()
+    global W, H
+    W, H = (int(v) for v in a.src.split("x"))
     if a.only in ("", "16x9"):
         run(False, a.jobs, a.scale)
     if a.only in ("", "9x16"):
