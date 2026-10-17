@@ -1,0 +1,353 @@
+<title>RAMS Rack Video Calendar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a warehouse load-sign header, then sections on one column; the calendar is a filterable list of week rows grouped by season. */
+:root {
+  --bg: #F3F4F6;
+  --surface: #FFFFFF;
+  --fg: #1B2230;
+  --muted: #5B6578;
+  --line: #D9DDE5;
+  --accent: #D9480F;        /* RAMS orange, darkened for text contrast */
+  --accent-strong: #F55314; /* RAMS orange as supplied */
+  --rack: #2F63B8;
+  --sign: #FFD23F;
+  --sign-fg: #1B1B1B;
+  --green: #2E8B47;
+  --amber: #B7791F;
+  --red: #D23A2A;
+  --chip: #E8EBF1;
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161E; --surface: #1A202B; --fg: #E6E9EF; --muted: #9AA4B5; --line: #2D3544;
+    --accent: #FF7A45; --accent-strong: #F55314; --rack: #6F9BE8; --sign: #FFD23F; --sign-fg: #1B1B1B;
+    --green: #5CC77A; --amber: #E8B04B; --red: #FF6B5B; --chip: #252C39; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161E; --surface: #1A202B; --fg: #E6E9EF; --muted: #9AA4B5; --line: #2D3544;
+  --accent: #FF7A45; --accent-strong: #F55314; --rack: #6F9BE8; --sign: #FFD23F; --sign-fg: #1B1B1B;
+  --green: #5CC77A; --amber: #E8B04B; --red: #FF6B5B; --chip: #252C39; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.05; }
+h2 { font-size: 30px; letter-spacing: .01em; text-transform: uppercase; }
+h3 { font-size: 21px; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 18px; padding-block: 34px; border-top: 1px solid var(--line); }
+
+/* Header: styled like a rack load-capacity sign */
+.sign { background: var(--sign); color: var(--sign-fg); border: 3px solid var(--sign-fg); border-radius: 6px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; padding: 22px 24px; margin-bottom: 28px; }
+.sign h1 { font-size: clamp(38px, 7vw, 64px); text-transform: uppercase; letter-spacing: .01em; }
+.sign p { font-weight: 500; margin-top: 10px; }
+.sign .stamp { align-self: start; border: 2px solid var(--sign-fg); padding: 10px 14px; text-align: center; font-family: var(--display); }
+.sign .stamp b { display: block; font-size: 46px; line-height: 1; }
+.sign .stamp span { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; }
+.hazard { height: 10px; margin: -10px 0 28px; border-radius: 0 0 4px 4px;
+  background: repeating-linear-gradient(-45deg, var(--sign-fg) 0 12px, var(--sign) 12px 24px); }
+@media (max-width: 560px) { .sign { grid-template-columns: 1fr; } .sign .stamp { justify-self: start; } }
+
+.lede { font-size: 17px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.panel ul, .panel ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.offer { border-left: 4px solid var(--accent-strong); }
+.tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 12px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.triggers { display: flex; flex-wrap: wrap; gap: 8px; }
+.trigger { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.trigger b { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+.insights { counter-reset: i; display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.insights li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; }
+.insights li::before { counter-increment: i; content: counter(i); font: 700 24px/1 var(--display); color: var(--accent); }
+
+/* Calendar */
+.formats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.fmt-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 6px; }
+.fmt-card .tag { justify-self: start; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls .label { font-size: 13px; color: var(--muted); margin-right: 4px; }
+button.chip { font: 500 13px/1 var(--body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer; }
+button.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button.chip:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input#q { font: 14px var(--body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); min-width: 0; width: 220px; max-width: 100%; }
+.count { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.season { display: grid; gap: 10px; }
+.season header { display: grid; gap: 4px; padding-top: 10px; }
+.season header p { color: var(--muted); font-size: 14px; }
+details.wk { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+details.wk summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 52px 92px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; }
+details.wk summary::-webkit-details-marker { display: none; }
+.wno { font: 700 26px/1 var(--display); color: var(--rack); font-variant-numeric: tabular-nums; }
+.wdate { font: 500 12.5px/1.3 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.wtitle { font-weight: 600; min-width: 0; }
+.wtitle small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+.tag { font: 600 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 4px; white-space: nowrap; background: var(--chip); color: var(--fg); }
+.tag.HERO { background: var(--accent-strong); color: #fff; }
+.tag.BNS { background: var(--sign); color: var(--sign-fg); }
+.tag.LENS { background: var(--rack); color: #fff; }
+.tag.TWIN { background: var(--fg); color: var(--bg); }
+.tag.SPOT { background: var(--chip); color: var(--fg); border: 1px dashed var(--muted); }
+.wbody { padding: 0 14px 16px 78px; display: grid; gap: 10px; }
+.wbody dl { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 14px; margin: 0; }
+.wbody dt { font: 600 12px/1.5 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wbody dd { margin: 0; min-width: 0; }
+.wbody ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.stage { font-size: 12px; color: var(--muted); }
+.stage::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.stage.Conversion::before { background: var(--red); }
+.stage.Consideration::before { background: var(--amber); }
+.stage.Education::before { background: var(--green); }
+.stage.Awareness::before { background: var(--rack); }
+@media (max-width: 640px) {
+  details.wk summary { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .wdate { grid-column: 2; grid-row: 2; }
+  .wtitle { grid-column: 2; grid-row: 1; }
+  details.wk summary .tag { grid-column: 3; grid-row: 1; }
+  .wbody { padding-left: 14px; }
+  .wbody dl { grid-template-columns: 1fr; }
+}
+.foot { color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { details.wk[open] .wbody { animation: drop .18s ease-out; } }
+@keyframes drop { from { transform: translateY(-4px); opacity: .6; } to { transform: none; opacity: 1; } }
+</style>
+
+<div class="wrap">
+  <div class="sign">
+    <div>
+      <div class="eyebrow" style="color:inherit">RAMS Digital · Rack Inspection · Blender video plan</div>
+      <h1>Show what the eye can't see</h1>
+      <p>A 52-week calendar of Blender films that turn invisible rack damage into something a warehouse head can watch in 45 seconds, then book a certified rack audit.</p>
+    </div>
+    <div class="stamp"><b>52</b><span>videos · 1 per week</span><br><span>Tue 3 Nov 2026 to Tue 26 Oct 2027</span></div>
+  </div>
+  <div class="hazard" aria-hidden="true"></div>
+
+  <section id="sell">
+    <div class="eyebrow">01 · What we're selling</div>
+    <h2>The Certified Rack Audit</h2>
+    <div class="grid2">
+      <div class="panel offer">
+        <h3>The offer on rams.digital/rack-audit</h3>
+        <p>Certified audit to EN 15635 + <b>Stability Certificate</b> + <b>3 months of RAMS software free</b>. Every audit ships a digital twin, Red/Amber/Green findings, a report with an OEM-specific BoQ, and issue tracking with closure proof.</p>
+        <p class="stage" style="font-size:13px">Lifecycle: Inspect → Tag → Act → Verify → Archive</p>
+      </div>
+      <div class="panel">
+        <h3>Three tiers</h3>
+        <ul>
+          <li><b>Essential:</b> one-time compliance. Twin, EN 15635 inspection, QR, RAG, vertical alignment and beam deflection tests, BoQ.</li>
+          <li><b>Performance:</b> ongoing programme on an annual maintenance contract.</li>
+          <li><b>Advanced:</b> thickness measurement, FEM analysis, safe working load calculation.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>The 9 moments a customer needs an audit</h3>
+    <p class="stage" style="font-size:14px">Every video in the calendar is tied to one of these.</p>
+    <div class="triggers">
+      <span class="trigger"><b>1</b>After a collision or visible damage</span>
+      <span class="trigger"><b>2</b>Every 12 months, minimum</span>
+      <span class="trigger"><b>3</b>Before certificate expiry</span>
+      <span class="trigger"><b>4</b>After new installation</span>
+      <span class="trigger"><b>5</b>Before reinstalling used racks</span>
+      <span class="trigger"><b>6</b>When safe working loads are unknown</span>
+      <span class="trigger"><b>7</b>After a layout change</span>
+      <span class="trigger"><b>8</b>After a natural disaster</span>
+      <span class="trigger"><b>9</b>Before insurance renewal or a claim</span>
+    </div>
+  </section>
+
+  <section id="audience">
+    <div class="eyebrow">02 · Who watches, who buys</div>
+    <h2>The buying committee</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Persona</th><th>Role</th><th>Their fear</th><th>What the video must show</th></tr></thead>
+        <tbody>
+          <tr><td><b>Head of Warehousing / Plant Head</b></td><td>Signs off</td><td>An aisle down in peak; losing a client; a collapse on their watch</td><td>Consequences, one standard across sites, zero disruption</td></tr>
+          <tr><td><b>EHS head / PRSES</b></td><td>Champion</td><td>Personal accountability, no records, no budget</td><td>EN 15635 made simple, RAG, an audit trail, things to forward</td></tr>
+          <tr><td><b>Site manager</b></td><td>User, can veto</td><td>Blame; an audit in peak hours; a vague report</td><td>What audit day looks like; a clear repair BoQ</td></tr>
+          <tr><td><b>Finance / procurement</b></td><td>Approves spend</td><td>Unplanned cost, emergency buys, premiums</td><td>Audit cost vs failure cost; OEM BoQ</td></tr>
+          <tr><td><b>Risk / insurance / legal</b></td><td>Influencer</td><td>Claim rejection, liability</td><td>"Snapshot, not a shield"; records as defence</td></tr>
+          <tr><td><b>Operators, pickers, supervisors</b></td><td>End users</td><td>Being blamed for a hit</td><td>No-blame reporting, simple loading rules, in Hindi, on WhatsApp</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>What that means for the films</h3>
+    <ol class="insights">
+      <li><p><b>Damage is invisible and slow, so the films make it visible and fast.</b> X-ray steel, load paths as light, months in seconds, collapses run in reverse. Live-action can only show the aftermath.</p></li>
+      <li><p><b>Lead with the consequence, then the cause, then the fix.</b> Buyers fear downtime and liability, not steel.</p></li>
+      <li><p><b>Floor content is no-blame and character-led.</b> RAMS says 90% of impacts go unreported. A felt cat can admit a hit that a real operator on camera can't, so <i>Bolt's Night Shift</i> carries the floor message.</p></li>
+      <li><p><b>Compliance in India is pulled by triggers</b> (client audits, insurers, certificate expiry, new sites), so every CTA names its trigger.</p></li>
+      <li><p><b>Champions need something to forward:</b> 16:9 for the boardroom, 9:16 for WhatsApp, captions always on.</p></li>
+      <li><p><b>People buy what they can picture.</b> Process films (what audit day looks like, what the report contains) take the risk out of the decision.</p></li>
+      <li><p><b>Selling videos land in the buying windows:</b> post-peak, Safety Week, FY-end, new FY, pre-monsoon, pre-peak.</p></li>
+    </ol>
+  </section>
+
+  <section id="calendar">
+    <div class="eyebrow">03 · The calendar</div>
+    <h2>52 weeks, 5 formats</h2>
+    <div class="formats" id="formats"></div>
+    <div class="controls" role="group" aria-label="Filter by format">
+      <span class="label">Format</span>
+      <div id="fmtChips" class="controls"></div>
+    </div>
+    <div class="controls" role="group" aria-label="Filter by funnel stage">
+      <span class="label">Stage</span>
+      <div id="stageChips" class="controls"></div>
+      <input id="q" type="search" placeholder="Search titles, triggers…" aria-label="Search the calendar">
+      <span class="count" id="count"></span>
+    </div>
+    <div id="seasons" style="display:grid;gap:22px"></div>
+  </section>
+
+  <section id="make">
+    <div class="eyebrow">04 · How we make it weekly</div>
+    <h2>Build the kit once, then shoot every week</h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Two-week sprint, 19–30 Oct 2026</h3>
+        <ul>
+          <li>Parametric rack kit (real + felt materials, QR plates, load signs, guards)</li>
+          <li>Damage library with RAG severity (dents, twist, locks, anchors, deflection, corrosion)</li>
+          <li>Stress Lens heatmap driven by real statics, engineer-reviewed</li>
+          <li>Collapse rig, baked once, reused in weeks 1, 18 and 52</li>
+          <li>Twin wipe shader and RAMS UI kit; hero aisle with 3 lighting presets</li>
+          <li>Ollie the Owl, the RAMS inspector for <i>Bolt's Night Shift</i></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Weekly rhythm (two-week lead)</h3>
+        <ol>
+          <li>N-2: script, storyboard, engineer sign-off, animatic</li>
+          <li>N-1: layout, animation, sim, render, post (EN + Hindi captions, 16:9 + 9:16)</li>
+          <li>N: publish Tuesday 10:00 IST</li>
+        </ol>
+        <p class="stage" style="font-size:13px">HERO films start 3 weeks ahead and render on Kaggle (a 60 s Cycles film takes about 18 h on the laptop).</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sell-out">
+    <div class="eyebrow">05 · From view to booked audit</div>
+    <h2>Every video gets one trigger, one CTA, one link</h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Distribution</h3>
+        <ul>
+          <li>LinkedIn first (Tue), YouTube and Shorts, Reels (Wed), WhatsApp toolbox pack (Thu)</li>
+          <li>Week 1 replaces the third-party Reddit clip on /rack-audit</li>
+          <li>Sales sends the matching video after each objection</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Conversion</h3>
+        <ul>
+          <li>UTM per video: <code>rack_w01_one_weak_rack</code></li>
+          <li>Comment keywords (POSTER, BEAM, ANCHOR…) send lead magnets</li>
+          <li>Retarget 50% viewers with weeks 6, 20 and 47</li>
+          <li>Show real audit slots by region. Never fake scarcity.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="foot">Full working docs, CSV and the editable calendar source live in the <code>content-plan/</code> folder of the Blender-CC repo. Sources: a full read of rams.digital (17 Oct 2026); market figures from Knight Frank and Colliers 2025 reports. Numbers marked as RAMS claims are RAMS's own published figures.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"weeks": [{"w": 1, "fmt": "HERO", "stage": "Awareness", "title": "One Weak Rack", "audience": "Everyone: Ops/warehouse heads, EHS heads, owners", "trigger": "Series launch, the week before Diwali peak (8 Nov)", "hook": "Extreme macro of a 4 mm crease at the foot of an upright. VO: \"This dent is 4 millimetres deep. Watch what it costs.\"", "beats": ["A reach truck's fork tip kisses the upright base. Paint flakes, one dull 'tink'.", "Pull back down a 6-level aisle loaded for peak. Time-lapse of weeks: more taps on the same upright. On-screen counter: 'Impacts reported: 0'.", "A last pallet lands on level 6. The creased upright folds. Slow-motion progressive collapse across 5 bays: cartons burst, shrink-wrap tears, dust hangs in the light.", "Freeze at peak destruction. Time rewinds to the first dent. A RAMS engineer scans the QR, a RED tag snaps on, the digital-twin bay turns red, a BoQ line reads 'Replace 1 upright'.", "End card: 'One weak rack can take down your whole operation.'"], "shot": "Rigid-body progressive collapse with fractured cartons, cloth shrink-wrap and volumetric dust in sodium light; a speed ramp to 1000 fps-style slow motion, then a seamless time reverse.", "runtime": "60 s 16:9 master + 30 s 9:16 cut", "cta": "Book a Certified Rack Audit: Stability Certificate + 3 months RAMS free. Also replace the third-party Reddit clip in the /rack-audit hero with this film.", "date": "2026-11-03", "date_label": "Tue 03 Nov 2026", "format": "Hero Cinematic", "season": "Season 1: Peak Season Scars"}, {"w": 2, "fmt": "BNS", "stage": "Education", "title": "Peak Night", "audience": "Forklift operators, shift supervisors (made for WhatsApp shift groups)", "trigger": "Diwali week: peak volume, lowest attention", "hook": "Mittens, after a soft bump at the end of Aisle 4: \"Nobody saw that... right?\"", "beats": ["The warehouse is strung with Diwali lights. Orders pile up and FL-02 is rushing.", "Mittens clips the end upright, looks around. Pickles saw it.", "Bolt trots up with a 'Report a hit' card. Mittens reports it. Bolt stitches an AMBER tag on the bay. Nobody gets shouted at.", "Rule card: 'Hit it? Report it. No blame. Just fix.'", "Stat card: 'RAMS field data: 90% of forklift impacts in Indian warehouses go unreported.'"], "shot": "Felt Diwali string lights as bokeh behind FL-02; a crinkle in the felt upright; the amber felt tag stitched on in close-up.", "runtime": "45 s, 16:9 + 9:16, English and Hindi captions", "cta": "Share with your shift team. Soft CTA: post-peak audit slots open.", "date": "2026-11-10", "date_label": "Tue 10 Nov 2026", "format": "Bolt's Night Shift", "season": "Season 1: Peak Season Scars"}, {"w": 3, "fmt": "LENS", "stage": "Consideration", "title": "Peak Season Leaves Scars", "audience": "Warehouse managers, EHS managers", "trigger": "Post-peak, post-collision damage", "hook": "An empty aisle at dawn that looks perfect. Text: \"Peak is over. Your racks didn't get the memo.\"", "beats": ["A scanning plane of light sweeps down the aisle.", "Behind it the steel turns X-ray and the damage lights up: a dented upright base, a bent diagonal brace, a missing beam lock, a dislodged beam, a loose anchor bolt.", "Each defect pops a RAG tag, and a tally counts up in the corner.", "Close: 'Every peak leaves marks. Find them before the next one does.'"], "shot": "A volumetric scanning plane that switches materials from painted steel to X-ray as it passes.", "runtime": "40 s, 16:9 + 9:16", "cta": "Book a post-peak rack audit (December slots).", "date": "2026-11-17", "date_label": "Tue 17 Nov 2026", "format": "Stress Lens", "season": "Season 1: Peak Season Scars"}, {"w": 4, "fmt": "SPOT", "stage": "Awareness", "title": "Spot the Damage #1", "audience": "Floor teams, safety officers, inspectors (engagement)", "trigger": "Engagement and comment-driven reach", "hook": "Text: \"3 defects in this bay. Most people find 1.\"", "beats": ["A slow 360-degree orbit of one loaded bay for 10 s. 'Comment what you see.'", "Reveal: a missing beam safety lock, a bent diagonal brace, a missing anchor bolt, each tagged by colour."], "shot": "A clean turntable orbit with shallow depth of field; the reveal snaps in with RAG tags.", "runtime": "20 s, 9:16 + 1:1", "cta": "Comment POSTER for the free RAG damage poster (lead magnet).", "date": "2026-11-24", "date_label": "Tue 24 Nov 2026", "format": "Spot the Damage", "season": "Season 1: Peak Season Scars"}, {"w": 5, "fmt": "LENS", "stage": "Education", "title": "Green, Amber, Red", "audience": "PRSES, safety officers, supervisors", "trigger": "EN 15635 damage classification", "hook": "Three uprights side by side. VO: \"Your racks are talking in three colours.\"", "beats": ["GREEN: damage within tolerance. Record it, recheck at the next inspection.", "AMBER: beyond tolerance. Offload, don't reload until repaired, repair within 4 weeks.", "RED: severe. Offload and isolate immediately.", "A gauge measures each one in macro while the light shifts through traffic-light colours.", "Close: 'RAMS classifies every finding against EN 15635 tolerances, automatically.'"], "shot": "One macro dolly repeated three times; the key light changes to green, amber, then red.", "runtime": "45 s, 16:9 + 9:16", "cta": "Download the RAG poster / book an audit.", "date": "2026-12-01", "date_label": "Tue 01 Dec 2026", "format": "Stress Lens", "season": "Season 1: Peak Season Scars"}, {"w": 6, "fmt": "TWIN", "stage": "Conversion", "title": "Inside a RAMS Rack Audit", "audience": "Ops heads, EHS heads, procurement", "trigger": "Explains exactly what the customer buys", "hook": "VO: \"Here's exactly what happens when you book a RAMS rack audit.\"", "beats": ["One continuous camera move. An engineer scans the QR on a bay.", "A vertical alignment laser runs up the upright; a beam deflection measurement is taken under load.", "The finding goes into the tablet. The real bay dissolves into the digital twin and its tag turns AMBER.", "An OEM-specific BoQ prints out of the twin. A crew swaps the beam, photo proof is taken, the bay turns GREEN.", "The Stability Certificate stamps and files into the dashboard. On screen: Inspect, Tag, Act, Verify, Archive."], "shot": "A single oner with a real-to-twin dissolve (a wireframe shader wipe follows the camera).", "runtime": "60 s 16:9 + 30 s 9:16", "cta": "Book the Essential Rack Audit (includes 3 months RAMS software). Use as the retargeting ad all year.", "date": "2026-12-08", "date_label": "Tue 08 Dec 2026", "format": "Inside RAMS", "season": "Season 1: Peak Season Scars"}, {"w": 7, "fmt": "LENS", "stage": "Education", "title": "The Beam Is Rated. The Rack Isn't.", "audience": "Warehouse managers, layout planners", "trigger": "Changed or unknown safe working loads", "hook": "Text: \"Every beam here is within its load sign. The rack is still overloaded.\"", "beats": ["A beam load sign. The team adds a sixth beam level 'because the beams are rated'.", "Stress Lens: every beam stays green, but the uprights and base plates shift orange to red as the total load builds.", "Myth/reality cards: 'We added stronger beams.' / 'The top shelf is fine for heavy pallets.'", "Close: 'Beams hold pallets. Uprights hold everything.'"], "shot": "Load arrows flowing down the uprights into the base plates as glowing streams, with a heatmap on the steel.", "runtime": "40 s, 16:9 + 9:16", "cta": "Ask for an SWL check (Advanced Rack Audit: FEM + SWL calculation).", "date": "2026-12-15", "date_label": "Tue 15 Dec 2026", "format": "Stress Lens", "season": "Season 1: Peak Season Scars"}, {"w": 8, "fmt": "BNS", "stage": "Education", "title": "The Top Shelf", "audience": "Forklift operators, pickers", "trigger": "Year-end, a light episode", "hook": "Pickles: \"Top shelf's empty. Perfect for the heavy one!\"", "beats": ["Pickles points Mittens at level 5 with the heaviest crate.", "Bolt does his stop-paw. A felt 'stress thermometer' on the upright rises as the crate goes up.", "Mittens sets it on level 1 instead and the thermometer drops.", "Rule card: 'Heavy low. Light high. Centred on the beam.'"], "shot": "A felt thermometer appliqué that fills with red felt as the forks rise.", "runtime": "45 s, English and Hindi captions", "cta": "Share. Download the loading do's and don'ts poster.", "date": "2026-12-22", "date_label": "Tue 22 Dec 2026", "format": "Bolt's Night Shift", "season": "Season 1: Peak Season Scars"}, {"w": 9, "fmt": "TWIN", "stage": "Consideration", "title": "What We Found in 2026", "audience": "Leadership, ops heads, journalists", "trigger": "Year in review (fill in with real RAMS audit data only)", "hook": "VO: \"We inspected [N] bays this year. Here's what's really holding up India's inventory.\"", "beats": ["An India map rises out of black. Each audited site is a pillar of light sized by bay count (20+ states).", "Top 5 damage types appear as bars built from real rack parts.", "The overall Green/Amber/Red split.", "The most common root cause, and the cheapest fix."], "shot": "A 3D map with a bar chart built from uprights, beams and base plates.", "runtime": "45 s, 16:9 + 1:1", "cta": "Plan your 2027 audit calendar. Data needed from RAMS ops by 15 Dec.", "date": "2026-12-29", "date_label": "Tue 29 Dec 2026", "format": "Inside RAMS", "season": "Season 1: Peak Season Scars"}, {"w": 10, "fmt": "HERO", "stage": "Consideration", "title": "A Snapshot, Not a Shield", "audience": "Owners, compliance, legal, insurance/risk", "trigger": "Before Stability Certificate expiry", "hook": "A framed Stability Certificate on a pristine rack. Text: \"Your certificate is dated. Your racks aren't frozen in time.\"", "beats": ["Time-lapse over months: forklift hits, a layout change, heavier pallets, a swapped beam.", "With each event the certificate's paper yellows and the stamp fades a little.", "Fine print enlarges: 'Valid as of the date of inspection.'", "A fresh audit. A new stamp lands with a heavy thud."], "shot": "A hyper-lapse of the warehouse with a paper-ageing shader driven by event keyframes.", "runtime": "45 s, 16:9 + 9:16", "cta": "Re-certify, or move to the Performance Rack Audit (annual contract).", "date": "2027-01-05", "date_label": "Tue 05 Jan 2027", "format": "Hero Cinematic", "season": "Season 1: Peak Season Scars"}, {"w": 11, "fmt": "LENS", "stage": "Consideration", "title": "When a Rack Falls, Who Pays?", "audience": "Owners, EHS heads, legal", "trigger": "EN 15635 responsibilities and the Factories Act, 1948", "hook": "Text: \"The OEM built it. The inspector signed it. Guess who's liable.\"", "beats": ["A rack on a dark stage with three spotlights: OEM, INSPECTOR, USER.", "Scenario cards drop in: new damage after inspection goes to the user; damage the inspector missed goes to the inspector; overload goes to the user; modification after certification goes to the user or contractor.", "EN 15635: the user is responsible for ongoing safety, inspection and maintenance.", "Close: 'Your records are your defence.'"], "shot": "A theatrical stage with three pools of light; the scenario cards fall like playing cards.", "runtime": "50 s, 16:9 + 9:16 (legal review before publishing)", "cta": "Get an audit trail you can defend: book a certified audit.", "date": "2027-01-12", "date_label": "Tue 12 Jan 2027", "format": "Stress Lens", "season": "Season 1: Peak Season Scars"}, {"w": 12, "fmt": "LENS", "stage": "Education", "title": "The 150 mm Mistake", "audience": "Forklift operators, supervisors", "trigger": "Eccentric loading at height", "hook": "Text: \"15 centimetres. That's all it takes.\"", "beats": ["Top-down: a pallet set 150 mm toward the aisle on level 5 'for easier access'.", "Side view in Stress Lens: a twisting moment arrow appears.", "A time-lapse of months of edge-stacking. The rack slowly leans out of plumb (labelled 'exaggerated x20').", "Engineering card: 'A 150 mm offset on a 4.5 m rack can add lateral moments of 20-30% of the vertical load.'", "Fix: centre it, train it, tag edge-stacked pallets in the twin."], "shot": "An exaggerated lean using a shape-key shear with a ghost of the true vertical.", "runtime": "35 s, 9:16 first", "cta": "Operator training poster / book an audit.", "date": "2027-01-19", "date_label": "Tue 19 Jan 2027", "format": "Stress Lens", "season": "Season 1: Peak Season Scars"}, {"w": 13, "fmt": "BNS", "stage": "Education", "title": "Meet the PRSES", "audience": "Safety officers, warehouse managers", "trigger": "EN 15635 requires a Person Responsible for Storage Equipment Safety", "hook": "Bolt, holding a new badge: \"Person Responsible for Storage Equipment Safety? That's... me?\"", "beats": ["Daily/weekly: Mittens and Pickles do a walk-around check.", "Monthly: Bolt runs the formal inspection with a checklist and RAG felt tags.", "Yearly: a RAMS expert inspector arrives. This introduces Ollie the Owl, the RAMS inspector, with a hard hat and laser level.", "Rule card: 'Name your PRSES. Then back them up.'"], "shot": "Ollie's entrance: a silhouette in the dock door, laser dot first.", "runtime": "60 s", "cta": "Does your site have a PRSES? Book your annual expert inspection.", "date": "2027-01-26", "date_label": "Tue 26 Jan 2027", "format": "Bolt's Night Shift", "season": "Season 1: Peak Season Scars"}, {"w": 14, "fmt": "LENS", "stage": "Consideration", "title": "The Real Math", "audience": "CFOs, finance controllers, ops heads", "trigger": "Union Budget week (1 Feb); FY27-28 budgeting", "hook": "Text: \"One line in your budget. Or every line.\"", "beats": ["A balance scale built from rack parts. The left pan holds one small cube: AUDIT.", "Cost blocks drop into the right pan: lost inventory, downtime per hour, emergency repairs, injury, rejected insurance claim, SLA penalties, reputation.", "Card: 'RAMS estimate: a single rack failure can cost up to 50x the cost of proactive inspection.'", "Close: 'Put it in the budget before it puts itself there.'"], "shot": "Rigid-body blocks landing in the pan; the beam of the scale creaks and tips.", "runtime": "40 s, 16:9 + 1:1", "cta": "Get an audit quote for the FY27-28 budget.", "date": "2027-02-02", "date_label": "Tue 02 Feb 2027", "format": "Stress Lens", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 15, "fmt": "TWIN", "stage": "Consideration", "title": "Every Hit Leaves a Fingerprint", "audience": "Ops heads, EHS heads", "trigger": "Impacts between inspections (RTSS)", "hook": "Timestamp \"02:14 AM\". Text: \"Nobody saw it. RAMS did.\"", "beats": ["A dark night-shift aisle. A forklift clips an upright and drives on.", "The sensor on the upright sends a ripple; the twin lights the bay; an alert lands on the supervisor's phone.", "Morning: the bay is already cordoned off, tagged, with its repair line on the BoQ.", "Close: 'Audits find the damage. Sensors catch it between audits.'"], "shot": "A shockwave ripple through the steel (displacement + emission), carried into the twin view.", "runtime": "45 s", "cta": "Rack audit + RTSS impact-sensor pilot.", "date": "2027-02-09", "date_label": "Tue 09 Feb 2027", "format": "Inside RAMS", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 16, "fmt": "BNS", "stage": "Education", "title": "The Quick Fix", "audience": "Maintenance teams, supervisors", "trigger": "Improper repairs (welding, straightening, non-OEM parts)", "hook": "Pickles, with a hammer: \"I'll just bang it straight!\"", "beats": ["A bent beam. Pickles hammers it and welds a brace on (felt sparks).", "A ghostly 'design strength' gauge drops with every blow.", "Bolt: EN 15635 says no welding or straightening of structural parts; repair to the original spec.", "The OEM-matched part arrives from the BoQ, with a note: non-OEM repairs can void insurance claims."], "shot": "Felt sparks (orange felt confetti particles) and the gauge needle falling.", "runtime": "50 s, English and Hindi captions", "cta": "Get an OEM-matched repair BoQ with your audit.", "date": "2027-02-16", "date_label": "Tue 16 Feb 2027", "format": "Bolt's Night Shift", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 17, "fmt": "SPOT", "stage": "Awareness", "title": "Spot the Damage #2: Floor Level", "audience": "Floor teams, safety officers", "trigger": "Base plates and anchors", "hook": "Text: \"Look down. 2 problems at floor level.\"", "beats": ["A low orbit around one frame's base.", "Reveal: an anchor with a missing nut, cracked concrete under a base plate, a base plate that isn't fully supported."], "shot": "A ground-level macro orbit with dust motes.", "runtime": "20 s, 9:16 + 1:1", "cta": "Comment ANCHOR for the floor-level checklist.", "date": "2027-02-23", "date_label": "Tue 23 Feb 2027", "format": "Spot the Damage", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 18, "fmt": "HERO", "stage": "Awareness", "title": "Aisle 7: A Collapse in Reverse", "audience": "Everyone", "trigger": "National Safety Week (4-10 March)", "hook": "Settled dust over a collapsed aisle. VO: \"This collapse took 11 weeks. Let's rewind it.\"", "beats": ["The collapse plays backward with date stamps.", "Week 10: an extra beam level added. Week 7: an upright visibly leaning. Week 4: an anchor bolt working loose. Week 1: the first, unreported impact.", "At each stop a ghost RAMS tag shows where it could have been caught.", "Card: '6 chances to stop it. 0 inspections.'"], "shot": "A full collapse simulation baked and played backward, with chapter freeze-frames.", "runtime": "75 s 16:9 + 30 s 9:16", "cta": "Safety Week offer: book your audit this week.", "date": "2027-03-02", "date_label": "Tue 02 Mar 2027", "format": "Hero Cinematic", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 19, "fmt": "LENS", "stage": "Education", "title": "5 Reasons Racks Collapse", "audience": "Everyone", "trigger": "National Safety Week, a follow-up (built from earlier footage)", "hook": "Text: \"Rack collapses aren't random. There are 5 reasons.\"", "beats": ["1 Forklift impacts. 2 Overloading and eccentric loading. 3 Improper repairs. 4 Weak floors and loose anchors. 5 No structured inspections.", "Each cause gets an 8-10 s chapter cut from weeks 1-18."], "shot": "A supercut. New work is only the chapter title cards.", "runtime": "60 s 16:9, 5 x 12 s vertical chapters", "cta": "Book an audit; link the 'Rack Collapses Are Not Random' blog.", "date": "2027-03-09", "date_label": "Tue 09 Mar 2027", "format": "Stress Lens", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 20, "fmt": "TWIN", "stage": "Conversion", "title": "Close the Year Certified", "audience": "Ops heads, EHS heads, finance", "trigger": "Financial year-end, 31 March (unspent safety budget)", "hook": "Text: \"Close the financial year with a certificate, not a question mark.\"", "beats": ["What you get, unboxed as 3D objects: the digital twin spins up, then the EN 15635 inspection, the RAG report, the OEM BoQ, the Stability Certificate and 3 months of RAMS software.", "A calendar of the remaining March audit slots by region (real capacity only)."], "shot": "A product 'unboxing' with objects rising out of a RAMS-orange case.", "runtime": "30 s 9:16 + 45 s 16:9", "cta": "Book before 31 March. Paid boost on LinkedIn to ops/EHS titles in India.", "date": "2027-03-16", "date_label": "Tue 16 Mar 2027", "format": "Inside RAMS", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 21, "fmt": "BNS", "stage": "Consideration", "title": "Audit Day", "audience": "Supervisors, operators, managers", "trigger": "Objection: 'An audit will disrupt operations'", "hook": "Mittens: \"An audit? During peak hours?!\"", "beats": ["Ollie the Inspector arrives. Work carries on around him.", "QR scan, laser, tags. The gang watches their own aisle appear on Ollie's tablet twin.", "The certificate is handed over. Mittens: 'That's it?'"], "shot": "A split-diopter-style shot: Ollie working in the foreground, FL-02 still moving behind.", "runtime": "60 s", "cta": "Zero-disruption audits: book yours.", "date": "2027-03-23", "date_label": "Tue 23 Mar 2027", "format": "Bolt's Night Shift", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 22, "fmt": "TWIN", "stage": "Consideration", "title": "Every Site, One Standard", "audience": "National heads at 3PLs, e-commerce, FMCG, manufacturing", "trigger": "Multi-site consistency", "hook": "Text: \"12 warehouses. 12 different checklists. One problem.\"", "beats": ["The camera rises from one warehouse roof into the sky.", "An India map with each site as a mini twin and a RAG compliance score.", "One inconsistent site flags. One method, one dashboard, benchmarks across sites."], "shot": "A continuous rise from interior to orbit-level map (no cut).", "runtime": "45 s, 16:9", "cta": "Book a multi-site programme demo.", "date": "2027-03-30", "date_label": "Tue 30 Mar 2027", "format": "Inside RAMS", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 23, "fmt": "LENS", "stage": "Consideration", "title": "The Three Clocks", "audience": "EHS heads, PRSES", "trigger": "New financial year (April): annual contracts", "hook": "Text: \"Daily. Monthly. Yearly. Miss one and the other two can't save you.\"", "beats": ["A rack inside three rotating clock rings, like an orrery.", "Ring 1: daily/weekly operator checks. Ring 2: monthly PRSES formal inspection. Ring 3: annual expert inspection.", "RAMS schedules and tracks all three."], "shot": "Brass-and-steel rings orbiting the bay with engraved labels.", "runtime": "40 s", "cta": "Performance Rack Audit (annual maintenance contract).", "date": "2027-04-06", "date_label": "Tue 06 Apr 2027", "format": "Stress Lens", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 24, "fmt": "TWIN", "stage": "Conversion", "title": "Before You Renew Your Insurance", "audience": "Risk managers, finance, owners", "trigger": "Insurance renewal / claims (often April)", "hook": "A claim file stamped in red. Text: \"Claim REJECTED. Reason: no inspection records.\"", "beats": ["Split screen with the same incident in two worlds.", "Left: no records, the claim is rejected.", "Right: a RAMS audit trail of timestamped tags, photos and repairs, and the claim is processed.", "Close: 'Show your insurer the audit before they ask.'"], "shot": "A mirrored split-screen with one camera move and two outcomes.", "runtime": "40 s, 16:9 + 9:16", "cta": "Book a pre-renewal audit.", "date": "2027-04-13", "date_label": "Tue 13 Apr 2027", "format": "Inside RAMS", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 25, "fmt": "SPOT", "stage": "Awareness", "title": "Spot the Damage #3: The Beam", "audience": "Floor teams", "trigger": "Beam defects", "hook": "Text: \"This beam has 2 problems. Can you see them?\"", "beats": ["Orbit of a loaded beam level.", "Reveal: a missing safety lock pin, and a beam connector not fully engaged (plus visible deflection)."], "shot": "A beam-level orbit with a rack-focus reveal.", "runtime": "20 s, 9:16 + 1:1", "cta": "Comment BEAM for the beam checklist.", "date": "2027-04-20", "date_label": "Tue 20 Apr 2027", "format": "Spot the Damage", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 26, "fmt": "HERO", "stage": "Awareness", "title": "Every Rack Is a Ceiling", "audience": "Everyone (emotional, people-first)", "trigger": "World Day for Safety and Health at Work (28 April)", "hook": "A picker in hi-vis walks the aisle scanning cartons. Text: \"There are 12 tonnes above her head.\"", "beats": ["The camera tilts up slowly, level by level. A weight counter climbs as each level is revealed.", "She never looks up. She trusts the racks.", "As she passes, each bay gets a quiet GREEN RAMS tag.", "Close: 'Make that trust earned.'"], "shot": "One slow tilt-up from her shoulder to the top beam level; a stylised, faceless human figure (no uncanny valley).", "runtime": "60 s, 16:9 + 9:16", "cta": "Book a rack audit for the people under your racks.", "date": "2027-04-27", "date_label": "Tue 27 Apr 2027", "format": "Hero Cinematic", "season": "Season 2: Budget, Safety Week and FY-End"}, {"w": 27, "fmt": "LENS", "stage": "Consideration", "title": "Water Finds the Weak Spot", "audience": "Facility managers, EHS managers", "trigger": "Pre-monsoon (monsoon onset early June)", "hook": "Text: \"The monsoon doesn't hit your racks. It soaks in.\"", "beats": ["Rain on the roof. A leak drips onto a base plate.", "A time-lapse corrosion shader creeps up the base plate and anchor. Seepage darkens the slab.", "Pre-monsoon checklist: anchors, base plates, floor cracks, roof leaks above racks."], "shot": "A corrosion growth shader driven by an animated mask; macro drips.", "runtime": "40 s", "cta": "Pre-monsoon rack audit.", "date": "2027-05-04", "date_label": "Tue 04 May 2027", "format": "Stress Lens", "season": "Season 3: Monsoon and Change"}, {"w": 28, "fmt": "LENS", "stage": "Consideration", "title": "Second-Hand Racks, First-Hand Damage", "audience": "Facility heads, procurement, fast-expanding companies", "trigger": "Before reinstalling used racks", "hook": "Text: \"These racks are new to you. They're not new.\"", "beats": ["Racks are dismantled, trucked and re-erected (a montage in fast motion).", "X-ray reveals old dents painted over, beams from a different OEM that don't match the connectors, thinned sections.", "Advanced audit: thickness measurement and a certificate before first use."], "shot": "An exploded-view reassembly in reverse, then the X-ray pass.", "runtime": "45 s", "cta": "Audit before reinstallation.", "date": "2027-05-11", "date_label": "Tue 11 May 2027", "format": "Stress Lens", "season": "Season 3: Monsoon and Change"}, {"w": 29, "fmt": "BNS", "stage": "Education", "title": "The New Layout", "audience": "Supervisors, layout planners", "trigger": "After every layout change", "hook": "Pickles: \"We moved the aisle. Same racks, same rules... right?\"", "beats": ["The aisle shifts. A rack end now faces the forklift turning point, with no column guard.", "Beam levels were moved, but the load signs weren't.", "Bolt: 'New layout, new risks. New audit.'"], "shot": "A top-down felt map with the layout sliding like a board game.", "runtime": "50 s", "cta": "Book a post-layout-change audit.", "date": "2027-05-18", "date_label": "Tue 18 May 2027", "format": "Bolt's Night Shift", "season": "Season 3: Monsoon and Change"}, {"w": 30, "fmt": "LENS", "stage": "Education", "title": "Beam Deflection in 30 Seconds", "audience": "PRSES, maintenance engineers", "trigger": "Beam deflection test (part of the Essential audit)", "hook": "Text: \"Every loaded beam bends. Here's how much is too much.\"", "beats": ["A beam takes load and bends (exaggerated, labelled).", "A laser line measures mid-span deflection against the design limit.", "Unload: if it doesn't spring back, that permanent set is damage."], "shot": "A laser line projected across the beam; a ghost of the straight beam overlaid.", "runtime": "30 s, 9:16 first", "cta": "Essential Rack Audit includes the beam deflection test.", "date": "2027-05-25", "date_label": "Tue 25 May 2027", "format": "Stress Lens", "season": "Season 3: Monsoon and Change"}, {"w": 31, "fmt": "LENS", "stage": "Education", "title": "Straight Is a Safety Spec", "audience": "PRSES, maintenance engineers", "trigger": "Vertical alignment test (part of the Essential audit)", "hook": "Text: \"Your 10-metre rack is leaning. You can't see it.\"", "beats": ["A laser plumb line drops from the top of an upright.", "The gap between the line and the steel is exaggerated and measured.", "Lean plus load makes more lean (the P-delta effect, shown as a feedback arrow)."], "shot": "A vertigo dolly-zoom down the upright following the laser.", "runtime": "30 s, 9:16 first", "cta": "Book the vertical alignment test.", "date": "2027-06-01", "date_label": "Tue 01 Jun 2027", "format": "Stress Lens", "season": "Season 3: Monsoon and Change"}, {"w": 32, "fmt": "TWIN", "stage": "Conversion", "title": "Brand-New Isn't Certified", "audience": "Grade A park developers, new tenants, rack OEMs", "trigger": "After new rack installation", "hook": "Text: \"Handover day. 3 installation errors already.\"", "beats": ["A fly-through of a pristine new Grade A warehouse.", "The inspection finds anchors not installed, beam locks not fitted and an upright out of plumb. Load signs are missing.", "Close: 'Certify before the first pallet goes up.'"], "shot": "A glossy architectural fly-through that snaps into inspection mode.", "runtime": "45 s, 16:9", "cta": "Book an installation audit + Stability Certificate.", "date": "2027-06-08", "date_label": "Tue 08 Jun 2027", "format": "Inside RAMS", "season": "Season 3: Monsoon and Change"}, {"w": 33, "fmt": "SPOT", "stage": "Awareness", "title": "Spot the Damage #4: Monsoon Edition", "audience": "Floor teams", "trigger": "Monsoon", "hook": "Text: \"It rained last night. Find 3 problems.\"", "beats": ["A wet floor orbit around a frame.", "Reveal: rust at a base plate, water pooling at an anchor, a crack in the slab."], "shot": "Puddle reflections with a wet-floor shader.", "runtime": "20 s, 9:16 + 1:1", "cta": "Comment MONSOON for the checklist.", "date": "2027-06-15", "date_label": "Tue 15 Jun 2027", "format": "Spot the Damage", "season": "Season 3: Monsoon and Change"}, {"w": 34, "fmt": "LENS", "stage": "Consideration", "title": "If You Don't Know the Load, You're Guessing", "audience": "Warehouse managers, engineers", "trigger": "When safe working loads are unknown", "hook": "Every load sign on the rack shows a '?'. VO: \"What's the safe load on this rack?\"", "beats": ["Question marks on every beam.", "Advanced audit: thickness test, then an FEM model wraps the rack in a coloured mesh.", "SWL numbers replace the question marks and new load signs print.", "Utilisation and deflection ratios are shown per bay."], "shot": "An FEM-style mesh wireframe crawling over the rack, then resolving into numbers.", "runtime": "40 s", "cta": "Advanced Rack Audit: FEM + SWL calculation.", "date": "2027-06-22", "date_label": "Tue 22 Jun 2027", "format": "Stress Lens", "season": "Season 3: Monsoon and Change"}, {"w": 35, "fmt": "HERO", "stage": "Awareness", "title": "The Waterline", "audience": "Everyone in flood/cyclone regions", "trigger": "After a natural disaster (monsoon floods, cyclones)", "hook": "Text: \"The water left. Look at what it left behind.\"", "beats": ["A flooded aisle, still. The water drains slowly.", "A mud line on the uprights. Settled floor, an undermined base plate, rust bloom.", "A rack that is ever so slightly tilted.", "Close: 'After the water, before the restock: inspect.'"], "shot": "An animated displacement water surface (not a full fluid sim) with a receding mud-line shader.", "runtime": "60 s, 16:9 + 9:16", "cta": "Post-disaster rack audit.", "date": "2027-06-29", "date_label": "Tue 29 Jun 2027", "format": "Hero Cinematic", "season": "Season 3: Monsoon and Change"}, {"w": 36, "fmt": "BNS", "stage": "Education", "title": "Where's the Load Sign?", "audience": "Operators, supervisors", "trigger": "Load signage", "hook": "Mittens: \"How much can this level take?\" Pickles: \"...Feels strong?\"", "beats": ["No signs anywhere.", "Bolt brings load signs for the beams and for the bay as a whole.", "The gang puts them up together."], "shot": "Felt signs flapping up into place on the beat of the music.", "runtime": "45 s, English and Hindi captions", "cta": "Get signage with your audit.", "date": "2027-07-06", "date_label": "Tue 06 Jul 2027", "format": "Bolt's Night Shift", "season": "Season 3: Monsoon and Change"}, {"w": 37, "fmt": "TWIN", "stage": "Conversion", "title": "From Finding to Fix in One Click", "audience": "Procurement, maintenance heads", "trigger": "OEM-specific BoQ and issue tracking", "hook": "Text: \"37 damaged parts. One click to the purchase order.\"", "beats": ["Red and amber parts float out of the rack in exploded view.", "They line up into a BoQ: part code, quantity, OEM.", "Repair tracking with closure photos, and the twin turns green bay by bay."], "shot": "An exploded-view choreography that snaps into a list layout.", "runtime": "40 s", "cta": "Book an audit and get the BoQ.", "date": "2027-07-13", "date_label": "Tue 13 Jul 2027", "format": "Inside RAMS", "season": "Season 3: Monsoon and Change"}, {"w": 38, "fmt": "TWIN", "stage": "Consideration", "title": "Your Warehouse, Mirrored", "audience": "Ops heads, digital/IT leads", "trigger": "Digital twin and history", "hook": "Text: \"Scrub back 12 months of your racks.\"", "beats": ["The real warehouse becomes the twin.", "A time scrubber slides: tags appear and resolve across 12 months of history.", "A damage heatmap by aisle shows repeated hits at one turn: a layout or traffic problem, not bad luck."], "shot": "The time scrubber drives the whole scene (a tags-over-time animation).", "runtime": "60 s, 16:9", "cta": "Request a demo of the twin.", "date": "2027-07-20", "date_label": "Tue 20 Jul 2027", "format": "Inside RAMS", "season": "Season 3: Monsoon and Change"}, {"w": 39, "fmt": "TWIN", "stage": "Conversion", "title": "Case File", "audience": "Peers of the featured client", "trigger": "Customer story (real client, with written permission)", "hook": "Text: \"[Client] had [N] bays across [M] sites. Here's what we found.\"", "beats": ["A recreation of the site in the twin.", "Before/after RAG distribution and time to close every red.", "A client quote card."], "shot": "A twin recreation of the client layout (anonymised if needed).", "runtime": "60 s, 16:9", "cta": "'Get the same audit.' Sales sends this one in follow-ups.", "date": "2027-07-27", "date_label": "Tue 27 Jul 2027", "format": "Inside RAMS", "season": "Season 3: Monsoon and Change"}, {"w": 40, "fmt": "LENS", "stage": "Consideration", "title": "Don't Borrow Capacity", "audience": "Warehouse managers, planners", "trigger": "Festive pre-stocking (Aug-Sep)", "hook": "Text: \"Festive stock is arriving. Is your rack rated for it?\"", "beats": ["Taller, heavier pallets arrive. Extra levels go in.", "Capacity bars on each bay fill toward red.", "Close: 'Check the SWL before the stock, not after.'"], "shot": "Capacity bars as holographic columns beside each bay.", "runtime": "35 s", "cta": "Pre-festive SWL check.", "date": "2027-08-03", "date_label": "Tue 03 Aug 2027", "format": "Stress Lens", "season": "Season 4: Festive Build-Up"}, {"w": 41, "fmt": "BNS", "stage": "Education", "title": "Guards Aren't Decoration", "audience": "Operators, supervisors", "trigger": "Rack protection (column guards, end-of-aisle barriers)", "hook": "Mittens: \"Why are these yellow things even here?\"", "beats": ["Split screen: FL-02 takes the same corner twice.", "With a guard, the guard takes the hit. Without one, the upright does.", "Bolt: protect high-risk zones such as turns, rack ends and loading zones."], "shot": "A mirrored felt split with the same take played twice.", "runtime": "45 s", "cta": "The audit recommends where guards go.", "date": "2027-08-10", "date_label": "Tue 10 Aug 2027", "format": "Bolt's Night Shift", "season": "Season 4: Festive Build-Up"}, {"w": 42, "fmt": "LENS", "stage": "Conversion", "title": "Internal Check vs Certified Audit", "audience": "EHS heads, ops heads", "trigger": "Objection: 'We already do internal inspections'", "hook": "Text: \"Your team walked this aisle and found nothing. We found 6.\"", "beats": ["Split screen: a clipboard walk-and-glance POV vs the RAMS method (QR, laser, deflection test, twin).", "The six items are revealed one by one.", "Close: 'Internal checks are vital. They aren't certification.'"], "shot": "Matched POV cameras with one scene; X-ray only on the RAMS side.", "runtime": "40 s", "cta": "Book a certified audit (OEM-, insurer- and auditor-accepted reports).", "date": "2027-08-17", "date_label": "Tue 17 Aug 2027", "format": "Stress Lens", "season": "Season 4: Festive Build-Up"}, {"w": 43, "fmt": "SPOT", "stage": "Awareness", "title": "Spot the Damage #5: Expert Level", "audience": "Inspectors, safety pros", "trigger": "Engagement", "hook": "Text: \"Only inspectors get all 4.\"", "beats": ["A slow orbit.", "Reveal: a twisted upright, a beam out of level, frame bracing missing a bolt, an overloaded beam deflecting."], "shot": "An orbit with a rack-focus pull on each answer.", "runtime": "25 s, 9:16 + 1:1", "cta": "Comment EXPERT; inspectors are pointed to the Partner Program.", "date": "2027-08-24", "date_label": "Tue 24 Aug 2027", "format": "Spot the Damage", "season": "Season 4: Festive Build-Up"}, {"w": 44, "fmt": "HERO", "stage": "Consideration", "title": "We've Never Had an Incident", "audience": "Owners, ops heads", "trigger": "Objection: 'We've never had an incident, so why now?'", "hook": "Text: \"Every collapse happened at a warehouse that had never had one.\"", "beats": ["Inside the upright, a translucent glass 'safety margin' core.", "Week after week a small change (a hit, an extra level, a loose bolt) cracks it a little more. The workers stay calm.", "The margin is down to its last sliver. Cut to black. No collapse is shown.", "Card: 'Safety is proactive, not reactive.'"], "shot": "A glass margin core with progressive fracture (cell fracture + emission cracks), with tension built by sound design.", "runtime": "45 s", "cta": "Book the audit while the margin is still there.", "date": "2027-08-31", "date_label": "Tue 31 Aug 2027", "format": "Hero Cinematic", "season": "Season 4: Festive Build-Up"}, {"w": 45, "fmt": "LENS", "stage": "Education", "title": "Thickness Matters", "audience": "Engineers, maintenance heads", "trigger": "Advanced audit: thickness measurement", "hook": "Text: \"Rust doesn't just stain steel. It eats it.\"", "beats": ["A cross-section cut through the upright.", "Corrosion thins the wall over time and an ultrasonic gauge reading drops.", "The capacity bar drops with it."], "shot": "A boolean section-cut with an animated wall thickness.", "runtime": "35 s", "cta": "Advanced Rack Audit.", "date": "2027-09-07", "date_label": "Tue 07 Sep 2027", "format": "Stress Lens", "season": "Season 4: Festive Build-Up"}, {"w": 46, "fmt": "BNS", "stage": "Education", "title": "The Lean", "audience": "Supervisors, maintenance teams", "trigger": "Foundation failures and loose anchors", "hook": "Pickles, head tilted: \"Was this rack always... wonky?\"", "beats": ["A time-lapse over weeks: micro-vibrations, an anchor bolt backs out, the upright 'walks' forward.", "Bolt checks the anchors with a felt torque wrench. Fixed, re-checked."], "shot": "Stop-motion time-lapse with the light changing day and night through the skylight.", "runtime": "50 s", "cta": "Floor and anchor checks are part of every audit.", "date": "2027-09-14", "date_label": "Tue 14 Sep 2027", "format": "Bolt's Night Shift", "season": "Season 4: Festive Build-Up"}, {"w": 47, "fmt": "TWIN", "stage": "Conversion", "title": "Your Audit Report, Unboxed", "audience": "Ops heads, EHS heads, procurement", "trigger": "What the customer receives", "hook": "Text: \"This is what lands in your inbox after a RAMS audit.\"", "beats": ["A report opens and its pages pop up in 3D: the RAG site map, photo evidence for each finding, the repair priority plan, the OEM BoQ, the Stability Certificate, the dashboard login."], "shot": "Pop-up-book paper engineering in 3D.", "runtime": "45 s, 16:9 + 9:16", "cta": "Book now; ask for a sample report.", "date": "2027-09-21", "date_label": "Tue 21 Sep 2027", "format": "Inside RAMS", "season": "Season 4: Festive Build-Up"}, {"w": 48, "fmt": "TWIN", "stage": "Consideration", "title": "Become a RAMS Certified Inspector", "audience": "Independent inspectors, rack installers, structural engineers", "trigger": "Partner Program (adds audit capacity in more cities)", "hook": "Text: \"Inspecting racks already? Do it with a digital twin behind you.\"", "beats": ["An inspector's day with the RAMS app: QR, tags, BoQ, report in one tap.", "The certified badge, partner directory, priority projects."], "shot": "Over-the-shoulder app UI composited onto a real-scale scene.", "runtime": "45 s", "cta": "Apply to the Partner Program.", "date": "2027-09-28", "date_label": "Tue 28 Sep 2027", "format": "Inside RAMS", "season": "Season 4: Festive Build-Up"}, {"w": 49, "fmt": "LENS", "stage": "Conversion", "title": "24 Days to Peak", "audience": "Ops heads, warehouse managers", "trigger": "Pre-peak readiness (Diwali 29 Oct 2027)", "hook": "Countdown clock: \"Peak starts in 24 days. Your racks need to be ready in 14.\"", "beats": ["The pre-peak checklist ticks itself off across the twin.", "The bays that fail turn amber; the repair is scheduled before peak."], "shot": "A countdown clock built into a rack end board.", "runtime": "35 s, 9:16 first", "cta": "Pre-peak audit slots (real capacity).", "date": "2027-10-05", "date_label": "Tue 05 Oct 2027", "format": "Stress Lens", "season": "Season 4: Festive Build-Up"}, {"w": 50, "fmt": "SPOT", "stage": "Awareness", "title": "Spot the Damage: Grand Finale", "audience": "Everyone who played this year", "trigger": "Engagement, season finale", "hook": "Text: \"The hardest one yet. 5 defects.\"", "beats": ["One bay combining the year's defects.", "Reveal with a leaderboard shout-out to top commenters."], "shot": "An orbit with all RAG tags snapping in sequence.", "runtime": "25 s, 9:16 + 1:1", "cta": "Comment for the full answer key + RAG poster.", "date": "2027-10-12", "date_label": "Tue 12 Oct 2027", "format": "Spot the Damage", "season": "Season 4: Festive Build-Up"}, {"w": 51, "fmt": "BNS", "stage": "Education", "title": "Peak Night, Again", "audience": "Operators, supervisors", "trigger": "Diwali week 2027, callback to Week 2", "hook": "Same shot as Week 2: Mittens bumps the upright. This time, without a pause: \"Reporting it!\"", "beats": ["The bay is flagged, repaired and green before the peak rush.", "The gang celebrates under the Diwali lights.", "Rule card: 'One year of reporting every hit.'"], "shot": "A mirror of Week 2's framing for a side-by-side 'then/now' cut.", "runtime": "60 s, English and Hindi captions", "cta": "Share. Happy Diwali from RAMS.", "date": "2027-10-19", "date_label": "Tue 19 Oct 2027", "format": "Bolt's Night Shift", "season": "Season 4: Festive Build-Up"}, {"w": 52, "fmt": "HERO", "stage": "Awareness", "title": "One Weak Rack: Caught", "audience": "Everyone", "trigger": "One-year bookend of Week 1", "hook": "The same 4 mm dent from Week 1. VO: \"Same dent. Different ending.\"", "beats": ["Week-1 footage, but a RAMS audit catches the dent on day one: tag, BoQ, repair.", "The collapse never happens. The camera pulls back to a calm, full, green aisle.", "Brand line: 'Racks carry your business. Literally.'"], "shot": "Re-uses the Week-1 set and sim with a branching edit (no new physics).", "runtime": "60 s, 16:9 + 9:16", "cta": "Book your 2027-28 audit.", "date": "2027-10-26", "date_label": "Tue 26 Oct 2027", "format": "Hero Cinematic", "season": "Season 4: Festive Build-Up"}], "formats": {"HERO": "Hero Cinematic", "BNS": "Bolt's Night Shift", "LENS": "Stress Lens", "TWIN": "Inside RAMS", "SPOT": "Spot the Damage"}, "seasons": [{"a": 1, "b": 13, "name": "Season 1: Peak Season Scars", "blurb": "Diwali peak, post-peak damage, year-end and the basics of EN 15635"}, {"a": 14, "b": 26, "name": "Season 2: Budget, Safety Week and FY-End", "blurb": "Union Budget, National Safety Week, 31 March close, new-FY contracts, insurance renewals"}, {"a": 27, "b": 39, "name": "Season 3: Monsoon and Change", "blurb": "Pre-monsoon, floods, relocated and new racks, unknown loads, the product in depth"}, {"a": 40, "b": 52, "name": "Season 4: Festive Build-Up", "blurb": "Pre-stocking overloads, objections head-on, pre-peak readiness, the bookend"}]};
+const FMT_NOTE = {
+  HERO: "Photoreal Cycles, slow-motion physics. 60-90 s.",
+  BNS: "The felt stop-motion series. 45-60 s, EN + Hindi.",
+  LENS: "X-ray engineering explainers. 30-45 s.",
+  TWIN: "Real warehouse to digital twin. The selling films.",
+  SPOT: "Vertical puzzle, comment-driven. 15-25 s."
+};
+const STAGES = ["Awareness", "Education", "Consideration", "Conversion"];
+const state = { fmt: "ALL", stage: "ALL", q: "" };
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+function chips(host, items, key) {
+  host.replaceChildren();
+  items.forEach(([val, label]) => {
+    const b = el("button", "chip", label);
+    b.type = "button"; b.id = `chip-${key}-${val}`;
+    b.setAttribute("aria-pressed", String(state[key] === val));
+    b.addEventListener("click", () => { state[key] = val; render(); });
+    host.appendChild(b);
+  });
+}
+
+function weekRow(e) {
+  const d = el("details", "wk");
+  const s = el("summary");
+  s.append(el("span", "wno", String(e.w)), el("span", "wdate", e.date_label));
+  const t = el("span", "wtitle", e.title);
+  t.appendChild(el("small", "stage " + e.stage, e.stage + " · " + e.trigger));
+  s.append(t, el("span", "tag " + e.fmt, DATA.formats[e.fmt]));
+  d.appendChild(s);
+  const b = el("div", "wbody"), dl = el("dl");
+  const row = (k, v) => { dl.append(el("dt", null, k)); const dd = el("dd"); typeof v === "string" ? dd.textContent = v : dd.append(v); dl.append(dd); };
+  row("Hook", e.hook);
+  const ol = el("ol"); e.beats.forEach(x => ol.append(el("li", null, x))); row("Beats", ol);
+  row("Blender shot", e.shot);
+  row("Audience", e.audience);
+  row("Runtime", e.runtime);
+  row("CTA", e.cta);
+  b.append(dl); d.append(b);
+  return d;
+}
+
+function render() {
+  chips(document.getElementById("fmtChips"), [["ALL", "All"], ...Object.entries(DATA.formats)], "fmt");
+  chips(document.getElementById("stageChips"), [["ALL", "All"], ...STAGES.map(s => [s, s])], "stage");
+  const q = state.q.trim().toLowerCase();
+  const match = e => (state.fmt === "ALL" || e.fmt === state.fmt) && (state.stage === "ALL" || e.stage === state.stage)
+    && (!q || [e.title, e.trigger, e.hook, e.audience, e.cta].join(" ").toLowerCase().includes(q));
+  const host = document.getElementById("seasons");
+  host.replaceChildren();
+  let n = 0;
+  DATA.seasons.forEach(se => {
+    const ws = DATA.weeks.filter(e => e.w >= se.a && e.w <= se.b && match(e));
+    if (!ws.length) return;
+    n += ws.length;
+    const box = el("div", "season"), h = el("header");
+    h.append(el("h3", null, se.name), el("p", null, se.blurb + ` · weeks ${se.a}–${se.b}`));
+    box.append(h);
+    ws.forEach(e => box.append(weekRow(e)));
+    host.append(box);
+  });
+  if (!n) host.append(el("p", "foot", "No weeks match these filters. Clear the search or pick All."));
+  document.getElementById("count").textContent = `${n} of ${DATA.weeks.length} weeks`;
+}
+
+(function init() {
+  const fh = document.getElementById("formats");
+  Object.entries(DATA.formats).forEach(([k, name]) => {
+    const c = el("div", "fmt-card");
+    const cnt = DATA.weeks.filter(e => e.fmt === k).length;
+    c.append(el("span", "tag " + k, name), el("b", null, `${cnt} videos`), el("span", "stage", FMT_NOTE[k]));
+    fh.append(c);
+  });
+  document.getElementById("q").addEventListener("input", ev => { state.q = ev.target.value; render(); });
+  render();
+  const first = document.querySelector("details.wk"); if (first) first.open = true;
+})();
+</script>

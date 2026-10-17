@@ -1,0 +1,353 @@
+<title>RAMS Rack Video Calendar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a warehouse load-sign header, then sections on one column; the calendar is a filterable list of week rows grouped by season. */
+:root {
+  --bg: #F3F4F6;
+  --surface: #FFFFFF;
+  --fg: #1B2230;
+  --muted: #5B6578;
+  --line: #D9DDE5;
+  --accent: #D9480F;        /* RAMS orange, darkened for text contrast */
+  --accent-strong: #F55314; /* RAMS orange as supplied */
+  --rack: #2F63B8;
+  --sign: #FFD23F;
+  --sign-fg: #1B1B1B;
+  --green: #2E8B47;
+  --amber: #B7791F;
+  --red: #D23A2A;
+  --chip: #E8EBF1;
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161E; --surface: #1A202B; --fg: #E6E9EF; --muted: #9AA4B5; --line: #2D3544;
+    --accent: #FF7A45; --accent-strong: #F55314; --rack: #6F9BE8; --sign: #FFD23F; --sign-fg: #1B1B1B;
+    --green: #5CC77A; --amber: #E8B04B; --red: #FF6B5B; --chip: #252C39; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161E; --surface: #1A202B; --fg: #E6E9EF; --muted: #9AA4B5; --line: #2D3544;
+  --accent: #FF7A45; --accent-strong: #F55314; --rack: #6F9BE8; --sign: #FFD23F; --sign-fg: #1B1B1B;
+  --green: #5CC77A; --amber: #E8B04B; --red: #FF6B5B; --chip: #252C39; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.05; }
+h2 { font-size: 30px; letter-spacing: .01em; text-transform: uppercase; }
+h3 { font-size: 21px; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+.eyebrow { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 18px; padding-block: 34px; border-top: 1px solid var(--line); }
+
+/* Header: styled like a rack load-capacity sign */
+.sign { background: var(--sign); color: var(--sign-fg); border: 3px solid var(--sign-fg); border-radius: 6px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; padding: 22px 24px; margin-bottom: 28px; }
+.sign h1 { font-size: clamp(38px, 7vw, 64px); text-transform: uppercase; letter-spacing: .01em; }
+.sign p { font-weight: 500; margin-top: 10px; }
+.sign .stamp { align-self: start; border: 2px solid var(--sign-fg); padding: 10px 14px; text-align: center; font-family: var(--display); }
+.sign .stamp b { display: block; font-size: 46px; line-height: 1; }
+.sign .stamp span { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; }
+.hazard { height: 10px; margin: -10px 0 28px; border-radius: 0 0 4px 4px;
+  background: repeating-linear-gradient(-45deg, var(--sign-fg) 0 12px, var(--sign) 12px 24px); }
+@media (max-width: 560px) { .sign { grid-template-columns: 1fr; } .sign .stamp { justify-self: start; } }
+
+.lede { font-size: 17px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.panel ul, .panel ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.offer { border-left: 4px solid var(--accent-strong); }
+.tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font: 600 12px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.triggers { display: flex; flex-wrap: wrap; gap: 8px; }
+.trigger { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.trigger b { font-family: var(--mono); color: var(--accent); margin-right: 6px; }
+.insights { counter-reset: i; display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.insights li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; }
+.insights li::before { counter-increment: i; content: counter(i); font: 700 24px/1 var(--display); color: var(--accent); }
+
+/* Calendar */
+.formats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.fmt-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 6px; }
+.fmt-card .tag { justify-self: start; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls .label { font-size: 13px; color: var(--muted); margin-right: 4px; }
+button.chip { font: 500 13px/1 var(--body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer; }
+button.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button.chip:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input#q { font: 14px var(--body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); min-width: 0; width: 220px; max-width: 100%; }
+.count { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.season { display: grid; gap: 10px; }
+.season header { display: grid; gap: 4px; padding-top: 10px; }
+.season header p { color: var(--muted); font-size: 14px; }
+details.wk { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+details.wk summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 52px 92px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; }
+details.wk summary::-webkit-details-marker { display: none; }
+.wno { font: 700 26px/1 var(--display); color: var(--rack); font-variant-numeric: tabular-nums; }
+.wdate { font: 500 12.5px/1.3 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.wtitle { font-weight: 600; min-width: 0; }
+.wtitle small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+.tag { font: 600 11px/1 var(--body); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 4px; white-space: nowrap; background: var(--chip); color: var(--fg); }
+.tag.HERO { background: var(--accent-strong); color: #fff; }
+.tag.BNS { background: var(--sign); color: var(--sign-fg); }
+.tag.LENS { background: var(--rack); color: #fff; }
+.tag.TWIN { background: var(--fg); color: var(--bg); }
+.tag.SPOT { background: var(--chip); color: var(--fg); border: 1px dashed var(--muted); }
+.wbody { padding: 0 14px 16px 78px; display: grid; gap: 10px; }
+.wbody dl { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 14px; margin: 0; }
+.wbody dt { font: 600 12px/1.5 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wbody dd { margin: 0; min-width: 0; }
+.wbody ol { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.stage { font-size: 12px; color: var(--muted); }
+.stage::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.stage.Conversion::before { background: var(--red); }
+.stage.Consideration::before { background: var(--amber); }
+.stage.Education::before { background: var(--green); }
+.stage.Awareness::before { background: var(--rack); }
+@media (max-width: 640px) {
+  details.wk summary { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .wdate { grid-column: 2; grid-row: 2; }
+  .wtitle { grid-column: 2; grid-row: 1; }
+  details.wk summary .tag { grid-column: 3; grid-row: 1; }
+  .wbody { padding-left: 14px; }
+  .wbody dl { grid-template-columns: 1fr; }
+}
+.foot { color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { details.wk[open] .wbody { animation: drop .18s ease-out; } }
+@keyframes drop { from { transform: translateY(-4px); opacity: .6; } to { transform: none; opacity: 1; } }
+</style>
+
+<div class="wrap">
+  <div class="sign">
+    <div>
+      <div class="eyebrow" style="color:inherit">RAMS Digital · Rack Inspection · Blender video plan</div>
+      <h1>Show what the eye can't see</h1>
+      <p>A 52-week calendar of Blender films that turn invisible rack damage into something a warehouse head can watch in 45 seconds, then book a certified rack audit.</p>
+    </div>
+    <div class="stamp"><b>52</b><span>videos · 1 per week</span><br><span>Tue 3 Nov 2026 to Tue 26 Oct 2027</span></div>
+  </div>
+  <div class="hazard" aria-hidden="true"></div>
+
+  <section id="sell">
+    <div class="eyebrow">01 · What we're selling</div>
+    <h2>The Certified Rack Audit</h2>
+    <div class="grid2">
+      <div class="panel offer">
+        <h3>The offer on rams.digital/rack-audit</h3>
+        <p>Certified audit to EN 15635 + <b>Stability Certificate</b> + <b>3 months of RAMS software free</b>. Every audit ships a digital twin, Red/Amber/Green findings, a report with an OEM-specific BoQ, and issue tracking with closure proof.</p>
+        <p class="stage" style="font-size:13px">Lifecycle: Inspect → Tag → Act → Verify → Archive</p>
+      </div>
+      <div class="panel">
+        <h3>Three tiers</h3>
+        <ul>
+          <li><b>Essential:</b> one-time compliance. Twin, EN 15635 inspection, QR, RAG, vertical alignment and beam deflection tests, BoQ.</li>
+          <li><b>Performance:</b> ongoing programme on an annual maintenance contract.</li>
+          <li><b>Advanced:</b> thickness measurement, FEM analysis, safe working load calculation.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>The 9 moments a customer needs an audit</h3>
+    <p class="stage" style="font-size:14px">Every video in the calendar is tied to one of these.</p>
+    <div class="triggers">
+      <span class="trigger"><b>1</b>After a collision or visible damage</span>
+      <span class="trigger"><b>2</b>Every 12 months, minimum</span>
+      <span class="trigger"><b>3</b>Before certificate expiry</span>
+      <span class="trigger"><b>4</b>After new installation</span>
+      <span class="trigger"><b>5</b>Before reinstalling used racks</span>
+      <span class="trigger"><b>6</b>When safe working loads are unknown</span>
+      <span class="trigger"><b>7</b>After a layout change</span>
+      <span class="trigger"><b>8</b>After a natural disaster</span>
+      <span class="trigger"><b>9</b>Before insurance renewal or a claim</span>
+    </div>
+  </section>
+
+  <section id="audience">
+    <div class="eyebrow">02 · Who watches, who buys</div>
+    <h2>The buying committee</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Persona</th><th>Role</th><th>Their fear</th><th>What the video must show</th></tr></thead>
+        <tbody>
+          <tr><td><b>Head of Warehousing / Plant Head</b></td><td>Signs off</td><td>An aisle down in peak; losing a client; a collapse on their watch</td><td>Consequences, one standard across sites, zero disruption</td></tr>
+          <tr><td><b>EHS head / PRSES</b></td><td>Champion</td><td>Personal accountability, no records, no budget</td><td>EN 15635 made simple, RAG, an audit trail, things to forward</td></tr>
+          <tr><td><b>Site manager</b></td><td>User, can veto</td><td>Blame; an audit in peak hours; a vague report</td><td>What audit day looks like; a clear repair BoQ</td></tr>
+          <tr><td><b>Finance / procurement</b></td><td>Approves spend</td><td>Unplanned cost, emergency buys, premiums</td><td>Audit cost vs failure cost; OEM BoQ</td></tr>
+          <tr><td><b>Risk / insurance / legal</b></td><td>Influencer</td><td>Claim rejection, liability</td><td>"Snapshot, not a shield"; records as defence</td></tr>
+          <tr><td><b>Operators, pickers, supervisors</b></td><td>End users</td><td>Being blamed for a hit</td><td>No-blame reporting, simple loading rules, in Hindi, on WhatsApp</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>What that means for the films</h3>
+    <ol class="insights">
+      <li><p><b>Damage is invisible and slow, so the films make it visible and fast.</b> X-ray steel, load paths as light, months in seconds, collapses run in reverse. Live-action can only show the aftermath.</p></li>
+      <li><p><b>Lead with the consequence, then the cause, then the fix.</b> Buyers fear downtime and liability, not steel.</p></li>
+      <li><p><b>Floor content is no-blame and character-led.</b> RAMS says 90% of impacts go unreported. A felt cat can admit a hit that a real operator on camera can't, so <i>Bolt's Night Shift</i> carries the floor message.</p></li>
+      <li><p><b>Compliance in India is pulled by triggers</b> (client audits, insurers, certificate expiry, new sites), so every CTA names its trigger.</p></li>
+      <li><p><b>Champions need something to forward:</b> 16:9 for the boardroom, 9:16 for WhatsApp, captions always on.</p></li>
+      <li><p><b>People buy what they can picture.</b> Process films (what audit day looks like, what the report contains) take the risk out of the decision.</p></li>
+      <li><p><b>Selling videos land in the buying windows:</b> post-peak, Safety Week, FY-end, new FY, pre-monsoon, pre-peak.</p></li>
+    </ol>
+  </section>
+
+  <section id="calendar">
+    <div class="eyebrow">03 · The calendar</div>
+    <h2>52 weeks, 5 formats</h2>
+    <div class="formats" id="formats"></div>
+    <div class="controls" role="group" aria-label="Filter by format">
+      <span class="label">Format</span>
+      <div id="fmtChips" class="controls"></div>
+    </div>
+    <div class="controls" role="group" aria-label="Filter by funnel stage">
+      <span class="label">Stage</span>
+      <div id="stageChips" class="controls"></div>
+      <input id="q" type="search" placeholder="Search titles, triggers…" aria-label="Search the calendar">
+      <span class="count" id="count"></span>
+    </div>
+    <div id="seasons" style="display:grid;gap:22px"></div>
+  </section>
+
+  <section id="make">
+    <div class="eyebrow">04 · How we make it weekly</div>
+    <h2>Build the kit once, then shoot every week</h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Two-week sprint, 19–30 Oct 2026</h3>
+        <ul>
+          <li>Parametric rack kit (real + felt materials, QR plates, load signs, guards)</li>
+          <li>Damage library with RAG severity (dents, twist, locks, anchors, deflection, corrosion)</li>
+          <li>Stress Lens heatmap driven by real statics, engineer-reviewed</li>
+          <li>Collapse rig, baked once, reused in weeks 1, 18 and 52</li>
+          <li>Twin wipe shader and RAMS UI kit; hero aisle with 3 lighting presets</li>
+          <li>Ollie the Owl, the RAMS inspector for <i>Bolt's Night Shift</i></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Weekly rhythm (two-week lead)</h3>
+        <ol>
+          <li>N-2: script, storyboard, engineer sign-off, animatic</li>
+          <li>N-1: layout, animation, sim, render, post (EN + Hindi captions, 16:9 + 9:16)</li>
+          <li>N: publish Tuesday 10:00 IST</li>
+        </ol>
+        <p class="stage" style="font-size:13px">HERO films start 3 weeks ahead and render on Kaggle (a 60 s Cycles film takes about 18 h on the laptop).</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sell-out">
+    <div class="eyebrow">05 · From view to booked audit</div>
+    <h2>Every video gets one trigger, one CTA, one link</h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Distribution</h3>
+        <ul>
+          <li>LinkedIn first (Tue), YouTube and Shorts, Reels (Wed), WhatsApp toolbox pack (Thu)</li>
+          <li>Week 1 replaces the third-party Reddit clip on /rack-audit</li>
+          <li>Sales sends the matching video after each objection</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Conversion</h3>
+        <ul>
+          <li>UTM per video: <code>rack_w01_one_weak_rack</code></li>
+          <li>Comment keywords (POSTER, BEAM, ANCHOR…) send lead magnets</li>
+          <li>Retarget 50% viewers with weeks 6, 20 and 47</li>
+          <li>Show real audit slots by region. Never fake scarcity.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="foot">Full working docs, CSV and the editable calendar source live in the <code>content-plan/</code> folder of the Blender-CC repo. Sources: a full read of rams.digital (17 Oct 2026); market figures from Knight Frank and Colliers 2025 reports. Numbers marked as RAMS claims are RAMS's own published figures.</p>
+  </section>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const FMT_NOTE = {
+  HERO: "Photoreal Cycles, slow-motion physics. 60-90 s.",
+  BNS: "The felt stop-motion series. 45-60 s, EN + Hindi.",
+  LENS: "X-ray engineering explainers. 30-45 s.",
+  TWIN: "Real warehouse to digital twin. The selling films.",
+  SPOT: "Vertical puzzle, comment-driven. 15-25 s."
+};
+const STAGES = ["Awareness", "Education", "Consideration", "Conversion"];
+const state = { fmt: "ALL", stage: "ALL", q: "" };
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+
+function chips(host, items, key) {
+  host.replaceChildren();
+  items.forEach(([val, label]) => {
+    const b = el("button", "chip", label);
+    b.type = "button"; b.id = `chip-${key}-${val}`;
+    b.setAttribute("aria-pressed", String(state[key] === val));
+    b.addEventListener("click", () => { state[key] = val; render(); });
+    host.appendChild(b);
+  });
+}
+
+function weekRow(e) {
+  const d = el("details", "wk");
+  const s = el("summary");
+  s.append(el("span", "wno", String(e.w)), el("span", "wdate", e.date_label));
+  const t = el("span", "wtitle", e.title);
+  t.appendChild(el("small", "stage " + e.stage, e.stage + " · " + e.trigger));
+  s.append(t, el("span", "tag " + e.fmt, DATA.formats[e.fmt]));
+  d.appendChild(s);
+  const b = el("div", "wbody"), dl = el("dl");
+  const row = (k, v) => { dl.append(el("dt", null, k)); const dd = el("dd"); typeof v === "string" ? dd.textContent = v : dd.append(v); dl.append(dd); };
+  row("Hook", e.hook);
+  const ol = el("ol"); e.beats.forEach(x => ol.append(el("li", null, x))); row("Beats", ol);
+  row("Blender shot", e.shot);
+  row("Audience", e.audience);
+  row("Runtime", e.runtime);
+  row("CTA", e.cta);
+  b.append(dl); d.append(b);
+  return d;
+}
+
+function render() {
+  chips(document.getElementById("fmtChips"), [["ALL", "All"], ...Object.entries(DATA.formats)], "fmt");
+  chips(document.getElementById("stageChips"), [["ALL", "All"], ...STAGES.map(s => [s, s])], "stage");
+  const q = state.q.trim().toLowerCase();
+  const match = e => (state.fmt === "ALL" || e.fmt === state.fmt) && (state.stage === "ALL" || e.stage === state.stage)
+    && (!q || [e.title, e.trigger, e.hook, e.audience, e.cta].join(" ").toLowerCase().includes(q));
+  const host = document.getElementById("seasons");
+  host.replaceChildren();
+  let n = 0;
+  DATA.seasons.forEach(se => {
+    const ws = DATA.weeks.filter(e => e.w >= se.a && e.w <= se.b && match(e));
+    if (!ws.length) return;
+    n += ws.length;
+    const box = el("div", "season"), h = el("header");
+    h.append(el("h3", null, se.name), el("p", null, se.blurb + ` · weeks ${se.a}–${se.b}`));
+    box.append(h);
+    ws.forEach(e => box.append(weekRow(e)));
+    host.append(box);
+  });
+  if (!n) host.append(el("p", "foot", "No weeks match these filters. Clear the search or pick All."));
+  document.getElementById("count").textContent = `${n} of ${DATA.weeks.length} weeks`;
+}
+
+(function init() {
+  const fh = document.getElementById("formats");
+  Object.entries(DATA.formats).forEach(([k, name]) => {
+    const c = el("div", "fmt-card");
+    const cnt = DATA.weeks.filter(e => e.fmt === k).length;
+    c.append(el("span", "tag " + k, name), el("b", null, `${cnt} videos`), el("span", "stage", FMT_NOTE[k]));
+    fh.append(c);
+  });
+  document.getElementById("q").addEventListener("input", ev => { state.q = ev.target.value; render(); });
+  render();
+  const first = document.querySelector("details.wk"); if (first) first.open = true;
+})();
+</script>
