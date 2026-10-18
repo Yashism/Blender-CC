@@ -1,12 +1,12 @@
 """TEMP sound design for W01 "One Weak Rack" (numpy synthesis, system python3), mixed with the
-music: the orchestral score.py (default), a beat cut to the picture by beat_edit.py, or the
-synthesised temp music.
+music: the orchestral score.py (default), a licensed cinematic track cut to the picture by
+cue_edit.py, or the synthesised temp music.
 
 A timing guide for review, locked to edit.py. Final mix (recorded metal and cardboard impacts,
 VO) replaces the sound design later.
 
     python3 scripts/w01/sfx.py                    # -> renders/w01/w01_audio.wav (orchestral score)
-    python3 scripts/w01/sfx.py --music ovo        # a beat instead (beat_edit.py TRACKS)
+    python3 scripts/w01/sfx.py --music catalyst   # a cinematic track instead (cue_edit.py CUES)
     python3 scripts/w01/sfx.py --music temp       # or the synthesised temp music
 """
 import argparse
@@ -201,8 +201,8 @@ def mallet(f, d=1.6):
 DEFAULT_MUSIC = "score"
 
 
-def beat_mix(sfx, amb, beat):
-    """The beat up front at -14 LUFS, the sound design 3 LU under it and punching through: the
+def track_mix(sfx, amb, music):
+    """A licensed track at -14 LUFS, the sound design 3 LU under it and punching through: the
     music ducks under the big hits (up to 6 dB, fast attack, 300 ms release) like a sidechain."""
     import pyloudnorm
     from scipy.signal import lfilter
@@ -215,7 +215,7 @@ def beat_mix(sfx, amb, beat):
     env = np.maximum(env, lfilter([1 - att], [1, -att], lvl))   # with a fast attack
     db = 20 * np.log10(env + 1e-9)
     duck = 10 ** (-np.clip((db + 22) * 0.5, 0, 6) / 20)
-    mix = sfx + amb + beat * duck[:, None]
+    mix = sfx + amb + music * duck[:, None]
     mix *= 10 ** ((-14.0 - meter.integrated_loudness(mix)) / 20)
     from scipy.ndimage import maximum_filter1d, minimum_filter1d, uniform_filter1d
     ceil = 10 ** (-1 / 20)
@@ -227,7 +227,7 @@ def beat_mix(sfx, amb, beat):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--music", default=DEFAULT_MUSIC,
-                    help="a beat_edit.py track key, a wav path, 'score' or 'temp'")
+                    help="a cue_edit.py key, a wav path, 'score' or 'temp'")
     ap.add_argument("--out", default=os.path.join(ROOT, "renders", "w01", "w01_audio.wav"))
     args = ap.parse_args()
     sfx, amb, mus = buf(), buf(), buf()
@@ -341,7 +341,7 @@ def main():
     add(mus, pad([130.8, 164.8, 196], 4.2, 0.12), ec + 0.4)
 
     beat = args.music if args.music.endswith(".wav") else \
-        os.path.join(ROOT, "renders", "w01", "music", f"w01_beat_{args.music}.wav")
+        os.path.join(ROOT, "renders", "w01", "music", f"w01_cue_{args.music}.wav")
     score = os.path.join(ROOT, "renders", "w01", "w01_score.wav")
     if args.music not in ("score", "temp") and os.path.exists(beat):
         import soundfile as sf
@@ -350,7 +350,7 @@ def main():
         mus = np.zeros_like(sfx)
         n = min(len(b), len(mus))
         mus[:n] = b[:n]
-        mix = beat_mix(sfx, amb, mus)
+        mix = track_mix(sfx, amb, mus)
         print(f"music: {os.path.relpath(beat, ROOT)}")
     elif args.music != "temp" and os.path.exists(score):
         # the orchestral score (score.py) replaces the synthesised temp music

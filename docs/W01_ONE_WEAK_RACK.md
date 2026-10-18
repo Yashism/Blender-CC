@@ -48,7 +48,7 @@ Labels, the dent ring and the load path are pinned to the steel with camera trac
 | Set assembly (~480 loads, 4 rows) | `scripts/w01/build_set.py` → `blender/w01_set.blend` |
 | Collapse: kinematic frames, breakable beam hooks, 1,288 cartons + 59 pallets as rigid bodies, volumetric dust | `scripts/w01/collapse.py` → `blender/w01_collapse.blend` |
 | Shots (cameras, animation, particles, twin pass) | `scripts/w01/shots.py` |
-| Edit, temp sound design, music edit, grade/HUD/captions/end card | `scripts/w01/edit.py`, `sfx.py`, `beat_edit.py`, `post.py` |
+| Edit, temp sound design, score, music edit, grade/HUD/captions/end card | `scripts/w01/edit.py`, `sfx.py`, `score.py`, `cue_edit.py`, `post.py` |
 
 ## Rebuild and render
 
@@ -78,51 +78,51 @@ Existing frames are skipped, so deleting a frame and re-running re-renders only 
 
 ## Music
 
-The music is the orchestral score (`scripts/w01/score.py`, below). The trap-beat versions are
-kept as an alternative: `python3 scripts/w01/sfx.py --music ovo` (or nav3, mafia, paranoia,
-carti) after `beat_edit.py`.
+The film is scored for what it is: a serious safety story that turns into reassurance. Two kinds
+of music are set up, both cued to the picture:
 
-### Beat alternative
+- **Orchestral score (default):** `scripts/w01/score.py`, composed to every moment of the cut (below).
+- **Licensed cinematic tracks:** film-composer orchestral music by Scott Buckley, cut to the
+  picture by `scripts/w01/cue_edit.py`. 360p cuts with each: `renders/w01/music_options/`.
 
-A produced trap / hip-hop beat, re-edited to the picture by `scripts/w01/beat_edit.py`
-on the track's own beat grid (whole-number tempo fitted over the whole track, drops found where the
-808 and kick come in):
+### Cinematic options (`cue_edit.py`)
+
+Scored like a trailer, in two cues:
 
 | Time | Music |
 | --- | --- |
-| 1.6 | the fork hit starts the track's intro, low-passed and opening up |
-| 7.0 | **drop** on the reveal; the beat runs through the time-lapse |
-| 18.0 | low-pass breakdown, noise riser and a reverse-reverb swell under the last pallet |
-| 22.0 | silence for the fold, then the **drop** on the first clang (22.3), on the track's hardest 10 s |
-| 32.9 | tape-stop as the picture freezes, then silence |
-| 34.9 | the whole cue played backwards, accelerating like the picture's rewind |
-| 38.4 | melody only (a drums-out breakdown, or the intro), filter opening, while RAMS tags the upright |
-| 45.4 | the beat drops back on the end card and stops on a final hit with an echo tail |
+| 0.0 | **Cue A, tension:** placed so the track's key moment lands on the picture (its driving entrance on the fork hit, or its dramatic back end on the fold) |
+| 24.6 | a held breath under the last pallet: the music drops back and closes down to a muffled 1.3 kHz |
+| 28.3 | opens up full on the fold's first clang, under the collapse |
+| 38.9 | cut to silence on the freeze (the room rings out); silence under "the warning was there on day one" |
+| 43.4 | cue A played backwards, accelerating like the picture's rewind |
+| 46.9 | **Cue B, resolve:** the uplifting part of a track enters as RAMS comes in; its last big phrase lands 3 s into the end card, then it fades |
 
-`sfx.py` mixes it with the sound design: the beat at -14 LUFS, the effects 3 LU under it, the music
-ducking up to 6 dB under the big hits, -1 dBFS peak ceiling.
+| Key | Cue A | Cue B | Feel |
+| --- | --- | --- | --- |
+| `catalyst` | Catalyst (from 0:08, its drive enters on the fork hit) | Catalyst (its epic theme, last 22 s) | dark, driving synths and orchestra into an inspirational theme |
+| `uprising` | Uprising (its dark slow burn, 1:23-2:01) | Uprising (its heroic back end) | slow-burn tension into a heroic resolve |
+| `nightfall` | Nightfall (its dramatic back end on the fold) | Rise Above | dark, rhythmic hybrid into uplifting orchestra |
 
 ```bash
-bash scripts/w01/fetch_music.sh               # the beats -> assets/music/w01/ (not committed)
+bash scripts/w01/fetch_music.sh               # -> assets/music/w01_cinematic/ (not committed)
 pip install librosa soundfile scipy pyloudnorm
-python3 scripts/w01/beat_edit.py ovo nav3 mafia paranoia carti
-python3 scripts/w01/sfx.py --music ovo        # -> renders/w01/w01_audio.wav, then post.py
+python3 scripts/w01/cue_edit.py catalyst uprising nightfall
+python3 scripts/w01/sfx.py --music catalyst   # -> renders/w01/w01_audio.wav, then post.py
 ```
 
-Options (all [Mixkit Stock Music Free License](https://mixkit.co/license/#musicFree): free for
-commercial use in a video, no attribution required; the files may not be redistributed on their
-own, so they are downloaded, not committed). 360p cuts with each beat: `renders/w01/beat_options/`.
+`sfx.py` mixes a track with the sound design: the music at -14 LUFS, the effects 3 LU under it,
+the music ducking up to 6 dB under the big hits, -1 dBFS peak ceiling.
 
-| Key | Track | Artist | Tempo | Feel | Source |
-| --- | --- | --- | --- | --- | --- |
-| `ovo` | OVO | Arulo | 87 | dark Drake / OVO-style | https://assets.mixkit.co/music/412/412.mp3 |
-| `nav3` | Nav Type 3 | Arulo | 160 | Nav / Travis Scott-style | https://assets.mixkit.co/music/261/261.mp3 |
-| `mafia` | The Mafia | Michael Ramir C. | 140 | hard cinematic trap | https://assets.mixkit.co/music/929/929.mp3 |
-| `paranoia` | Paranoia | Arulo | 140 | dark trap | https://assets.mixkit.co/music/367/367.mp3 |
-| `carti` | Carti Bih | Arulo | 140 | Playboi Carti-style | https://assets.mixkit.co/music/418/418.mp3 |
+**Licence:** CC BY 4.0 (https://www.scottbuckley.com.au/library/using-this-music/): free for
+commercial use synchronised to a video, with this credit in the video description (YouTube,
+LinkedIn, Instagram):
 
-Any other track can be cut the same way: add it to `TRACKS` in `beat_edit.py` (a licensed
-commercial song needs a sync licence from its publisher and label).
+> Music: "Catalyst" by Scott Buckley, released under CC-BY 4.0. www.scottbuckley.com.au
+
+Paid ads that cannot carry a credit need Scott Buckley's Web License (AUD 40 per track,
+https://www.scottbuckley.com.au/library/licensing/). The MP3s may not be redistributed on their
+own, so they are downloaded, not committed.
 
 ### Orchestral score (default)
 
