@@ -27,3 +27,5 @@ renders/w01/*.wav
 renders/w01/*/preview/
 renders/w01/W01_one_weak_rack_16x9.mp4
 renders/w01/W01_one_weak_rack_9x16.mp4
+assets/music/
+renders/w01/music/
