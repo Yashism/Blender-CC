@@ -2,13 +2,15 @@
 # Render every W01 shot in priority order, resumable (existing frames are skipped), and encode
 # each finished shot to renders/w01/clips/<shot>.mp4.
 #
-#   bash scripts/w01/render_queue.sh [RES] [SAMPLES]        # defaults 960x540 24
+#   bash scripts/w01/render_queue.sh [RES] [SAMPLES] [DEVICE]   # defaults 960x540 24 cpu
+#   bash scripts/w01/render_queue.sh 1920x1080 64 gpu          # final, on an NVIDIA/AMD/Intel GPU
 #
 # Collapse shots open blender/w01_collapse.blend (run the collapse_bake shot first).
 set -u
 cd "$(dirname "$0")/../.."
 RES="${1:-960x540}"
 SPP="${2:-24}"
+DEVICE="${3:-cpu}"
 BLENDER="${BLENDER:-blender}"
 mkdir -p renders/w01/logs renders/w01/clips
 
@@ -36,7 +38,7 @@ for item in "${QUEUE[@]}"; do
   spp=$SPP
   [ "$shot" = "s09b_twin" ] && spp=12
   echo "[queue] $(date +%H:%M) $shot"
-  "$BLENDER" -b "$blend" -P scripts/w01/shots.py -- --shot "$shot" --res "$RES" --samples "$spp" \
+  "$BLENDER" -b "$blend" -P scripts/w01/shots.py -- --shot "$shot" --res "$RES" --samples "$spp" --device "$DEVICE" \
       >> "renders/w01/logs/$shot.log" 2>&1
   python3 scripts/w01/encode.py "$shot" >> renders/w01/logs/encode.log 2>&1
   echo "[queue] $(date +%H:%M) $shot done"
