@@ -10,11 +10,13 @@ a first-time viewer is missing:
 3. **That it keeps getting worse:** the weeks of knocks shot macro on the crease. Each knock
    lands on screen and the bend gets deeper, 4.0 mm → 7.4 mm, while "reported" stays at 0.
 4. **Why it rewinds:** "The warning was there on day one", then a day counter running back.
-5. **Where RAMS comes in:** we inspect and tag it, it goes into your digital twin, we alert you
-   the same day with the exact fix, the repair is verified, the aisle keeps running.
+5. **Where RAMS comes in:** we scan the upright, analyse the damage (a stress heatmap shows the
+   hot spot at the crease, the measurements come up and a damage-intensity gauge swings into
+   RED), tag it, put it in your digital twin, alert you the same day with the exact fix, verify
+   the repair, and the aisle keeps running.
 6. **What to do now:** "Catch it on day one", then the audit offer.
 
-Runtime 65.4 s (v1: 50.4 s). 16:9 and 9:16. Every line is on screen, so it works on mute; no VO.
+Runtime 69.4 s (v1: 50.4 s). 16:9 and 9:16. Every line is on screen, so it works on mute; no VO.
 
 ## The script
 
@@ -37,11 +39,13 @@ Runtime 65.4 s (v1: 50.4 s). 16:9 and 9:16. Every line is on screen, so it works
 | 0:40.9 | Held frame, slow push in, darkening | *The warning was there on day one.* | The dent's piano question returns |
 | **ACT 5: WHERE RAMS COMES IN** | | | |
 | 0:43.4 | Rewind to the fresh dent | **◀◀ REWIND · DAY 47 → DAY 1** | The collapse music backwards |
-| 0:46.9 | s09: the RAMS QR plate is scanned, the RED tag goes on | *This is where RAMS comes in.* · *We inspect every upright and tag the damage.* · legend **GREEN monitor / AMBER repair within 4 weeks / RED unload now** (EN 15635) | D major, the piano answered |
-| 0:50.9 | Pull back into the RAMS digital twin | Twin callout (A-04-U05 · RED · BoQ) · *Every rack goes into your RAMS digital twin.* | Harp, glockenspiel |
-| 0:53.9 | **NEW.** The twin holds; RAMS app notifications slide in | **● RED ALERT · Upright A-04-U05**: Base crease 4 mm. Unload bay 4, replace the upright. · **● Work order created**: 1 x upright 90x70x2, 9.0 m · due today · *We alert you the same day, with the exact fix.* | A two-note chime per card, a soft pulse |
-| 0:57.4 | **NEW (reuses s00).** The same aisle, morning grade, still standing | **● Repair verified · A-04-U05**: Upright replaced, re-inspected. Status GREEN. · *Fixed and verified. The aisle keeps running.* | Harp sweep, horns rise |
-| 1:00.4 | End card | RAMS logo · **Catch it on day one.** · *RAMS inspects, tags and tracks every rack, and alerts you before it fails.* · **[Book a Certified Rack Audit]** · Stability Certificate + 3 months of RAMS software, free · rams.digital/rack-audit | The chord and the three-note RAMS logo |
+| 0:46.9 | s09: the RAMS QR plate is scanned | *This is where RAMS comes in.* | D major, the piano answered, scan beeps |
+| 0:48.1 | **NEW s09h.** Damage analysis: the warehouse drops to a glow, a scan line sweeps up the frame and the steel turns into an FEM-style stress heatmap: cool blue along the rack, contour bands closing in on a red hot spot at the crease. The camera pushes in on it. | Panel **RAMS DAMAGE ANALYSIS · A-04-U05**: Crease depth 4.0 mm · Location base, highest load · Stress concentration HIGH · **Damage intensity** gauge sweeps through Green and Amber into **RED** · stress scale LOW→HIGH · **PEAK STRESS** pinned to the crease · *We scan it and map the stress the dent creates.* | Scan sweep, spiccato "processing" pulse, a blip per reading, brass stab and warning beeps on RED |
+| 0:52.1 | s09: the RED tag goes on | *Graded RED: unload the bay, replace the upright.* · legend **GREEN monitor / AMBER repair within 4 weeks / RED unload now** (EN 15635) | G major, harp |
+| 0:54.9 | Pull back into the RAMS digital twin | Twin callout (A-04-U05 · RED · BoQ) · *Every rack goes into your RAMS digital twin.* | Harp, glockenspiel |
+| 0:57.9 | **NEW.** The twin holds; RAMS app notifications slide in | **● RED ALERT · Upright A-04-U05**: Base crease 4 mm. Unload bay 4, replace the upright. · **● Work order created**: 1 x upright 90x70x2, 9.0 m · due today · *We alert you the same day, with the exact fix.* | A two-note chime per card, a soft pulse |
+| 1:01.4 | **NEW (reuses s00).** The same aisle, morning grade, still standing | **● Repair verified · A-04-U05**: Upright replaced, re-inspected. Status GREEN. · *Fixed and verified. The aisle keeps running.* | Harp sweep, horns rise |
+| 1:04.4 | End card | RAMS logo · **Catch it on day one.** · *RAMS inspects, tags and tracks every rack, and alerts you before it fails.* · **[Book a Certified Rack Audit]** · Stability Certificate + 3 months of RAMS software, free · rams.digital/rack-audit | The chord and the three-note RAMS logo |
 
 ## Claims to confirm with RAMS before publishing
 
@@ -57,6 +61,9 @@ Runtime 65.4 s (v1: 50.4 s). 16:9 and 9:16. Every line is on screen, so it works
   same-day promise. Instant alerts on new impacts *between* audits are RTSS (impact sensors), a
   separate product, so the film shows alerts after the inspection, not sensor alerts.
 - **The time-lapse depth** (4.0 → 7.4 mm over seven knocks) is a dramatisation.
+- **The heatmap** is an FEM-style visualisation (FEM analysis is part of RAMS's Advanced Rack
+  Audit), not a solved model of this upright: stress is drawn as the load building toward the
+  base plus a hot spot at the crease. The panel shows no invented numbers beyond the 4 mm depth.
 
 ## Optional next steps
 

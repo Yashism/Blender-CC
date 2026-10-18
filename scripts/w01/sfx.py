@@ -237,12 +237,12 @@ def main():
     hum = (np.sin(2 * np.pi * 50 * t) * 0.5 + np.sin(2 * np.pi * 100 * t) * 0.25) * 0.02
     air = band(noise(tone_end), 30, 420) * 0.03
     add(amb, hum + air, 0.0)
-    add(amb, (band(noise(ST["endcard"] - ST["s09_tag"]), 30, 420) * 0.025), ST["s09_tag"])
+    add(amb, (band(noise(ST["endcard"] - ST["rams_scan"]), 30, 420) * 0.025), ST["rams_scan"])
 
     # on-screen graphics: a soft UI tick as each label, callout and panel lands
     for _, t_in, _, _ in E.LABELS:
         add(sfx, ui_tick(2200), ST["s00_establish"] + t_in, 0.05, pan=0.2)
-    for t_ui in (t_of("s02_dent", 6), ST["s04_lapse"] + E.STAT[1], t_of("s09_tag", 40)):
+    for t_ui in (t_of("s02_dent", 6), ST["s04_lapse"] + E.STAT[1], t_of("s09_tag", 10)):
         add(sfx, ui_tick(1700), t_ui, 0.06)
     # the RAMS app notifications: a two-note chime as each card lands
     for tag, t_in, _, _, _ in E.ALERTS:
@@ -301,7 +301,7 @@ def main():
     add(sfx, ring, fz, 0.06)
     add(mus, pad([41.2, 61.7], 2.0, 0.2), fz)
     # rewind: the collapse sound reversed and sped up, then the suck-back
-    rw0, rw1 = ST["rewind"], ST["s09_tag"]
+    rw0, rw1 = ST["rewind"], ST["rams_scan"]
     seg = sfx[int(ST["s05_last"] * SR):int(fz * SR)].copy()[::-1]
     idx = np.clip((np.linspace(0, len(seg) - 1, int((rw1 - rw0) * SR)) ** 1.0).astype(int), 0, len(seg) - 1)
     sped = seg[idx]
@@ -311,13 +311,25 @@ def main():
     sfx[i0:i0 + len(sped)] += sped * 0.5
     add(sfx, whoosh(rw1 - rw0, True), rw0, 0.25)
     # s09: scanner beep, the tag, data blips
-    add(sfx, beep(1600, 0.09), t_of("s09_tag", 21), 0.18)
-    add(sfx, beep(2400, 0.12), t_of("s09_tag", 21) + 0.11, 0.18)
-    tag = t_of("s09_tag", 37)
+    add(sfx, beep(1600, 0.09), t_of("rams_scan", 20), 0.18)
+    add(sfx, beep(2400, 0.12), t_of("rams_scan", 20) + 0.11, 0.18)
+    # the analysis: a rising scan sweep, a data blip per read-out, a warning pair on RED
+    an = ST["analysis"]
+    sweep_d = 2.0
+    ts = tt(sweep_d)
+    fsw = 300 + 1500 * (ts / sweep_d) ** 1.5
+    sweep = np.sin(2 * np.pi * np.cumsum(fsw) / SR) * np.minimum(1, ts / 0.2) * np.exp(-((ts - 1.2) / 1.0) ** 2)
+    add(sfx, band(sweep + 0.3 * band(noise(sweep_d), 2000, 6000) * np.minimum(1, ts / 0.3) * (1 - ts / sweep_d),
+                  None, 7000), an, 0.07)
+    for t_in, _, _ in E.ANALYSIS_ROWS:
+        add(sfx, ui_tick(2400), an + t_in, 0.06, pan=-0.3)
+    for k in range(2):
+        add(sfx, beep(880, 0.14), an + E.GAUGE[1] + k * 0.22, 0.12)
+    tag = t_of("s09_tag", 6)
     zip_ = np.concatenate([band(noise(0.004), 2000, 9000) * 0.6 for _ in range(14)])
     add(sfx, zip_, tag - 0.25, 0.12)
     add(sfx, band(noise(0.25), 400, 4000) * np.exp(-tt(0.25) / 0.07), tag, 0.2)
-    add(mus, pad([130.8, 196, 261.6, 329.6], ST["endcard"] - ST["s09_tag"] + 1.0, 0.16), ST["s09_tag"])
+    add(mus, pad([130.8, 196, 261.6, 329.6], ST["endcard"] - ST["rams_scan"] + 1.0, 0.16), ST["rams_scan"])
     for k in range(8):
         add(sfx, beep(RNG.choice([1800, 2400, 3000]), 0.05), ST["twin"] + 0.3 + k * 0.28, 0.06,
             pan=RNG.uniform(-0.5, 0.5))

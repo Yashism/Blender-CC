@@ -27,6 +27,7 @@ QUEUE=(
   "s06a_fold collapse"
   "s03_reveal set"
   "s09_tag set"
+  "s09h_heat set"
   "s06c_rain collapse"
   "s07_freeze collapse"
   "s04_lapse set"

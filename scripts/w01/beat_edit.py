@@ -43,7 +43,7 @@ T_LAST = ST["s05_last"]
 T_FOLD = ST["s06a_fold"] + 8 / E.FPS         # first clang of the fold (sfx.py)
 T_FREEZE = ST["s07_freeze"]
 T_REWIND = ST["rewind"]
-T_TAG = ST["s09_tag"]
+T_TAG = ST["rams_scan"]                      # the rewind lands; RAMS comes in
 T_END = ST["endcard"]
 LUFS = -14.0
 

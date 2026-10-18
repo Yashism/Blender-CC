@@ -753,6 +753,138 @@ def s09():
     scene.render.use_motion_blur = True
 
 
+RACK_STEEL = ("rack_upright_blue", "rack_upright_hero", "rack_beam_orange", "rack_brace_blue")
+
+
+def heat_material(dent, scan_keys):
+    """RAMS damage analysis (FEM-style): steel coloured by stress, low (blue) to high (red), in
+    contour bands. Stress = the load building down the frame (highest at the base) plus a hot
+    spot around the crease. A scan line sweeps up (value node 'scan_z', keyed) and reveals it;
+    above the line the steel is plain blue."""
+    m = bpy.data.materials.new("analysis_heat")
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    N, Lk = nt.nodes.new, nt.links.new
+
+    def math_(op, a, b=None, clamp=False):
+        n = N("ShaderNodeMath")
+        n.operation = op
+        n.use_clamp = clamp
+        for k, v in enumerate((a, b)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                n.inputs[k].default_value = v
+            else:
+                Lk(v, n.inputs[k])
+        return n.outputs[0]
+
+    pos = N("ShaderNodeNewGeometry").outputs["Position"]
+    sep = N("ShaderNodeSeparateXYZ")
+    Lk(pos, sep.inputs[0])
+    x, y, z = sep.outputs
+    # anisotropic distance to the crease: the fold runs across the face, so the hot spot is wide
+    # and short
+    d2 = math_("ADD", math_("ADD", math_("POWER", math_("SUBTRACT", x, dent.x), 2.0),
+                            math_("POWER", math_("MULTIPLY", math_("SUBTRACT", y, dent.y), 0.8), 2.0)),
+               math_("POWER", math_("MULTIPLY", math_("SUBTRACT", z, dent.z), 2.0), 2.0))
+    hot = math_("EXPONENT", math_("MULTIPLY", d2, -1.0 / 0.075 ** 2))
+    load = N("ShaderNodeMapRange")
+    Lk(z, load.inputs["Value"])
+    load.inputs["From Min"].default_value, load.inputs["From Max"].default_value = 0.0, 3.0
+    load.inputs["To Min"].default_value, load.inputs["To Max"].default_value = 0.3, 0.04
+    stress = math_("ADD", load.outputs[0], math_("MULTIPLY", hot, 0.9), clamp=True)
+    ramp = N("ShaderNodeValToRGB")
+    cr = ramp.color_ramp
+    stops = [(0.0, (0.02, 0.06, 0.55)), (0.22, (0.0, 0.35, 0.95)), (0.4, (0.0, 0.8, 0.55)),
+             (0.58, (0.85, 0.9, 0.05)), (0.76, (1.0, 0.45, 0.0)), (1.0, (1.0, 0.04, 0.03))]
+    cr.elements[0].position, cr.elements[0].color = stops[0][0], (*stops[0][1], 1)
+    cr.elements[1].position, cr.elements[1].color = stops[-1][0], (*stops[-1][1], 1)
+    for p, c in stops[1:-1]:
+        e = cr.elements.new(p)
+        e.color = (*c, 1)
+    Lk(stress, ramp.inputs[0])
+    # FEM-style contour lines: darken where stress crosses each tenth
+    fr = math_("FRACT", math_("MULTIPLY", stress, 10.0))
+    edge = math_("MINIMUM", fr, math_("SUBTRACT", 1.0, fr))
+    contour = math_("SUBTRACT", 1.0, math_("MULTIPLY", math_("LESS_THAN", edge, 0.06), 0.55))
+    facing = N("ShaderNodeLayerWeight")
+    facing.inputs["Blend"].default_value = 0.3
+    shade = math_("ADD", 0.45, math_("MULTIPLY", math_("SUBTRACT", 1.0, facing.outputs["Facing"]), 0.55))
+    strength = math_("MULTIPLY", math_("MULTIPLY", contour, shade), math_("ADD", 0.35, math_("MULTIPLY", stress, 1.6)))
+    em = N("ShaderNodeEmission")
+    Lk(ramp.outputs["Color"], em.inputs["Color"])
+    Lk(strength, em.inputs["Strength"])
+    # reveal below the scan line, plain painted steel above it, a bright line at the front
+    scan = N("ShaderNodeValue")
+    scan.name = scan.label = "scan_z"
+    for f, v in scan_keys:
+        scan.outputs[0].default_value = v
+        scan.outputs[0].keyframe_insert("default_value", frame=f)
+    below = math_("LESS_THAN", z, scan.outputs[0])
+    paint = N("ShaderNodeBsdfPrincipled")
+    paint.inputs["Base Color"].default_value = (0.03, 0.09, 0.32, 1)
+    paint.inputs["Roughness"].default_value = 0.4
+    mix = N("ShaderNodeMixShader")
+    Lk(below, mix.inputs[0])
+    Lk(paint.outputs[0], mix.inputs[1])
+    Lk(em.outputs[0], mix.inputs[2])
+    line = math_("EXPONENT", math_("MULTIPLY", math_("POWER", math_("SUBTRACT", z, scan.outputs[0]), 2.0),
+                                   -1.0 / 0.012 ** 2))
+    lem = N("ShaderNodeEmission")
+    lem.inputs["Color"].default_value = (0.55, 0.95, 1.0, 1)
+    Lk(math_("MULTIPLY", line, 40.0), lem.inputs["Strength"])
+    add = N("ShaderNodeAddShader")
+    Lk(mix.outputs[0], add.inputs[0])
+    Lk(lem.outputs[0], add.inputs[1])
+    out = N("ShaderNodeOutputMaterial")
+    Lk(add.outputs[0], out.inputs["Surface"])
+    return m
+
+
+@shot("s09h_heat")
+def s09h():
+    """RAMS damage analysis: a scan line sweeps up the frame and the steel turns into a stress
+    heatmap, cool blue along the rack and a red hot spot at the crease, as the camera pushes in
+    on it. Post lays the measurements and the damage grade over it."""
+    scene = bpy.context.scene
+    scene.frame_start, scene.frame_end = 1, 96
+    hero().data.shape_keys.key_blocks["dent"].value = 1.0
+    damage_key(1, 1.0)
+    park_truck(Vector((0.4, HY + 9.0, 0)), math.pi / 2)
+    dent = Vector((HX + 0.003, HY + 0.04, 0.238))
+    keys = [(1, -0.05), (48, 1.5), (60, 2.4)]
+    heat = heat_material(dent, keys)
+    for ob in bpy.data.objects:
+        if ob.type != "MESH" or not ob.material_slots:
+            continue
+        if not any(s.material and s.material.name in RACK_STEEL for s in ob.material_slots):
+            continue
+        for s in ob.material_slots:
+            s.link = "OBJECT"
+            s.material = heat
+    for ob in bpy.data.objects:                       # scan mode: the warehouse drops to a glow
+        if ob.type == "LIGHT":
+            ob.data.energy *= 0.2
+    bg = scene.world.node_tree.nodes.get("Background")
+    if bg:
+        bg.inputs["Strength"].default_value *= 0.2
+    cam, tgt = camera("CAM_s09h", (HX + 1.15, HY + 1.05, 1.0), (HX, HY + 0.1, 0.6), lens=32, fstop=6.3)
+    cam.data.dof.focus_object = None
+    for f, loc, tg, lens, fd in ((1, (HX + 1.15, HY + 1.05, 1.0), (HX, HY + 0.1, 0.6), 32, 1.65),
+                                 (40, (HX + 0.85, HY + 0.75, 0.75), (HX, HY + 0.08, 0.45), 36, 1.2),
+                                 (96, (HX + 0.5, HY + 0.38, 0.45), (HX, HY + 0.04, 0.27), 45, 0.66)):
+        key(cam, "location", f, Vector(loc), interp="BEZIER")
+        key(tgt, "location", f, Vector(tg), interp="BEZIER")
+        cam.data.lens = lens
+        cam.data.keyframe_insert("lens", frame=f)
+        cam.data.dof.focus_distance = fd
+        cam.data.dof.keyframe_insert("focus_distance", frame=f)
+    handheld(cam, 1, 96, 0.0015)
+    scene.render.use_motion_blur = False
+
+
 def _red_tag(coll):
     me = bpy.data.meshes.new("red_tag")
     bm = bmesh.new()
@@ -868,6 +1000,7 @@ def _track_points():
                      "dent_hi": (HX + 0.003, HY + 0.04, 0.276)},
         "s03_reveal": up,
         "s04m_lapse": {"dent": (HX + 0.003, HY + 0.04, 0.238)},
+        "s09h_heat": {"dent": (HX + 0.003, HY + 0.04, 0.238)},
     }
 
 

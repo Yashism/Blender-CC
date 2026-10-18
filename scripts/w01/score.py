@@ -430,9 +430,14 @@ def compose():
     for k, (nm, dt) in enumerate((("D4", 0.15), ("F4", 0.65), ("A4", 1.15), ("E4", 1.8))):
         play("piano", nm, hold + dt, 1.8, 2 if k < 3 else 1, 0.85, release=1.0, bus_name="solo")
 
-    # J. RAMS: D major, the piano motif answered
-    res = [(tag, ["D2", "D3", "A3", "F#4", "D5"]), (tag + 1.75, ["C#2", "C#3", "A3", "E4", "C#5"]),
-           (tag + 3.5, ["B1", "B2", "B3", "F#4", "D5"]), (tag + 5.25, ["G1", "G2", "B3", "G4", "D5"]),
+    # J. RAMS: D major and the piano motif answered as RAMS comes in; a spiccato "processing"
+    # pulse under the analysis, a brass stab when it grades RED, then on through the twin,
+    # the alerts and the repaired aisle
+    scan, ana = ST["rams_scan"], ST["analysis"]
+    res = [(scan, ["D2", "D3", "A3", "F#4", "D5"]), (scan + 1.75, ["C#2", "C#3", "A3", "E4", "C#5"]),
+           (scan + 3.5, ["B1", "B2", "B3", "F#4", "D5"]), (tag, ["G1", "G2", "B3", "G4", "D5"]),
+           (tag + 1.4, ["E1", "E2", "B3", "G4", "B4"]), (twin, ["D2", "D3", "A3", "F#4", "D5"]),
+           (twin + 1.5, ["C#2", "C#3", "A3", "E4", "C#5"]),
            (alert, ["E1", "E2", "B3", "G4", "B4"]), (alert + 1.75, ["A1", "A2", "A3", "E4", "C#5"]),
            (outcome, ["F#1", "F#2", "A3", "D4", "F#5"]), (outcome + 1.5, ["A1", "A2", "A3", "E4", "C#5"])]
     for i, (t0, notes) in enumerate(res):
@@ -443,11 +448,24 @@ def compose():
         chord("vln", notes[3:], t0, dur, 2, 0.45, attack=0.6, release=0.4)
     for nm, dt, v in (("D4", 0.25, 2), ("F#4", 0.85, 2), ("A4", 1.45, 2), ("A4", 2.3, 2), ("G4", 2.85, 2),
                       ("F#4", 3.4, 2), ("E4", 4.1, 2), ("D4", 4.9, 2)):
-        play("piano", nm, tag + dt, 1.8, v, 0.5, release=1.0)
+        play("piano", nm, scan + dt, 1.8, v, 0.5, release=1.0)
+    verdict = ana + E.GAUGE[1]
+    t = ana + 0.4
+    k = 0
+    while t < verdict - 1e-6:
+        g = 0.12 + 0.22 * (t - ana) / (verdict - ana)
+        play("vln_spic", "A5" if k % 2 else "D5", t, 0.1, 2, g)
+        t += six
+        k += 1
+    for t_in, _, _ in E.ANALYSIS_ROWS:
+        play("glock", "A6", ana + t_in, 0.8, 2, 0.1)
+    hit("timp", verdict, 0.7, "D2", vel=3)
+    chord("tbn_stac", ("D2", "Eb2"), verdict, 0.5, 3, 0.55)
+    chord("hn_stac", ("D3", "Eb3"), verdict, 0.5, 3, 0.4)
     for j, nm in enumerate(("D4", "F#4", "A4", "D5", "F#5", "A5", "D6")):
         play("harp", nm, twin + 0.2 + j * 0.11, 2.0, 3, 0.4)
     for j, nm in enumerate(("G3", "B3", "D4", "G4", "B4", "D5")):
-        play("harp", nm, tag + 5.3 + j * 0.11, 2.0, 3, 0.35)
+        play("harp", nm, tag + 0.05 + j * 0.11, 2.0, 3, 0.35)
     play("glock", "A5", twin + 0.95, 1.5, 3, 0.18)
     play("glock", "D6", twin + 1.6, 1.5, 3, 0.16)
     play("hn", "A3", twin, 1.6, 2, 0.35, attack=0.6, release=0.3)
@@ -513,7 +531,7 @@ def mixdown():
     ir = hall_ir()
     freeze = ST["s07_freeze"]
     rewind = ST["rewind"]
-    tag = ST["s09_tag"]
+    tag = ST["rams_scan"]                           # where the rewind lands and RAMS comes in
     out = np.zeros((N, 2))
     sends = {"strings": 0.32, "brass": 0.3, "perc": 0.26, "keys": 0.36, "solo": 0.45}
     gains = {"strings": 1.0, "brass": 0.9, "perc": 1.0, "keys": 0.9, "solo": 1.0}

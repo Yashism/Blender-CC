@@ -46,6 +46,8 @@ SLATES = {
     "s06c_rain": "Cartons rain into the aisle",
     "s07_freeze": "Frozen moment",
     "s09_tag": "QR scan, RED tag",
+    "s09h_heat": "RAMS damage analysis (heatmap)",
+    "s04m_lapse": "Macro time-lapse: the crease deepens",
     "s09c_pull": "Pull back into the digital twin",
     "s09b_twin": "Digital twin pass",
 }
@@ -506,7 +508,7 @@ def rag_legend(canvas, i, vertical):
     if a is None or not a <= i <= b:
         return
     k = i - a
-    p = min(1.0, max(0.0, (k - 40) / 10.0))
+    p = min(1.0, max(0.0, (k - 10) / 10.0))
     if p <= 0:
         return
     w, h = canvas.size
@@ -528,6 +530,98 @@ def rag_legend(canvas, i, vertical):
         d.text((x0 + 53 * s, y + 12 * s), name, font=F(15, "mono"), fill=(10, 10, 10, al), anchor="mm")
         d.text((x0 + 104 * s, y + 12 * s), txt, font=F(19, "bold" if on else "reg"), fill=(255, 255, 255, al),
                anchor="lm")
+    canvas.alpha_composite(ov)
+
+
+HEAT = [(0.0, (8, 20, 140)), (0.22, (0, 90, 240)), (0.4, (0, 200, 140)), (0.58, (220, 230, 15)),
+        (0.76, (255, 115, 0)), (1.0, (255, 12, 8))]
+
+
+def heat_col(v):
+    for (a, ca), (b, cb) in zip(HEAT, HEAT[1:]):
+        if v <= b:
+            t = (v - a) / (b - a)
+            return tuple(int(ca[c] + (cb[c] - ca[c]) * t) for c in range(3))
+    return HEAT[-1][1]
+
+
+def analysis_hud(canvas, i, f, vertical):
+    """s09h: the RAMS damage analysis read-out over the heatmap: a stress scale, the peak
+    stress pinned to the crease, the measurements, and the damage-intensity gauge swinging
+    into RED."""
+    a, b = E.span("analysis")
+    if a is None or not a <= i <= b:
+        return
+    t = (i - a) / E.FPS
+    w, h = canvas.size
+    s = CFG.get("k", 1.0)
+    ov = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(ov)
+    out = max(0.0, min(1.0, (b - i) / 6.0))
+
+    def fade(t0, dur=0.3):
+        return max(0.0, min(1.0, (t - t0) / dur)) * out
+
+    # stress scale (vertical bar, right edge)
+    p = fade(0.4)
+    if p > 0:
+        bx, by, bh = w * (0.93 if not vertical else 0.88), h * (0.2 if not vertical else 0.34), h * 0.34
+        bw = 16 * s
+        for n in range(int(bh)):
+            v = 1 - n / bh
+            d.line([(bx, by + n), (bx + bw, by + n)], fill=heat_col(v) + (int(255 * p),))
+        d.rectangle([bx, by, bx + bw, by + bh], outline=(255, 255, 255, int(120 * p)))
+        sf = F(17, "mono")
+        d.text((bx + bw / 2, by - 8 * s), "STRESS", font=sf, fill=(220, 226, 234, int(255 * p)), anchor="md")
+        d.text((bx - 6 * s, by + 6 * s), "HIGH", font=sf, fill=(255, 120, 90, int(255 * p)), anchor="rm")
+        d.text((bx - 6 * s, by + bh - 6 * s), "LOW", font=sf, fill=(120, 170, 255, int(255 * p)), anchor="rm")
+    # peak stress, pinned to the crease once the scan has passed it
+    p = fade(0.9)
+    pt = trk("s09h_heat", f, "dent", vertical)
+    if p > 0 and _inside(pt, w, h, 0.05):
+        label_box(d, pt, "PEAK STRESS", "at the crease", p, w, h, s, RED,
+                  right=pt[0] < w * (0.6 if not vertical else 0.45))
+    # measurements panel
+    p = fade(0.6)
+    if p > 0:
+        pw = w * (0.38 if not vertical else 0.9)
+        x0 = w * 0.04 if not vertical else (w - pw) / 2
+        y0 = h * (0.06 if not vertical else 0.05)
+        tf, lf, vf = F(16, "mono"), F(19, "reg"), F(20, "bold")
+        rh = 30 * s
+        ph = 44 * s + rh * len(E.ANALYSIS_ROWS) + 78 * s
+        al = int(255 * p)
+        d.rounded_rectangle([x0, y0, x0 + pw, y0 + ph], radius=int(10 * s), fill=(8, 12, 20, int(205 * p)),
+                            outline=(70, 170, 255, int(90 * p)), width=1)
+        d.text((x0 + 16 * s, y0 + 14 * s), "RAMS DAMAGE ANALYSIS · " + L.LOCATION_CODE, font=tf,
+               fill=(120, 190, 255, al))
+        y = y0 + 44 * s
+        for t_in, label, value in E.ANALYSIS_ROWS:
+            q = fade(t_in, 0.2)
+            if q > 0:
+                d.text((x0 + 16 * s, y), label, font=lf, fill=(200, 208, 218, int(255 * q)))
+                col = RED if value == "HIGH" else (255, 255, 255)
+                d.text((x0 + pw - 16 * s, y), value, font=vf, fill=col + (int(255 * q),), anchor="ra")
+            y += rh
+        # damage intensity gauge: GREEN | AMBER | RED, the needle sweeps up
+        t0, t1, final = E.GAUGE
+        q = fade(t0 - 0.2, 0.2)
+        if q > 0:
+            d.text((x0 + 16 * s, y + 2 * s), "Damage intensity", font=lf, fill=(200, 208, 218, int(255 * q)))
+            gx0, gx1, gy = x0 + 16 * s, x0 + pw - 16 * s, y + 32 * s
+            gh = 14 * s
+            for (u0, u1, col) in ((0.0, 0.4, GREEN), (0.4, 0.7, AMBER), (0.7, 1.0, RED)):
+                d.rectangle([gx0 + (gx1 - gx0) * u0 + 1, gy, gx0 + (gx1 - gx0) * u1 - 1, gy + gh],
+                            fill=col + (int(110 * q),))
+            u = max(0.0, min(1.0, (t - t0) / (t1 - t0)))
+            u = 1 - (1 - u) ** 3
+            v = final * u
+            fx = gx0 + (gx1 - gx0) * v
+            d.rectangle([gx0, gy, fx, gy + gh], fill=heat_col(v) + (int(255 * q),))
+            d.polygon([(fx, gy - 2 * s), (fx - 7 * s, gy - 12 * s), (fx + 7 * s, gy - 12 * s)],
+                      fill=(255, 255, 255, int(255 * q)))
+            if u >= 1.0:
+                d.text((gx1, y + 2 * s), "RED", font=vf, fill=RED + (int(255 * q),), anchor="ra")
     canvas.alpha_composite(ov)
 
 
@@ -740,6 +834,7 @@ def build_frame(i):
     stat_card(canvas, i, vertical)
     rewind_hud(canvas, i, vertical)
     rag_legend(canvas, i, vertical)
+    analysis_hud(canvas, i, f, vertical)
     twin_callout(canvas, i, anchor, vertical)
     alerts(canvas, i, vertical)
     caption(canvas, i, vertical)

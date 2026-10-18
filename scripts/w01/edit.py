@@ -44,7 +44,9 @@ def build():
     out += [(LAPSE_SHOT, f, "rewind") for f in range(36, 0, -3)]
     out += _rev("s03_reveal", 1, 120, 8)
     out += _rev("s02_dent", 1, 72, 8)
-    out += _seq("s09_tag", range(1, 97))
+    out += _seq("s09_tag", range(1, 31), "rams_scan")          # the QR plate is scanned
+    out += _seq("s09h_heat", range(1, 97), "analysis")         # the damage analysis, as a heatmap
+    out += _seq("s09_tag", range(31, 97))                      # graded RED, the tag goes on
     out += _seq("s09c_pull", range(1, 73), "twin")
     out += [("s09c_pull", 72, "alert")] * ALERT_HOLD
     out += _seq("s00_establish", OUTCOME, "outcome")
@@ -81,8 +83,9 @@ CAPTIONS = [
     ("s05_last", 0.6, 3.6, "Day 47. The last pallet of the night."),
     ("s07_freeze", 0.3, 2.0, "One weak rack. Five bays down."),
     ("freeze_hold", 0.1, 2.45, "The warning was there on day one."),
-    ("s09_tag", 0.2, 1.9, "This is where RAMS comes in."),
-    ("s09_tag", 2.0, 3.95, "We inspect every upright and tag the damage."),
+    ("rams_scan", 0.15, 2.3, "This is where RAMS comes in."),
+    ("analysis", 1.2, 3.95, "We scan it and map the stress the dent creates."),
+    ("s09_tag", 0.25, 2.7, "Graded RED: unload the bay, replace the upright."),
     ("twin", 0.3, 2.9, "Every rack goes into your RAMS digital twin."),
     ("alert", 0.3, 3.4, "We alert you the same day, with the exact fix."),
     ("outcome", 0.3, 2.9, "Fixed and verified. The aisle keeps running."),
@@ -101,6 +104,11 @@ STAT = ("s04_lapse", 3.0, 5.9, "9 out of 10 rack impacts", "are never reported."
 LAPSE_DAYS = 47                            # the time-lapse runs day 1 -> day 47
 
 END_LINES = ("Catch it on day one.", "RAMS inspects, tags and tracks every rack, and alerts you before it fails.")
+
+# the damage analysis panel (s09h): (seconds in, label, value); the gauge then swings to RED
+ANALYSIS_ROWS = [(1.0, "Crease depth", "4.0 mm"), (1.5, "Location", "base, highest load"),
+                 (2.0, "Stress concentration", "HIGH")]
+GAUGE = (2.3, 3.3, 0.9)                    # sweep from, to (seconds), final damage intensity 0..1
 
 # the RAMS app notifications (tag, seconds in, accent, title, body)
 ALERTS = [
