@@ -784,7 +784,7 @@ def _bake_rigid(scene):
     log(f"rigid bake ready {time.time() - t:.1f}s")
 
 
-def _freeze_frame(scene, f, scene.frame_start, scene.frame_end):
+def _freeze_frame(scene, f, f0, f1):
     scene.frame_set(int(scene["freeze_at"]))
     pts = [Vector(p) for p in scene["freeze_path"]]
     u = (f - f0) / max(1, f1 - f0)
