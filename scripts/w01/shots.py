@@ -811,6 +811,8 @@ def parse():
     ap.add_argument("--save", default="")
     ap.add_argument("--device", default="cpu", help="cpu | gpu (OptiX/CUDA/HIP/oneAPI/Metal, first found)")
     ap.add_argument("--slice", default="", help="i/n: render every n-th frame starting at i (multi-GPU)")
+    ap.add_argument("--step", type=int, default=1, help="render every n-th frame (preview: post holds them)")
+    ap.add_argument("--fast", action="store_true", help="preview: no motion blur, fewer bounces, fast denoise")
     return ap.parse_args(argv)
 
 
@@ -843,6 +845,17 @@ def main():
     if a.device == "gpu":
         use_gpu(scene)
     scene.cycles.samples = a.samples
+    if a.fast:
+        scene.render.use_motion_blur = False
+        c = scene.cycles
+        c.adaptive_threshold = 0.08
+        c.max_bounces, c.diffuse_bounces, c.glossy_bounces = 3, 1, 1
+        c.transparent_max_bounces = 6
+        c.volume_step_rate = 4.0
+        try:
+            c.denoising_quality = "FAST"
+        except (AttributeError, TypeError):
+            pass
     scene.render.fps = FPS
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_depth = "8"
@@ -864,7 +877,7 @@ def main():
         _bake_rigid(scene)
     if scene.get("freeze_at"):
         _bake_rigid(scene)
-    frames = list(range(f0, f1 + 1))
+    frames = list(range(f0, f1 + 1, max(1, a.step)))
     if a.slice:
         i, n = (int(v) for v in a.slice.split("/"))
         frames = frames[i::n]

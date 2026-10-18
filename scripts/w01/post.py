@@ -79,8 +79,17 @@ def slate(shot, f, size):
 
 
 def load(shot, f, size):
+    """Final frame if rendered; else the nearest earlier preview frame (previews are rendered
+    every 2nd frame at lower resolution and held); else a slate."""
     p = frame_path(shot, f)
-    if os.path.exists(p):
+    if not os.path.exists(p):
+        p = None
+        for k in range(0, 3):
+            q = os.path.join(RENDERS, shot, "preview", f"f_{f - k:04d}.png")
+            if os.path.exists(q):
+                p = q
+                break
+    if p:
         im = Image.open(p).convert("RGB")
         if im.size != size:
             im = im.resize(size, Image.LANCZOS)
