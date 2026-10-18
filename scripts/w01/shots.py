@@ -473,6 +473,49 @@ def s04():
     scene.render.use_motion_blur = False
 
 
+@shot("s04m_lapse")
+def s04m():
+    """The same 36 days as s04, shot macro on the crease (the s01 framing) so the bend visibly
+    deepens: on every knock day the forks are right there against the steel, and the crease
+    is a step deeper from then on. Day and night swap over the steel; floor pallets come and go
+    behind it."""
+    s04()
+    scene = bpy.context.scene
+    t = truck()
+    c = Vector((HX + 1.15 - 0.001, HY + 0.37, 0.0))
+    for f in range(1, 37):
+        hit = f in LAPSE_HITS
+        # knock days: forks against the crease; other days the truck is away down the aisle
+        loc = c + Vector((0.004, 0.0, 0)) if hit else Vector((0.3, HY + (6.0 + (f * 7) % 9), 0))
+        rz = math.pi if hit else (math.pi / 2 if f % 3 else -math.pi / 2)
+        t["root"].location = loc
+        t["root"].rotation_euler = (0, 0, rz)
+        t["lift"].location = (0, 0, 0.222 if hit else 0.2)
+        for ob, path in ((t["root"], "location"), (t["root"], "rotation_euler"), (t["lift"], "location")):
+            ob.keyframe_insert(path, frame=f)
+    for ob in (t["root"], t["lift"]):
+        set_interp_all(ob, "CONSTANT")
+    # every knock flakes off more paint along the fold
+    hits = 0
+    for f in range(1, 37):
+        hits += f in LAPSE_HITS
+        damage_key(f, 1.0 + 0.13 * hits)
+    # a small raking light from just above, grazing down the front face so the fold line
+    # catches light and shadow (and the steel still reads on the night frames)
+    ld = bpy.data.lights.new("LGT_lapse_rake", "AREA")
+    ld.size = 0.08
+    ld.energy = 7.0
+    ld.color = (1.0, 0.96, 0.9)
+    lo = bpy.data.objects.new(ld.name, ld)
+    lo.location = (HX + 0.07, HY + 0.13, 0.62)
+    lo.rotation_mode = "QUATERNION"
+    lo.rotation_quaternion = (Vector((HX, HY + 0.035, 0.236)) - lo.location).to_track_quat("-Z", "Y")
+    scene.collection.objects.link(lo)
+    cam, tgt = camera("CAM_s04m", (HX + 0.30, HY + 0.22, 0.31), (HX - 0.002, HY + 0.035, 0.236), lens=85,
+                      fstop=8.0)
+    scene.render.use_motion_blur = False
+
+
 @shot("s05_last")
 def s05():
     """Worm's-eye from the dented upright: on the top level of bay 4 the last pallet of the night
@@ -824,6 +867,7 @@ def _track_points():
         "s02_dent": {"dent": (HX + 0.003, HY + 0.04, 0.238), "dent_lo": (HX + 0.003, HY + 0.04, 0.20),
                      "dent_hi": (HX + 0.003, HY + 0.04, 0.276)},
         "s03_reveal": up,
+        "s04m_lapse": {"dent": (HX + 0.003, HY + 0.04, 0.238)},
     }
 
 

@@ -242,8 +242,13 @@ def main():
     # on-screen graphics: a soft UI tick as each label, callout and panel lands
     for _, t_in, _, _ in E.LABELS:
         add(sfx, ui_tick(2200), ST["s00_establish"] + t_in, 0.05, pan=0.2)
-    for t_ui in (t_of("s02_dent", 6), ST["s04_lapse"] + E.STAT[1], t_of("s09_tag", 40), t_of("outcome", 6)):
+    for t_ui in (t_of("s02_dent", 6), ST["s04_lapse"] + E.STAT[1], t_of("s09_tag", 40)):
         add(sfx, ui_tick(1700), t_ui, 0.06)
+    # the RAMS app notifications: a two-note chime as each card lands
+    for tag, t_in, _, _, _ in E.ALERTS:
+        tc = ST[tag] + t_in
+        add(sfx, ui_tick(1318, 0.25), tc, 0.12, pan=0.3)
+        add(sfx, ui_tick(1760, 0.3), tc + 0.11, 0.12, pan=0.3)
     # s01: the approach, the hit, the chips, reversing beeps
     contact = t_of("s01_impact", 40)
     add(sfx, motor(contact + 0.1, 820, 1180, lambda u: 0.25 + 0.75 * u), 0.0, 0.16, pan=0.3)

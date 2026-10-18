@@ -19,6 +19,8 @@ while pgrep -f "shots.py -- --shot s0" > /dev/null; do sleep 60; done
 
 QUEUE=(
   "s01_impact set"
+  "s00_establish set"
+  "s04m_lapse set"
   "s06b_wide collapse"
   "s02_dent set"
   "s05_last set"

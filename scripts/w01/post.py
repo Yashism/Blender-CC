@@ -253,7 +253,7 @@ def stat_card(canvas, i, vertical):
     lines = [l1, l2] if not vertical else wrap(d, l1, big, w * 0.84) + [l2]
     tw = max(d.textlength(t, font=big) for t in lines) + 60 * s
     th = big.size * 1.2 * len(lines) + 46 * s
-    cx, cy = w / 2, h * (0.5 if not vertical else 0.45)
+    cx, cy = w / 2, h * (0.76 if not vertical else 0.7)
     d.rounded_rectangle([cx - tw / 2, cy - th / 2, cx + tw / 2, cy + th / 2], radius=int(12 * s),
                         fill=(8, 10, 14, int(200 * p)))
     d.rectangle([cx - tw / 2, cy - th / 2, cx - tw / 2 + 6 * s, cy + th / 2], fill=RED + (int(255 * p),))
@@ -374,10 +374,11 @@ def _glow(canvas, ov, blur):
     canvas.alpha_composite(ov)
 
 
-def label_box(d, anchor, title, line, p, w, h, s, col=ORANGE):
+def label_box(d, anchor, title, line, p, w, h, s, col=ORANGE, right=None):
     """A ringed point, a leader and a two-line label, placed toward the emptier side."""
     ax, ay = anchor
-    right = ax < w * 0.55
+    if right is None:
+        right = ax < w * 0.55
     bx = ax + (70 if right else -70) * s
     by = ay - 54 * s
     t1, t2 = F(24, "mono"), F(19, "bold")
@@ -553,6 +554,84 @@ def outcome_chip(canvas, i, vertical):
     canvas.alpha_composite(ov)
 
 
+def lapse_dent(canvas, i, f, vertical):
+    """s04 macro: the crease ringed, its depth stepping up with every knock."""
+    a, b = E.span("s04_lapse")
+    if a is None or not a <= i <= b:
+        return
+    k, sub = (i - a) // E.LAPSE_HOLD + 1, (i - a) % E.LAPSE_HOLD
+    hits = sum(1 for h in E.LAPSE_HITS if h <= k)
+    depth = L.DENT_DEPTH * 1000 * (1 + E.DENT_STEP * hits)
+    pt = trk(E.LAPSE_SHOT, f, "dent", vertical)
+    if pt is None:
+        return
+    hit = k in E.LAPSE_HITS
+    if hit:                                          # follow the punch-in (about the centre)
+        z = 1 + 0.08 * (1 - sub / E.LAPSE_HOLD)
+        w0, h0 = canvas.size
+        pt = (w0 / 2 + (pt[0] - w0 / 2) * z, h0 / 2 + (pt[1] - h0 / 2) * z)
+    w, h = canvas.size
+    s = CFG.get("k", 1.0)
+    ov = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(ov)
+    p = min(1.0, (i - a) / 8.0, (b - i) / 6.0)
+    r = h * 0.13 * (1.15 if hit else 1.0)
+    d.ellipse([pt[0] - r, pt[1] - r, pt[0] + r, pt[1] + r], outline=RED + (int(230 * p),),
+              width=max(2, int((5 if hit else 3) * s)))
+    label_box(d, (pt[0] + r * 0.72, pt[1] - r * 0.72), "DENT", f"{depth:.1f} mm deep", p, w, h, s, RED,
+              right=True)
+    canvas.alpha_composite(ov)
+
+
+ACCENT = {"red": RED, "blue": (70, 170, 255), "green": GREEN}
+
+
+def alerts(canvas, i, vertical):
+    """RAMS app notifications stacking up (the alert beat, then 'repair verified')."""
+    w, h = canvas.size
+    s = CFG.get("k", 1.0)
+    st = E.starts()
+    cw = w * (0.44 if not vertical else 0.92)
+    x_end = w - cw - w * 0.03 if not vertical else (w - cw) / 2
+    y = h * (0.14 if not vertical else 0.11)
+    ov = None
+    for tag, t_in, acc, title, body in E.ALERTS:
+        a, b = E.span(tag)
+        if a is None or not a <= i <= b:
+            continue
+        k = i - (st[tag] + int(t_in * E.FPS))
+        if k < 0:
+            continue
+        u = min(1.0, k / 8.0)
+        u = 1 - (1 - u) ** 3
+        p = min(u, (b - i) / 6.0) if tag == "outcome" else u
+        if ov is None:
+            ov = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+            d = ImageDraw.Draw(ov)
+        tf, bf, sf = F(24, "bold"), F(20, "reg"), F(15, "mono")
+        lines = wrap(d, body, bf, cw - 92 * s)
+        ch = (34 + 30 + 26 * len(lines) + 14) * s
+        x = x_end + (1 - u) * (w - x_end) * (1.0 if not vertical else 0.0)
+        yy = y - (1 - u) * ch * (1.2 if vertical else 0.0)
+        al = int(255 * p)
+        d.rounded_rectangle([x, yy, x + cw, yy + ch], radius=int(14 * s), fill=(18, 22, 30, int(235 * p)),
+                            outline=(255, 255, 255, int(40 * p)), width=1)
+        ic = 44 * s
+        d.rounded_rectangle([x + 14 * s, yy + 14 * s, x + 14 * s + ic, yy + 14 * s + ic], radius=int(9 * s),
+                            fill=(10, 14, 20, al), outline=ORANGE + (al,), width=max(1, int(2 * s)))
+        d.text((x + 14 * s + ic / 2, yy + 14 * s + ic / 2), "R", font=F(24, "xbold"), fill=ORANGE + (al,), anchor="mm")
+        tx = x + 72 * s
+        d.text((tx, yy + 12 * s), "RAMS  ·  now", font=sf, fill=(160, 170, 182, al))
+        dot = 6 * s
+        d.ellipse([tx, yy + 44 * s - dot, tx + 2 * dot, yy + 44 * s + dot], fill=ACCENT[acc] + (al,))
+        d.text((tx + 3 * dot, yy + 44 * s), title, font=tf, fill=(255, 255, 255, al), anchor="lm")
+        for n, ln in enumerate(lines):
+            d.text((tx, yy + (62 + 26 * n) * s), ln, font=bf, fill=(214, 220, 228, al))
+        y += ch + 12 * s
+    if ov is not None:
+        canvas.alpha_composite(ov)
+
+
 def end_card(i, size, vertical, bg):
     a, _ = E.span("endcard")
     k = i - a
@@ -627,6 +706,19 @@ def build_frame(i):
         u = (i - a) / max(1, b - a)
         im = push(im, 1 + 0.07 * u * u * (3 - 2 * u))
         im = Image.blend(im, Image.new("RGB", im.size, (0, 0, 0)), 0.18 * u)
+    if tag == "alert":
+        im, _ = twin_frame(72, size)
+        a, b = E.span("alert")
+        u = (i - a) / max(1, b - a)
+        im = push(im, 1 + 0.05 * u)
+        im = Image.blend(im, Image.new("RGB", im.size, (2, 6, 12)), 0.3 * min(1.0, (i - a) / 8.0))
+    if tag == "s04_lapse":
+        a, _ = E.span("s04_lapse")
+        k, sub = (i - a) // E.LAPSE_HOLD + 1, (i - a) % E.LAPSE_HOLD
+        if k in E.LAPSE_HITS:                       # the knock: a jolt in, and a flash
+            im = push(im, 1 + 0.08 * (1 - sub / E.LAPSE_HOLD))
+            if sub == 0:
+                im = Image.blend(im, Image.new("RGB", im.size, (255, 255, 255)), 0.35)
     if tag == "outcome":
         im = morning(im)
         a, _ = E.span("outcome")
@@ -642,13 +734,14 @@ def build_frame(i):
     canvas = im.convert("RGBA")
     part_labels(canvas, i, f, vertical)
     dent_callout(canvas, i, f, vertical)
+    lapse_dent(canvas, i, f, vertical)
     load_path(canvas, i, f, vertical)
     lapse_hud(canvas, i, vertical)
     stat_card(canvas, i, vertical)
     rewind_hud(canvas, i, vertical)
     rag_legend(canvas, i, vertical)
     twin_callout(canvas, i, anchor, vertical)
-    outcome_chip(canvas, i, vertical)
+    alerts(canvas, i, vertical)
     caption(canvas, i, vertical)
     logo_bug(canvas, i, vertical)
     return canvas.convert("RGB")

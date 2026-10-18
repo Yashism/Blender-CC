@@ -288,6 +288,7 @@ def compose():
     rewind = ST["rewind"]
     tag = ST["s09_tag"]
     twin = ST["twin"]
+    alert = ST["alert"]
     outcome = ST["outcome"]
     end = ST["endcard"]
     beat = 0.5                                      # 120 bpm
@@ -432,6 +433,7 @@ def compose():
     # J. RAMS: D major, the piano motif answered
     res = [(tag, ["D2", "D3", "A3", "F#4", "D5"]), (tag + 1.75, ["C#2", "C#3", "A3", "E4", "C#5"]),
            (tag + 3.5, ["B1", "B2", "B3", "F#4", "D5"]), (tag + 5.25, ["G1", "G2", "B3", "G4", "D5"]),
+           (alert, ["E1", "E2", "B3", "G4", "B4"]), (alert + 1.75, ["A1", "A2", "A3", "E4", "C#5"]),
            (outcome, ["F#1", "F#2", "A3", "D4", "F#5"]), (outcome + 1.5, ["A1", "A2", "A3", "E4", "C#5"])]
     for i, (t0, notes) in enumerate(res):
         dur = (res[i + 1][0] - t0 + 0.05) if i + 1 < len(res) else end - t0 + 0.1
@@ -450,6 +452,9 @@ def compose():
     play("glock", "D6", twin + 1.6, 1.5, 3, 0.16)
     play("hn", "A3", twin, 1.6, 2, 0.35, attack=0.6, release=0.3)
     play("hn", "D4", twin + 1.6, outcome - twin - 1.5, 2, 0.35, attack=0.4, release=0.4)
+    # the alerts: a soft pulse under the cards
+    for k in range(int((outcome - alert) / beat)):
+        play("vc_spic", "E2" if alert + k * beat < alert + 1.75 else "A2", alert + k * beat, 0.15, 2, 0.35)
     # the aisle still standing: relief, a harp sweep in D, horns up to the end card
     for j, nm in enumerate(("D4", "F#4", "A4", "D5", "F#5", "A5")):
         play("harp", nm, outcome + 0.15 + j * 0.1, 2.0, 3, 0.32)
