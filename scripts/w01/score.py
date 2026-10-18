@@ -288,14 +288,23 @@ def compose():
     rewind = ST["rewind"]
     tag = ST["s09_tag"]
     twin = ST["twin"]
+    outcome = ST["outcome"]
     end = ST["endcard"]
     beat = 0.5                                      # 120 bpm
     six = beat / 4
 
-    # A. night: a held high A and a low D you feel more than hear
+    # A. night: a held high A and a low D you feel more than hear; the aisle opens up on a low
+    # D minor swell, and a harp note marks each part of the rack as it is named
     play("vln", "A5", 0.0, hit_t + 3.0, 1, 0.55, attack=1.1, release=1.2)
     play("cb", "D2", 0.2, hit_t + 5.5, 1, 0.8, attack=0.8, release=1.5)
     play("vc", "D3", 0.4, hit_t + 0.2, 1, 0.3, attack=0.9, release=0.6)
+    est = ST["s00_establish"]
+    play("vla", "A3", est + 0.8, hit_t - est - 0.6, 2, 0.34, attack=2.5, release=0.6)
+    play("vln", "F4", est + 1.6, hit_t - est - 1.4, 1, 0.24, attack=2.5, release=0.6)
+    play("hn", "D3", est + 2.4, hit_t - est - 2.3, 2, 0.3, attack=2.4, release=0.5)
+    for (_, t_in, _, _), nm in zip(E.LABELS, ("D5", "F5", "A5")):
+        play("harp", nm, est + t_in, 2.0, 3, 0.4)
+        play("glock", nm, est + t_in + 0.02, 1.2, 2, 0.06)
 
     # B. the hit: timpani, bass drum, low strings and brass on the contact frame
     hit("timp", hit_t, 1.1, "D2", vel=4)
@@ -413,14 +422,19 @@ def compose():
         play("tuba", notes[0], t0, dur, 4, 0.65, attack=0.05, release=0.03)
     hit("timp_roll", slam + 2.4, 0.8, "D3", vel=5, dur=freeze - slam - 2.45, swell=(0.3, 1.0))
 
-    # H. the freeze: one high note in the silence
-    play("vln", "A5", freeze + 0.2, 1.7, 1, 0.7, attack=0.4, release=0.15, bus_name="solo")
+    # H. the freeze: one high note in the silence; then, under "the warning was there on day
+    # one", the piano question from the dent comes back
+    hold = ST["freeze_hold"]
+    play("vln", "A5", freeze + 0.2, hold - freeze + 0.6, 1, 0.7, attack=0.4, release=0.6, bus_name="solo")
+    for k, (nm, dt) in enumerate((("D4", 0.15), ("F4", 0.65), ("A4", 1.15), ("E4", 1.8))):
+        play("piano", nm, hold + dt, 1.8, 2 if k < 3 else 1, 0.85, release=1.0, bus_name="solo")
 
     # J. RAMS: D major, the piano motif answered
     res = [(tag, ["D2", "D3", "A3", "F#4", "D5"]), (tag + 1.75, ["C#2", "C#3", "A3", "E4", "C#5"]),
-           (tag + 3.5, ["B1", "B2", "B3", "F#4", "D5"]), (tag + 5.25, ["G1", "G2", "B3", "G4", "D5"])]
+           (tag + 3.5, ["B1", "B2", "B3", "F#4", "D5"]), (tag + 5.25, ["G1", "G2", "B3", "G4", "D5"]),
+           (outcome, ["F#1", "F#2", "A3", "D4", "F#5"]), (outcome + 1.5, ["A1", "A2", "A3", "E4", "C#5"])]
     for i, (t0, notes) in enumerate(res):
-        dur = 1.8 if i < 3 else end - t0 + 0.1
+        dur = (res[i + 1][0] - t0 + 0.05) if i + 1 < len(res) else end - t0 + 0.1
         play("cb", notes[0], t0, dur, 2, 0.45, attack=0.5, release=0.4)
         play("vc", notes[1], t0, dur, 2, 0.55, attack=0.5, release=0.4)
         play("vla", notes[2], t0, dur, 2, 0.45, attack=0.5, release=0.4)
@@ -435,7 +449,13 @@ def compose():
     play("glock", "A5", twin + 0.95, 1.5, 3, 0.18)
     play("glock", "D6", twin + 1.6, 1.5, 3, 0.16)
     play("hn", "A3", twin, 1.6, 2, 0.35, attack=0.6, release=0.3)
-    play("hn", "D4", twin + 1.6, end - twin - 1.5, 2, 0.35, attack=0.4, release=0.4)
+    play("hn", "D4", twin + 1.6, outcome - twin - 1.5, 2, 0.35, attack=0.4, release=0.4)
+    # the aisle still standing: relief, a harp sweep in D, horns up to the end card
+    for j, nm in enumerate(("D4", "F#4", "A4", "D5", "F#5", "A5")):
+        play("harp", nm, outcome + 0.15 + j * 0.1, 2.0, 3, 0.32)
+    chord("hn", ("F#3", "D4"), outcome, 1.55, 2, 0.4, attack=0.5, release=0.3)
+    chord("hn", ("E3", "C#4"), outcome + 1.5, end - outcome - 1.45, 3, 0.45, attack=0.3, release=0.2)
+    hit("timp_roll", outcome + 1.6, 0.45, "A2", vel=3, dur=end - outcome - 1.62, swell=(0.2, 1.0))
 
     # K. end card: the chord, and the RAMS three-note sonic logo
     fin = end

@@ -5,6 +5,7 @@
             [--still 52]   # render one frame to --out/still_0052.png
 
 Shots (24 fps):
+  s00_establish  opening wide down the aisle, settling on the hero upright as the truck rolls in.
   s01_impact   macro: the reach truck's fork blade swings in and clips the upright base;
                paint chips burst, the 4 mm crease springs in.
   s02_dent     hold on the crease, slow push-in (the "4 millimetres" line).
@@ -235,6 +236,47 @@ def shot(name):
 
 
 CONTACT = 40      # s01 frame of impact
+
+
+@shot("s00_establish")
+def s00():
+    """Opening wide: high at the end of the aisle, night shift, every level full. The camera
+    glides down the aisle and settles low on the foot of the hero upright as the reach truck
+    comes in from the far end and squares up to bay 4 (s01 picks up from here). Post names the parts: pallet,
+    beam, upright. Frames 1-72 come back at the end as the repaired, still-standing aisle."""
+    scene = bpy.context.scene
+    scene.frame_start, scene.frame_end = 1, 144
+    t = truck()
+    t["lift"].location = (0, 0, 0.222)
+    root = t["root"]
+    root.rotation_mode = "XYZ"
+    c = Vector((HX + 1.15 - 0.001, HY + 0.37, 0.0))
+    # in from the far end, forks first, then a quarter turn to face bay 4
+    for f, loc, rz in ((1, Vector((0.30, HY + 9.0, 0)), -math.pi / 2),
+                       (100, Vector((0.36, HY + 1.5, 0)), -math.pi / 2),
+                       (144, c + Vector((0.86, 0.05, 0)), -math.pi + 0.035)):
+        key(root, "location", f, loc, interp="BEZIER")
+        key(root, "rotation_euler", f, (0, 0, rz), interp="BEZIER")
+    ob = bpy.data.objects.get("Load_A_04_0_0")      # the pallet the truck is coming for (s01)
+    if ob:
+        ob.hide_render = True
+    cam, tgt = camera("CAM_s00", (0.2, HY - 13.0, 7.0), (-0.3, HY + 6.0, 3.5), lens=24, fstop=5.6)
+    cam.data.dof.focus_object = None
+    path = [
+        (1, (0.2, HY - 13.0, 7.0), (-0.3, HY + 6.0, 3.5), 24, 16.0),
+        (60, (0.35, HY - 8.0, 4.4), (-0.6, HY + 3.0, 2.4), 26, 11.5),
+        (112, (0.6, HY - 4.0, 2.2), (HX + 0.2, HY + 0.6, 1.0), 28, 5.0),
+        (144, (0.75, HY - 1.7, 1.2), (HX + 0.1, HY + 0.2, 0.45), 30, 3.2),
+    ]
+    for f, loc, tg, lens, focus in path:
+        key(cam, "location", f, Vector(loc), interp="BEZIER")
+        key(tgt, "location", f, Vector(tg), interp="BEZIER")
+        cam.data.lens = lens
+        cam.data.keyframe_insert("lens", frame=f)
+        cam.data.dof.focus_distance = focus
+        cam.data.dof.keyframe_insert("focus_distance", frame=f)
+    handheld(cam, 1, 144, 0.003)
+    scene.render.use_motion_blur = True
 
 
 @shot("s01_impact")
@@ -770,6 +812,48 @@ def s09c():
     scene.render.use_motion_blur = True
 
 
+# ------------------------------------------------------------------ 2D tracks for post
+
+def _track_points():
+    """World points post.py pins labels and graphics to, per shot. "obj:<name>" is the centre of
+    that object's aisle face."""
+    up = {f"z{i}": (HX, HY, z) for i, z in enumerate([0.24] + list(L.LEVELS) + [L.UPRIGHT_H])}
+    return {
+        "s00_establish": {"pallet": "obj:Load_A_04_3_0", "beam": (HX + 0.01, HY + 1.2, L.LEVELS[1] - L.BEAM_H / 2),
+                          "upright": (HX, HY, 2.6), "foot": (HX, HY + 0.04, 0.24)},
+        "s02_dent": {"dent": (HX + 0.003, HY + 0.04, 0.238), "dent_lo": (HX + 0.003, HY + 0.04, 0.20),
+                     "dent_hi": (HX + 0.003, HY + 0.04, 0.276)},
+        "s03_reveal": up,
+    }
+
+
+def track(shot, out):
+    """Project the shot's track points through its camera for every frame -> JSON
+    {frame: {name: [x, y, depth]}} with x, y in 0..1 from the top-left of the frame."""
+    import json
+    from bpy_extras.object_utils import world_to_camera_view
+    scene = bpy.context.scene
+    pts = {}
+    for name, p in _track_points().get(shot, {}).items():
+        if isinstance(p, str) and p.startswith("obj:"):
+            ob = bpy.data.objects[p[4:]]
+            bb = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+            p = (max(v.x for v in bb), sum(v.y for v in bb) / 8, sum(v.z for v in bb) / 8)
+        pts[name] = Vector(p)
+    data = {}
+    for f in range(scene.frame_start, scene.frame_end + 1):
+        scene.frame_set(f)
+        row = {}
+        for name, p in pts.items():
+            v = world_to_camera_view(scene, scene.camera, p)
+            row[name] = [round(v.x, 5), round(1 - v.y, 5), round(v.z, 4)]
+        data[f] = row
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w") as fh:
+        json.dump(data, fh)
+    log(f"track {shot}: {len(pts)} points x {len(data)} frames -> {out}")
+
+
 # ------------------------------------------------------------------ main
 
 def _bake_rigid(scene):
@@ -813,6 +897,7 @@ def parse():
     ap.add_argument("--slice", default="", help="i/n: render every n-th frame starting at i (multi-GPU)")
     ap.add_argument("--step", type=int, default=1, help="render every n-th frame (preview: post holds them)")
     ap.add_argument("--fast", action="store_true", help="preview: no motion blur, fewer bounces, fast denoise")
+    ap.add_argument("--track", action="store_true", help="write renders/w01/track/<shot>.json and exit")
     return ap.parse_args(argv)
 
 
@@ -842,6 +927,9 @@ def main():
     SHOTS[a.shot]()
     w, h = (int(v) for v in a.res.split("x"))
     scene.render.resolution_x, scene.render.resolution_y = w, h
+    if a.track:
+        track(a.shot, os.path.join(ROOT, "renders", "w01", "track", f"{a.shot}.json"))
+        return
     if a.device == "gpu":
         use_gpu(scene)
     scene.cycles.samples = a.samples

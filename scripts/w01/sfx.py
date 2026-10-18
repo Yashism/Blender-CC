@@ -1,13 +1,13 @@
 """TEMP sound design for W01 "One Weak Rack" (numpy synthesis, system python3), mixed with the
-music: a beat cut to the picture by beat_edit.py (default), the orchestral score.py, or the
+music: the orchestral score.py (default), a beat cut to the picture by beat_edit.py, or the
 synthesised temp music.
 
 A timing guide for review, locked to edit.py. Final mix (recorded metal and cardboard impacts,
 VO) replaces the sound design later.
 
-    python3 scripts/w01/sfx.py                    # -> renders/w01/w01_audio.wav
-    python3 scripts/w01/sfx.py --music nav3       # another beat (beat_edit.py TRACKS)
-    python3 scripts/w01/sfx.py --music score      # or temp
+    python3 scripts/w01/sfx.py                    # -> renders/w01/w01_audio.wav (orchestral score)
+    python3 scripts/w01/sfx.py --music ovo        # a beat instead (beat_edit.py TRACKS)
+    python3 scripts/w01/sfx.py --music temp       # or the synthesised temp music
 """
 import argparse
 import os
@@ -185,6 +185,11 @@ def pad(freqs, d, gain=1.0):
     return norm(band(x, None, 2500) * e) * gain
 
 
+def ui_tick(f=2000, d=0.09):
+    t = tt(d)
+    return np.sin(2 * np.pi * f * t) * np.exp(-t / 0.018) + 0.4 * np.sin(2 * np.pi * f * 1.5 * t) * np.exp(-t / 0.01)
+
+
 def mallet(f, d=1.6):
     t = tt(d)
     x = np.sin(2 * np.pi * f * t) * np.exp(-t / 0.5) + 0.3 * np.sin(2 * np.pi * f * 4 * t) * np.exp(-t / 0.08)
@@ -193,7 +198,7 @@ def mallet(f, d=1.6):
 
 # ------------------------------------------------------------------ mix
 
-DEFAULT_BEAT = "ovo"
+DEFAULT_MUSIC = "score"
 
 
 def beat_mix(sfx, amb, beat):
@@ -221,7 +226,7 @@ def beat_mix(sfx, amb, beat):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--music", default=DEFAULT_BEAT,
+    ap.add_argument("--music", default=DEFAULT_MUSIC,
                     help="a beat_edit.py track key, a wav path, 'score' or 'temp'")
     ap.add_argument("--out", default=os.path.join(ROOT, "renders", "w01", "w01_audio.wav"))
     args = ap.parse_args()
@@ -234,6 +239,11 @@ def main():
     add(amb, hum + air, 0.0)
     add(amb, (band(noise(ST["endcard"] - ST["s09_tag"]), 30, 420) * 0.025), ST["s09_tag"])
 
+    # on-screen graphics: a soft UI tick as each label, callout and panel lands
+    for _, t_in, _, _ in E.LABELS:
+        add(sfx, ui_tick(2200), ST["s00_establish"] + t_in, 0.05, pan=0.2)
+    for t_ui in (t_of("s02_dent", 6), ST["s04_lapse"] + E.STAT[1], t_of("s09_tag", 40), t_of("outcome", 6)):
+        add(sfx, ui_tick(1700), t_ui, 0.06)
     # s01: the approach, the hit, the chips, reversing beeps
     contact = t_of("s01_impact", 40)
     add(sfx, motor(contact + 0.1, 820, 1180, lambda u: 0.25 + 0.75 * u), 0.0, 0.16, pan=0.3)
