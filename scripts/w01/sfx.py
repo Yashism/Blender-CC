@@ -277,7 +277,18 @@ def main():
     add(mus, np.sin(2 * np.pi * 65.4 * tt(2.5)) * np.exp(-tt(2.5) / 0.9), ec, 0.3)
     add(mus, pad([130.8, 164.8, 196], 4.2, 0.12), ec + 0.4)
 
-    mix = sfx * 1.0 + amb * 1.0 + mus * 0.9
+    score = os.path.join(ROOT, "renders", "w01", "w01_score.wav")
+    if os.path.exists(score):
+        # the orchestral score (score.py) replaces the synthesised temp music
+        import soundfile as sf
+        sc, sr = sf.read(score, always_2d=True)
+        mus = np.zeros_like(sfx)
+        n = min(len(sc), len(mus))
+        mus[:n] = sc[:n]
+        mix = sfx * 0.95 + amb * 1.0 + mus * 0.8
+        print("music: orchestral score")
+    else:
+        mix = sfx * 1.0 + amb * 1.0 + mus * 0.9
     # gentle bus limiter
     peak = np.max(np.abs(mix))
     mix = np.tanh(mix / max(peak, 1e-6) * 1.6) * 0.89

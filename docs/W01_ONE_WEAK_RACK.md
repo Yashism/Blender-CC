@@ -63,6 +63,34 @@ One shot can be re-rendered on its own, e.g.
 `blender -b blender/w01_collapse.blend -P scripts/w01/shots.py -- --shot s06b_wide --res 1920x1080 --samples 64 --device gpu`.
 Existing frames are skipped, so deleting a frame and re-running re-renders only that frame.
 
+## Music
+
+`scripts/w01/score.py` renders the score from real orchestral recordings: the Versilian Studios
+**VSCO-2 Community Edition** library (CC0 1.0, public domain, free for commercial use, no
+attribution required). String sections (sustain, spiccato, tremolo), contrabass, F horn, tenor
+trombone, tuba, timpani, bass drum, crash, upright piano, harp and glockenspiel.
+
+```bash
+git clone --filter=blob:none --no-checkout --depth 1 https://github.com/sgossner/VSCO-2-CE /opt/samples/VSCO-2-CE
+cd /opt/samples/VSCO-2-CE && git sparse-checkout init --no-cone
+printf '%s\n' /LICENSE '/Strings/Cello Section/' '/Strings/Viola Section/' '/Strings/Violin Section/' \
+  '/Strings/Solo Contrabass/' '/Strings/Harp/' '/Brass/F Horn/' '/Brass/Tenor Trombone/' '/Brass/Tuba/' \
+  '/Percussion/Timpani/' '/Percussion/BDrumNewhit*' '/Percussion/cymbal*' '/Percussion/Glock/' \
+  '/Keys/Upright Piano/' > .git/info/sparse-checkout && git checkout master       # about 1.9 GB
+pip install soundfile scipy
+python3 scripts/w01/score.py      # renders/w01/w01_score.wav
+python3 scripts/w01/sfx.py        # mixes the score under the sound effects -> w01_audio.wav
+```
+
+The cue (D minor, 120 bpm): a held high A over a low D; timpani, bass drum and low brass on the
+fork's contact frame; a lone piano question at the dent; a spiccato string ostinato that builds
+under the reveal and runs i-VI-iv-V through the time-lapse, with a timpani and trombone sting on
+every unreported knock; tremolo suspense under the last pallet; tutti hits on the fold and the
+slam with a descending brass line; silence on the freeze; the collapse music reversed for the
+rewind; D major and the piano motif answered when RAMS arrives; a three-note sonic logo
+(D-A-F#, glockenspiel and piano) on the end card. VSCO-2 labels its strings, brass and glock one
+octave low; `score.py` corrects that (measured against every instrument).
+
 ## Accuracy notes for the RAMS engineering review
 
 - The crease is 4 mm deep at the bend (`layout.DENT_DEPTH`); the time-lapse deepens it in six
