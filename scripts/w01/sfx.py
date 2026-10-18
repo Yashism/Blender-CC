@@ -201,13 +201,14 @@ def mallet(f, d=1.6):
 DEFAULT_MUSIC = "score"
 
 
-def track_mix(sfx, amb, music):
-    """A licensed track at -14 LUFS, the sound design 3 LU under it and punching through: the
-    music ducks under the big hits (up to 6 dB, fast attack, 300 ms release) like a sidechain."""
+def track_mix(sfx, amb, music, sfx_lufs=-17.0):
+    """A licensed track at -14 LUFS, the sound design under it (3 LU by default) and punching
+    through: the music ducks under the big hits (up to 6 dB, fast attack, 300 ms release) like
+    a sidechain."""
     import pyloudnorm
     from scipy.signal import lfilter
     meter = pyloudnorm.Meter(SR)
-    k = 10 ** ((-17.0 - meter.integrated_loudness(sfx)) / 20)
+    k = 10 ** ((sfx_lufs - meter.integrated_loudness(sfx)) / 20)
     sfx, amb = sfx * k, amb * k
     lvl = np.abs(sfx).max(1)
     att, rel = np.exp(-1 / (0.004 * SR)), np.exp(-1 / (0.3 * SR))
@@ -229,6 +230,8 @@ def main():
     ap.add_argument("--music", default=DEFAULT_MUSIC,
                     help="a cue_edit.py key, a wav path, 'score' or 'temp'")
     ap.add_argument("--out", default=os.path.join(ROOT, "renders", "w01", "w01_audio.wav"))
+    ap.add_argument("--sfx-lufs", type=float, default=-17.0,
+                    help="sound-design level under a licensed track (-19 for the simple launch style)")
     args = ap.parse_args()
     sfx, amb, mus = buf(), buf(), buf()
     # room tone (not under the freeze or the end card)
@@ -350,7 +353,7 @@ def main():
         mus = np.zeros_like(sfx)
         n = min(len(b), len(mus))
         mus[:n] = b[:n]
-        mix = track_mix(sfx, amb, mus)
+        mix = track_mix(sfx, amb, mus, args.sfx_lufs)
         print(f"music: {os.path.relpath(beat, ROOT)}")
     elif args.music != "temp" and os.path.exists(score):
         # the orchestral score (score.py) replaces the synthesised temp music

@@ -78,14 +78,32 @@ Existing frames are skipped, so deleting a frame and re-running re-renders only 
 
 ## Music
 
-The film is scored for what it is: a serious safety story that turns into reassurance. Two kinds
-of music are set up, both cued to the picture:
+For LinkedIn the film uses simple, modern music in the style of a product launch (SaaS, Apple,
+Anthropic): understated, steady, nothing that plays like a movie trailer. Three kinds of music are
+set up, all cued to the picture:
 
-- **Orchestral score (default):** `scripts/w01/score.py`, composed to every moment of the cut (below).
-- **Licensed cinematic tracks:** film-composer orchestral music by Scott Buckley, cut to the
-  picture by `scripts/w01/cue_edit.py`. 360p cuts with each: `renders/w01/music_options/`.
+- **Launch-film tracks (for LinkedIn):** minimal, modern tracks cut by `scripts/w01/cue_edit.py`
+  (simple style). 360p cuts with each: `renders/w01/music_options/`.
+- **Orchestral score:** `scripts/w01/score.py`, composed to every moment of the cut (below).
+- **Cinematic tracks:** Scott Buckley's orchestral music, trailer-style (`cue_edit.py` cinematic).
 
-### Cinematic options (`cue_edit.py`)
+### Launch-film options (`cue_edit.py`, simple style)
+
+The track plays as written from its own intro, stops when the picture freezes, runs backwards
+under the rewind, and comes back on a beat as RAMS comes in, placed so its own ending (or, for a
+track that fades out slowly, its last full phrase) finishes with the film. The sound design sits
+5 LU under it (`sfx.py --sfx-lufs -19`).
+
+| Key | Track | Artist | Feel |
+| --- | --- | --- | --- |
+| `moonwalk` | Moon Walk | Eugenio Mininni | warm, minimal electronic, major key: calm optimism |
+| `yourbreath` | Your Breath | Eugenio Mininni | modern corporate-electronic pulse |
+| `piano` | Piano Reflections | Ahjay Stelino | simple, steady piano-led |
+
+Licence: Mixkit Stock Music Free License (https://mixkit.co/license/#musicFree): free for
+commercial use in a video, including ads, no credit required.
+
+### Cinematic options (`cue_edit.py`, cinematic style)
 
 Scored like a trailer, in two cues:
 
@@ -105,13 +123,13 @@ Scored like a trailer, in two cues:
 | `nightfall` | Nightfall (its dramatic back end on the fold) | Rise Above | dark, rhythmic hybrid into uplifting orchestra |
 
 ```bash
-bash scripts/w01/fetch_music.sh               # -> assets/music/w01_cinematic/ (not committed)
+bash scripts/w01/fetch_music.sh               # -> assets/music/ (not committed)
 pip install librosa soundfile scipy pyloudnorm
-python3 scripts/w01/cue_edit.py catalyst uprising nightfall
-python3 scripts/w01/sfx.py --music catalyst   # -> renders/w01/w01_audio.wav, then post.py
+python3 scripts/w01/cue_edit.py moonwalk yourbreath piano catalyst uprising nightfall
+python3 scripts/w01/sfx.py --music moonwalk --sfx-lufs -19   # -> renders/w01/w01_audio.wav, then post.py
 ```
 
-`sfx.py` mixes a track with the sound design: the music at -14 LUFS, the effects 3 LU under it,
+`sfx.py` mixes a track with the sound design: the music at -14 LUFS, the effects 3 LU under it (5 LU for the launch style),
 the music ducking up to 6 dB under the big hits, -1 dBFS peak ceiling.
 
 **Licence:** CC BY 4.0 (https://www.scottbuckley.com.au/library/using-this-music/): free for
@@ -124,7 +142,7 @@ Paid ads that cannot carry a credit need Scott Buckley's Web License (AUD 40 per
 https://www.scottbuckley.com.au/library/licensing/). The MP3s may not be redistributed on their
 own, so they are downloaded, not committed.
 
-### Orchestral score (default)
+### Orchestral score
 
 `scripts/w01/score.py` renders the score from real orchestral recordings: the Versilian Studios
 **VSCO-2 Community Edition** library (CC0 1.0, public domain, free for commercial use, no
