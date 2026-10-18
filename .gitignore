@@ -24,3 +24,4 @@ blender/w01_*.blend
 renders/w01/post/
 renders/w01/logs/
 renders/w01/*.wav
+renders/w01/*/preview/
