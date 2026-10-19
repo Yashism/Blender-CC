@@ -191,9 +191,10 @@ def day_counter(img, tl, shot):
     lay = layer(img.size)
     d = ImageDraw.Draw(lay)
     x, y = 48 * s, 44 * s
-    d.text((x, y), "DAYS SINCE CERTIFICATE", font=font("b", 14 * s), fill=rgba(GREY, 1))
-    d.text((x, y + 18 * s), f"{n}", font=font("xb", 64 * s), fill=rgba(WHITE, 1))
-    shadowed(img, lay, 8, 0.6)
+    d.rounded_rectangle((x - 16 * s, y - 14 * s, x + 236 * s, y + 104 * s), radius=14 * s, fill=(14, 15, 18, 200))
+    d.text((x, y), "DAYS SINCE CERTIFICATE", font=font("b", 16 * s), fill=rgba(ORANGE, 1))
+    d.text((x, y + 20 * s), f"{n}", font=font("xb", 64 * s), fill=rgba(WHITE, 1))
+    shadowed(img, lay, 8, 0.5)
 
 
 def chip(d, x, y, text, col, s, a=1.0, size=15, sub=None, anchor="l"):
