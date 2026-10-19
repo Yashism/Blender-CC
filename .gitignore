@@ -42,3 +42,5 @@ assets/mocap/
 renders/chars/
 # generated character meshes (image-to-3D GLBs, 60+ MB each; the concepts are kept)
 assets/characters_v2/*.glb
+assets/characters_v2/*.blend
+assets/characters_v2/*.blend1
