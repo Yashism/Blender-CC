@@ -275,7 +275,7 @@ def s05_snap(tl, ta, size):
     photo = ImageEnhance.Color(photo).enhance(0.35)
     pw = int(W * 0.34)
     ph = int(pw * 1.1)
-    cx, cy = photo.width // 2, photo.height // 2
+    cx, cy = photo.width // 2, int(photo.height * 0.4)
     crop = photo.crop((cx - int(H * 0.33), cy - int(H * 0.36), cx + int(H * 0.33), cy + int(H * 0.36))).resize((pw - 24, ph - 70))
     card = Image.new("RGBA", (pw, ph), (246, 244, 238, 255))
     card.paste(crop, (12, 12))

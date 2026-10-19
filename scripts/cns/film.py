@@ -200,8 +200,9 @@ class Film:
         self.S.update(dict(DAMAGE_ALL, tags=TAGS_ALL, tag_glow={
             "green": self._glow(ta, "green"), "amber": self._glow(ta, "amber"), "red": self._glow(ta, "red")}))
         a = T.shot("s07_tags")[1]
-        kf = [(0.0, (10.0,)), (T.V("green")[0] - a, (8.75,)), (T.V("amber")[0] - a, (6.05,)), (T.V("red")[0] - a, (3.35,)),
-              (T.shot("s07_tags")[2] - a, (2.75,))]
+        g, am, r = (T.V(k)[0] - a for k in ("green", "amber", "red"))
+        kf = [(0.0, (9.7,)), (g - 0.1, (8.75,)), (am - 0.7, (8.72,)), (am - 0.05, (6.05,)),     # hold on each tag
+              (r - 0.7, (6.02,)), (r - 0.05, (3.35,)), (T.shot("s07_tags")[2] - a, (3.1,))]     # while it's read
         x = keys(kf, t)[0]
         loc = (x, 0.42, 1.38)
         tgt = (x - 0.62, 1.8, 1.3)
