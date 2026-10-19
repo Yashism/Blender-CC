@@ -15,7 +15,8 @@
 set -eu
 cd "$(dirname "$0")/../.."
 mkdir -p assets/music/w01_simple assets/music/w01_cinematic
-for id in 609 634 22; do     # Moon Walk, Your Breath (Eugenio Mininni), Piano Reflections (Ahjay Stelino)
+# Just Keep Walking, Tech House vibes, Ramp It Up, Moon Walk, Your Breath, Piano Reflections
+for id in 963 130 69 609 634 22; do
   f="assets/music/w01_simple/$id.mp3"
   [ -s "$f" ] || curl -fsSL -o "$f" "https://assets.mixkit.co/music/$id/$id.mp3"
 done

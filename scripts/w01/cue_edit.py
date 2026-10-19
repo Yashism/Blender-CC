@@ -18,8 +18,8 @@ Cinematic: Scott Buckley (CC BY 4.0: free for commercial use in a video, credit 
 description). Both are downloaded by `fetch_music.sh`.
 
     bash scripts/w01/fetch_music.sh
-    python3 scripts/w01/cue_edit.py moonwalk yourbreath piano     # -> renders/w01/music/w01_cue_<key>.wav
-    python3 scripts/w01/sfx.py --music moonwalk                   # mixes it under the sound design
+    python3 scripts/w01/cue_edit.py walking techhouse rampitup    # -> renders/w01/music/w01_cue_<key>.wav
+    python3 scripts/w01/sfx.py --music walking                    # mixes it under the sound design
 """
 import argparse
 import json
@@ -61,6 +61,12 @@ MIXKIT = '"{title}" by {artist}, Mixkit Stock Music Free License (no credit requ
 # key: style, library folder, cue A (file, title, source second, film moment it lands on),
 # cue B (file, title), artist, credit line
 CUES = {
+    "walking": ("simple", "w01_simple", ("963.mp3", "Just Keep Walking", 0.0, "start"),
+                ("963.mp3", "Just Keep Walking"), "Michael Ramir C.", MIXKIT),
+    "techhouse": ("simple", "w01_simple", ("130.mp3", "Tech House vibes", 0.0, "start"),
+                  ("130.mp3", "Tech House vibes"), "Alejandro Magaña", MIXKIT),
+    "rampitup": ("simple", "w01_simple", ("69.mp3", "Ramp It Up", 0.0, "start"), ("69.mp3", "Ramp It Up"),
+                 "Ahjay Stelino", MIXKIT),
     "moonwalk": ("simple", "w01_simple", ("609.mp3", "Moon Walk", 0.0, "start"), ("609.mp3", "Moon Walk"),
                  "Eugenio Mininni", MIXKIT),
     "yourbreath": ("simple", "w01_simple", ("634.mp3", "Your Breath", 0.0, "start"), ("634.mp3", "Your Breath"),

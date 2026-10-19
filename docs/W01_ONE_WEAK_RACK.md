@@ -62,7 +62,7 @@ bash scripts/w01/render_queue.sh 960x540 24
 for s in s00_establish s02_dent s03_reveal s04m_lapse s09h_heat; do      # camera tracks for the pinned graphics
   blender -b blender/w01_set.blend -P scripts/w01/shots.py -- --shot $s --track; done
 
-python3 scripts/w01/score.py                     # the orchestral score (see Music)
+bash scripts/w01/fetch_music.sh && python3 scripts/w01/cue_edit.py walking   # the music (see Music)
 python3 scripts/w01/sfx.py
 python3 scripts/w01/post.py                      # -> renders/w01/W01_one_weak_rack_16x9.mp4 + _9x16.mp4
 ```
@@ -82,8 +82,9 @@ For LinkedIn the film uses simple, modern music in the style of a product launch
 Anthropic): understated, steady, nothing that plays like a movie trailer. Three kinds of music are
 set up, all cued to the picture:
 
-- **Launch-film tracks (for LinkedIn):** minimal, modern tracks cut by `scripts/w01/cue_edit.py`
-  (simple style). 360p cuts with each: `renders/w01/music_options/`.
+- **Launch-film tracks (for LinkedIn, default "Just Keep Walking"):** upbeat or calm modern
+  tracks cut by `scripts/w01/cue_edit.py` (simple style). 360p cuts with each:
+  `renders/w01/music_options/`.
 - **Orchestral score:** `scripts/w01/score.py`, composed to every moment of the cut (below).
 - **Cinematic tracks:** Scott Buckley's orchestral music, trailer-style (`cue_edit.py` cinematic).
 
@@ -92,10 +93,13 @@ set up, all cued to the picture:
 The track plays as written from its own intro, stops when the picture freezes, runs backwards
 under the rewind, and comes back on a beat as RAMS comes in, placed so its own ending (or, for a
 track that fades out slowly, its last full phrase) finishes with the film. The sound design sits
-5 LU under it (`sfx.py --sfx-lufs -19`).
+5 LU under it (`sfx.py`, default `--sfx-lufs -19`).
 
 | Key | Track | Artist | Feel |
 | --- | --- | --- | --- |
+| `walking` (default) | Just Keep Walking | Michael Ramir C. | upbeat indie pop, major key: the phone-launch feel |
+| `techhouse` | Tech House vibes | Alejandro Magaña | clean electronic groove, major key: the SaaS-launch feel |
+| `rampitup` | Ramp It Up | Ahjay Stelino | bright, rhythmic tech underscore |
 | `moonwalk` | Moon Walk | Eugenio Mininni | warm, minimal electronic, major key: calm optimism |
 | `yourbreath` | Your Breath | Eugenio Mininni | modern corporate-electronic pulse |
 | `piano` | Piano Reflections | Ahjay Stelino | simple, steady piano-led |
@@ -125,8 +129,9 @@ Scored like a trailer, in two cues:
 ```bash
 bash scripts/w01/fetch_music.sh               # -> assets/music/ (not committed)
 pip install librosa soundfile scipy pyloudnorm
-python3 scripts/w01/cue_edit.py moonwalk yourbreath piano catalyst uprising nightfall
-python3 scripts/w01/sfx.py --music moonwalk --sfx-lufs -19   # -> renders/w01/w01_audio.wav, then post.py
+python3 scripts/w01/cue_edit.py walking techhouse rampitup moonwalk yourbreath piano catalyst uprising nightfall
+python3 scripts/w01/sfx.py                    # "Just Keep Walking" -> renders/w01/w01_audio.wav, then post.py
+python3 scripts/w01/sfx.py --music catalyst --sfx-lufs -17   # a cinematic track
 ```
 
 `sfx.py` mixes a track with the sound design: the music at -14 LUFS, the effects 3 LU under it (5 LU for the launch style),

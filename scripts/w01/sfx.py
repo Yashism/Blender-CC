@@ -1,13 +1,13 @@
 """TEMP sound design for W01 "One Weak Rack" (numpy synthesis, system python3), mixed with the
-music: the orchestral score.py (default), a licensed cinematic track cut to the picture by
-cue_edit.py, or the synthesised temp music.
+music: a licensed launch-film track cut to the picture by cue_edit.py (default "walking"), the
+orchestral score.py, or the synthesised temp music.
 
 A timing guide for review, locked to edit.py. Final mix (recorded metal and cardboard impacts,
 VO) replaces the sound design later.
 
-    python3 scripts/w01/sfx.py                    # -> renders/w01/w01_audio.wav (orchestral score)
-    python3 scripts/w01/sfx.py --music catalyst   # a cinematic track instead (cue_edit.py CUES)
-    python3 scripts/w01/sfx.py --music temp       # or the synthesised temp music
+    python3 scripts/w01/sfx.py                    # -> renders/w01/w01_audio.wav ("Just Keep Walking")
+    python3 scripts/w01/sfx.py --music techhouse  # another track (cue_edit.py CUES)
+    python3 scripts/w01/sfx.py --music score      # the orchestral score, or temp
 """
 import argparse
 import os
@@ -198,7 +198,7 @@ def mallet(f, d=1.6):
 
 # ------------------------------------------------------------------ mix
 
-DEFAULT_MUSIC = "score"
+DEFAULT_MUSIC = "walking"
 
 
 def track_mix(sfx, amb, music, sfx_lufs=-17.0):
@@ -230,8 +230,8 @@ def main():
     ap.add_argument("--music", default=DEFAULT_MUSIC,
                     help="a cue_edit.py key, a wav path, 'score' or 'temp'")
     ap.add_argument("--out", default=os.path.join(ROOT, "renders", "w01", "w01_audio.wav"))
-    ap.add_argument("--sfx-lufs", type=float, default=-17.0,
-                    help="sound-design level under a licensed track (-19 for the simple launch style)")
+    ap.add_argument("--sfx-lufs", type=float, default=-19.0,
+                    help="sound-design level under a licensed track (-19 launch style, -17 cinematic)")
     args = ap.parse_args()
     sfx, amb, mus = buf(), buf(), buf()
     # room tone (not under the freeze or the end card)
