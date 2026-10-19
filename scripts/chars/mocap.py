@@ -162,10 +162,12 @@ def _smooth_quats(qs, win=2):
 
 
 def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, smooth=2,
-             mapping=MOCAP_MAP):
+             mapping=MOCAP_MAP, arm_spread=None):
     """Bake the clip onto arm (an armature built from chars/biped.bones) as an action named name.
     frames: (first, last) source frames at 120 fps (1-based); face: heading (deg) the clip is
-    turned to (-90 = walking toward -Y). Returns the action."""
+    turned to (-90 = walking toward -Y); arm_spread: degrees each whole arm swings out sideways
+    about the shoulder, for bodies rounder than the actor's (default: the rig's "arm_spread").
+    Returns the action."""
     import bpy
     joints, data, dt = read_bvh(path)
     if frames:
@@ -210,6 +212,16 @@ def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, s
             world[ours].append(D @ Q[ours] @ restq[ours])
     for n in world:
         world[n] = _smooth_quats(world[n], smooth)
+    spread = arm.get("arm_spread", 0.0) if arm_spread is None else arm_spread
+    if spread and "chest" in world:
+        c0 = restq["chest"].inverted()
+        for fi in range(len(idx)):
+            back = (world["chest"][fi] @ c0) @ Vector((0, 1.0, 0))     # the chest's own back axis
+            for s, sg in (("L", -1), ("R", 1)):
+                R = Quaternion(back, math.radians(sg * spread))
+                for n in (f"upper_arm.{s}", f"forearm.{s}", f"hand.{s}"):
+                    if n in world:
+                        world[n][fi] = R @ world[n][fi]
 
     act = bpy.data.actions.new(name)
     arm.animation_data_create()

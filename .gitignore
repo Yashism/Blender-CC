@@ -40,3 +40,5 @@ blender/w02_*.blend
 assets/mocap/
 # v2 characters: test renders (the review reel is committed separately)
 renders/chars/
+# generated character meshes (image-to-3D GLBs, 60+ MB each; the concepts are kept)
+assets/characters_v2/*.glb

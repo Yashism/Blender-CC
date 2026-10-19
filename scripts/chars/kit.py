@@ -211,7 +211,7 @@ def solid(name, color, rough=0.5, metallic=0.0, coat=0.0, sss=0.0, attr=None, em
     return m
 
 
-def eye_material(name, iris, iris_deg=40.0, pupil_deg=19.0, sclera="#F7F4EE"):
+def eye_material(name, iris, iris_deg=40.0, pupil_deg=19.0, sclera="#F7F4EE", pupil_aspect=1.0):
     """Eyeball shader: sclera, iris and pupil from the angle to the eye's own -Y axis (so it
     follows the eyeball's rotation), a darker limbal ring, radial iris streaks, and a wet coat."""
     m, fresh = _mat(name)
@@ -250,8 +250,9 @@ def eye_material(name, iris, iris_deg=40.0, pupil_deg=19.0, sclera="#F7F4EE"):
     cr.elements[0].color = (*lin(sclera), 1)
     cr.elements[1].position = 1.0
     cr.elements[1].color = (0.003, 0.003, 0.004, 1)
+    cr.elements[1].color = (*np.clip(ir * 0.7, 0, 1), 1)
     for pos, col in ((ci - 0.012, lin(sclera)), (ci, dark * 0.6), (ci + 0.025, dark),
-                     (ci + 0.07, ir), (cp - 0.03, light), (cp - 0.004, ir * 0.7), (cp, (0.004, 0.004, 0.005))):
+                     (ci + 0.07, ir), (cp - 0.03, light)):
         e = cr.elements.new(min(0.999, max(0.001, pos)))
         e.color = (*np.clip(col, 0, 1), 1)
     # streak modulation: brighten / darken the iris a little along radial streaks
@@ -262,7 +263,28 @@ def eye_material(name, iris, iris_deg=40.0, pupil_deg=19.0, sclera="#F7F4EE"):
     nt.links.new(dot.outputs["Value"], ramp.inputs["Fac"])
     nt.links.new(ramp.outputs["Color"], mixn.inputs[6])
     nt.links.new(nz.outputs["Color"], mixn.inputs[7])
-    nt.links.new(mixn.outputs[2], b.inputs["Base Color"])
+    # the pupil: its own mask from a direction squashed in x (aspect > 1 = tall oval)
+    sc = nt.nodes.new("ShaderNodeVectorMath")
+    sc.operation = "MULTIPLY"
+    sc.inputs[1].default_value = (pupil_aspect, 1.0, 1.0)
+    nt.links.new(tc.outputs["Object"], sc.inputs[0])
+    n2 = nt.nodes.new("ShaderNodeVectorMath")
+    n2.operation = "NORMALIZE"
+    nt.links.new(sc.outputs[0], n2.inputs[0])
+    d2 = nt.nodes.new("ShaderNodeVectorMath")
+    d2.operation = "DOT_PRODUCT"
+    d2.inputs[1].default_value = (0.0, -1.0, 0.0)
+    nt.links.new(n2.outputs[0], d2.inputs[0])
+    pm = nt.nodes.new("ShaderNodeMapRange")
+    pm.inputs["From Min"].default_value = cp - 0.004
+    pm.inputs["From Max"].default_value = cp + 0.002
+    nt.links.new(d2.outputs["Value"], pm.inputs["Value"])
+    pmix = nt.nodes.new("ShaderNodeMix")
+    pmix.data_type = "RGBA"
+    pmix.inputs[7].default_value = (0.004, 0.004, 0.005, 1)
+    nt.links.new(pm.outputs["Result"], pmix.inputs["Factor"])
+    nt.links.new(mixn.outputs[2], pmix.inputs[6])
+    nt.links.new(pmix.outputs[2], b.inputs["Base Color"])
     b.inputs["Roughness"].default_value = 0.25
     b.inputs["Coat Weight"].default_value = 1.0
     b.inputs["Coat Roughness"].default_value = 0.02
@@ -289,7 +311,7 @@ def _cap(name, r, upper, coll, segs=40, rings=20):
 
 
 def eye_assembly(prefix, side, center, r, iris, lid_color, coll, open_up=38.0, open_lo=42.0,
-                 lash="#141416", yaw=0.0):
+                 lash="#141416", yaw=0.0, pupil_aspect=1.0):
     """Eyeball + upper and lower lid shells for one eye. center in rest (armature) space.
 
     The lids are built open (upper edge open_up degrees above the eye's axis, lower open_lo below)
@@ -306,7 +328,7 @@ def eye_assembly(prefix, side, center, r, iris, lid_color, coll, open_up=38.0, o
     me.shade_smooth()
     ball = bpy.data.objects.new(f"{prefix}_eye.{side}", me)
     geo._link(ball, coll)
-    me.materials.append(eye_material(f"{prefix}_eye_mat", iris))
+    me.materials.append(eye_material(f"{prefix}_eye_mat", iris, pupil_aspect=pupil_aspect))
     ball.location = c                                   # the iris looks straight ahead
     lids = {}
     lid_mat = solid(f"{prefix}_lid_mat", "#FFFFFF", rough=0.6, attr="Col")
@@ -440,3 +462,54 @@ def turnaround(build_fn, out_dir, target=(0, 0, 0.66), dist=3.4, lens=55, sample
         scene.render.filepath = os.path.join(out_dir, f"tile_{i}.png")
         bpy.ops.render.render(write_still=True)
     print("turnaround ->", out_dir)
+
+
+# ------------------------------------------------------------------ mouth line
+
+def surface_point(sculpt, center, toward, pad=0.0015):
+    """The point where the ray from `center` (inside the head) toward `toward` leaves the
+    sculpt's surface, pushed out by pad."""
+    c, t = np.array(center, float), np.array(toward, float)
+    d = (t - c) / np.linalg.norm(t - c)
+    lo, hi = 0.0, 0.4
+    for _ in range(36):
+        m = (lo + hi) / 2
+        p = c + d * m
+        if sculpt.field(np.array([p[0]]), np.array([p[1]]), np.array([p[2]]))[0] < 0:
+            lo = m
+        else:
+            hi = m
+    return c + d * (lo + pad)
+
+
+def mouth_line(name, sculpt, strokes, center, coll, radius=0.0026, corner_x=0.06, lift=0.016):
+    """Dark mouth line(s) on the face: each stroke is a list of guide points, projected onto the
+    sculpt surface from `center`. Shape keys: smile (outer ends up and back), frown (down)."""
+    cu = bpy.data.curves.new(name, "CURVE")
+    cu.dimensions = "3D"
+    cu.bevel_depth = radius
+    cu.bevel_resolution = 3
+    cu.use_fill_caps = True
+    for stroke in strokes:
+        pts = [surface_point(sculpt, center, g) for g in stroke]
+        sp = cu.splines.new("BEZIER")
+        sp.bezier_points.add(len(pts) - 1)
+        for bp, p in zip(sp.bezier_points, pts):
+            bp.co = tuple(p)
+            bp.handle_left_type = bp.handle_right_type = "AUTO"
+    ob = bpy.data.objects.new(name, cu)
+    geo._link(ob, coll)
+    cu.materials.append(solid(f"{name}_mat", "#1A1416", rough=0.5))
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg))
+    bpy.data.objects.remove(ob)
+    ob = bpy.data.objects.new(name, me)
+    geo._link(ob, coll)
+    me.shade_smooth()
+    ob.shape_key_add(name="Basis")
+    for key, sgn in (("smile", 1), ("frown", -1)):
+        sk = ob.shape_key_add(name=key)
+        for v in me.vertices:
+            u = min(1.0, abs(v.co.x) / corner_x) ** 2
+            sk.data[v.index].co = v.co + Vector((0, 0.35 * lift * u, sgn * lift * u))
+    return ob

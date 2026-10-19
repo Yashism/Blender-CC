@@ -57,7 +57,10 @@ class Keyer:
                 if ad and ad.action:
                     fc = next((c for c in _fcurves(ad.action) if c.data_path == path and c.array_index == i), None)
                 if fc is None:
-                    idb.keyframe_insert(path, index=i, frame=0)
+                    try:
+                        idb.keyframe_insert(path, index=i, frame=0)
+                    except TypeError:                 # not an array property (shape key value)
+                        idb.keyframe_insert(path, frame=0)
                     fc = next(c for c in _fcurves(idb.animation_data.action)
                               if c.data_path == path and c.array_index == i)
                     fc.keyframe_points.clear()
