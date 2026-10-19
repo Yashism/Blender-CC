@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--expr", default="happy")
     ap.add_argument("--talk", default="", help="jaw-flap ranges at 24 fps, e.g. 10-40,60-90")
     ap.add_argument("--dist", type=float, default=3.6)
+    ap.add_argument("--tz", type=float, default=0.0, help="camera target height (default: 0.5 x height)")
     a = ap.parse_args(argv)
     S.reset_scene()
     w, h = (int(x) for x in a.res.split("x"))
@@ -63,9 +64,10 @@ def main():
     for f in frames:
         scene.frame_set(f)
         hp = arm.matrix_world @ hips.head
-        c = Vector((hp.x, hp.y, 0.62))
+        tz = a.tz or (generated.SPEC[a.char]["height"] * 0.52 if a.char in generated.SPEC else 0.62)
+        c = Vector((hp.x, hp.y, tz))
         r = math.radians(ang)
-        cam.location = c + Vector((math.sin(r) * a.dist, -math.cos(r) * a.dist, 0.25))
+        cam.location = c + Vector((math.sin(r) * a.dist, -math.cos(r) * a.dist, 0.12))
         tgt.location = c
         scene.render.filepath = os.path.join(a.out, f"f_{f:04d}.png")
         bpy.ops.render.render(write_still=True)
