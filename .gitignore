@@ -29,3 +29,11 @@ renders/w01/W01_one_weak_rack_16x9.mp4
 renders/w01/W01_one_weak_rack_9x16.mp4
 assets/music/
 renders/w01/music/
+# W02 Peak Night: generated screen UI, test stills, frames, post
+assets/ui/w02_seq/
+renders/w02/test/
+renders/w02/frames/
+renders/w02/post/
+renders/w02/logs/
+renders/w02/*.wav
+blender/w02_*.blend
