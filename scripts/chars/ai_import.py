@@ -23,6 +23,26 @@ if __name__ == "__main__":
 from lib import geo  # noqa: E402
 
 
+def remap_roughness(ob, rng):
+    """Generated roughness maps can come out far too glossy (fur like wet plastic): remap the
+    map's (lo, hi) range to (lo', hi'), keeping the glossiest parts (a hard hat) the glossiest."""
+    a, b, c, d = rng
+    for m in ob.data.materials:
+        if not m or not m.use_nodes:
+            continue
+        nt = m.node_tree
+        bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None or not bsdf.inputs["Roughness"].links:
+            continue
+        src = bsdf.inputs["Roughness"].links[0].from_socket
+        mr = nt.nodes.new("ShaderNodeMapRange")
+        mr.clamp = True
+        mr.inputs["From Min"].default_value, mr.inputs["From Max"].default_value = a, b
+        mr.inputs["To Min"].default_value, mr.inputs["To Max"].default_value = c, d
+        nt.links.new(src, mr.inputs["Value"])
+        nt.links.new(mr.outputs["Result"], bsdf.inputs["Roughness"])
+
+
 def import_model(path, coll, height, yaw=0.0, name="Char_body"):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)

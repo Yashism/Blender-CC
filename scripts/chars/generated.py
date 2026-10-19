@@ -144,12 +144,60 @@ def proxy_weights(body, arm, voxel=0.012):
     with kit._override(body):
         bpy.ops.object.datalayout_transfer(modifier=dt.name)
         bpy.ops.object.modifier_apply(modifier=dt.name)
+    thin_features(body, bvh(px), voxel * 2.5)
     bpy.data.objects.remove(px)
     body.parent = arm
     am = body.modifiers.new("Armature", "ARMATURE")
     am.object = arm
     body.modifiers.move(len(body.modifiers) - 1, 0)
     return body
+
+
+def thin_features(body, proxy_tree, reach):
+    """Whiskers and other strands thinner than the proxy voxels vanish from the proxy, so their
+    transferred weights come from whatever surface happens to be nearest (a shoulder). Each such
+    strand (a connected piece of far-from-proxy vertices) takes the weights of the anchored
+    vertex closest to it: its root."""
+    from mathutils.kdtree import KDTree
+    me = body.data
+    V = [v.co.copy() for v in me.vertices]
+    far = np.array([(proxy_tree.find_nearest(co)[3] or 0.0) > reach for co in V])
+    if not far.any():
+        return
+    anchored = np.where(~far)[0]
+    kd = KDTree(len(anchored))
+    for i in anchored:
+        kd.insert(V[i], int(i))
+    kd.balance()
+    adj = {}
+    for e in me.edges:
+        a, b = e.vertices
+        if far[a] and far[b]:
+            adj.setdefault(a, []).append(b)
+            adj.setdefault(b, []).append(a)
+    seen = np.zeros(len(V), bool)
+    n_pieces = 0
+    for i in np.where(far)[0]:
+        if seen[i]:
+            continue
+        comp, stack = [], [int(i)]
+        seen[i] = True
+        while stack:
+            u = stack.pop()
+            comp.append(u)
+            for w in adj.get(u, ()):
+                if not seen[w]:
+                    seen[w] = True
+                    stack.append(w)
+        best = min((kd.find(V[u]) for u in comp), key=lambda r: r[2])
+        src = [(g.group, g.weight) for g in me.vertices[best[1]].groups]
+        for u in comp:
+            for g in list(me.vertices[u].groups):
+                body.vertex_groups[g.group].remove([u])
+            for gi, wt in src:
+                body.vertex_groups[gi].add([u], wt, "REPLACE")
+        n_pieces += 1
+    print(f"[gen] {body.name}: {int(far.sum())} thin-feature verts in {n_pieces} pieces re-weighted from their roots")
 
 
 def region_weight(body, bone, fn, others_scale=True):
@@ -448,6 +496,8 @@ def build_quadruped(spec, coll):
     name = spec["name"]
     body = ai_import.import_model(os.path.join(ROOT_DIR, spec["glb"]), coll, spec["height"], spec.get("yaw", 0.0),
                                   name=f"{name}_body")
+    if spec.get("rough_remap"):
+        ai_import.remap_roughness(body, spec["rough_remap"])
     decimate(body, spec.get("faces", 120000))
     centre(body, spec.get("centre_band", (0.45, 0.7)))
     if spec.get("head_fix"):
@@ -508,6 +558,8 @@ def build(spec, coll):
     name = spec["name"]
     body = ai_import.import_model(os.path.join(ROOT_DIR, spec["glb"]), coll, spec["height"], spec.get("yaw", 0.0),
                                   name=f"{name}_body")
+    if spec.get("rough_remap"):
+        ai_import.remap_roughness(body, spec["rough_remap"])
     decimate(body, spec.get("faces", 120000))
     centre(body, spec.get("centre_band", (0.45, 0.7)))
     if spec.get("head_fix"):
@@ -531,6 +583,8 @@ def build(spec, coll):
                                        for k, v in L.items()})
     arm = kit.armature(f"{name}_rig", biped.bones(L), coll)
     rigid = ("look", "eye", "lid_up", "lid_lo", "brow", "jaw")     # jaw and brows get painted weights
+    if spec.get("ears_rigid"):
+        rigid += ("ear",)                                # ears inside a hard hat stay put
     for b in arm.data.bones:
         if b.name.split(".")[0] in rigid:
             b.use_deform = False
@@ -569,6 +623,19 @@ def build(spec, coll):
 
 
 SPEC = {
+    "mittens": dict(
+        name="Mittens", glb="assets/characters_v2/mittens_tripo.glb", height=1.38, yaw=-90.0, faces=120000,
+        centre_band=(0.5, 0.75),
+        bands=dict(hip_z=0.47, knee_z=0.27, ankle_z=0.08, shoulder_z=0.90, neck_z=0.95, head_z=1.0,
+                   head_top=1.30, arm_x0=0.165, arm_z0=0.52, arm_y=0.2, tail_y0=0.09, tail_z1=0.56,
+                   tail_root=(0.03, 0.07, 0.47), leg_y_max=0.12, leg_x_max=0.2),
+        eye_xz=(0.0705, 1.102), eye_r=0.04, eye_sink=0.45, iris="#5E9A2E", iris_deg=52.0, pupil_deg=38.0,
+        lid_color="#B8662A", brow_xz=(0.068, 1.165), brow_reach=0.022, brow_gain=0.4,
+        jaw_hinge=(0.0, -0.14, 1.03), jaw_tip=(0.0, -0.25, 0.98), jaw_gain=0.55, jaw_reach=(1.4, 0.05),
+        mouth=dict(x=0.0, z=1.007, half=0.045, arc=0.006, power=2.0, tongue="#E07C8C"),
+        ear_base=(0.13, 0.0, 1.25), ear_tip=(0.17, 0.0, 1.35), ears_rigid=True, arm_spread=8.0,
+        rough_remap=(0.03, 0.30, 0.30, 0.82),
+    ),
     "bolt": dict(
         name="Bolt", glb="assets/characters_v2/bolt_tripo.glb", height=0.78, yaw=-79.5, faces=120000,
         centre_band=(0.25, 0.45), quadruped=True, voxel=0.008,
