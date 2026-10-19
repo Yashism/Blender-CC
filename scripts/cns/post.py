@@ -530,6 +530,10 @@ def mix_audio(out_wav):
 
     def noise(d, seed):
         return np.random.default_rng(seed).standard_normal(int(d * SR))
+
+    def mix(*parts):
+        m = max(len(x) for x in parts)
+        return sum(np.pad(x, (0, m - len(x))) for x in parts)
     # a quiet bed: low pad + a soft pulse, building after the snapshot card
     swell = np.clip(t / 2.0, 0, 1) * np.clip((T.LENGTH - t) / 2.5, 0, 1)
     lift = 0.6 + 0.4 * np.clip((t - T.shot("s06_en")[1]) / 4.0, 0, 1)
@@ -544,10 +548,10 @@ def mix_audio(out_wav):
     # sfx
     place(1.95, tone(80, 0.5, 0.001, 0.12) + 0.4 * noise(0.5, 1) * env(int(0.5 * SR), 0.001, 0.03), 0.5)   # the stamp
     imp = T.shot("s03a_clip")[1] + 0.95
-    place(imp, tone(60, 0.7, 0.001, 0.15) + 0.5 * tone(320, 0.9, 0.001, 0.3) + 0.35 * noise(0.4, 3) * env(int(0.4 * SR), 0.001, 0.04), 0.7)
-    place(T.shot("s03b_brace")[1] + 0.35, 0.5 * tone(210, 1.0, 0.002, 0.4) + 0.3 * noise(0.3, 4) * env(int(0.3 * SR), 0.001, 0.05), 0.5)
+    place(imp, mix(tone(60, 0.7, 0.001, 0.15), 0.5 * tone(320, 0.9, 0.001, 0.3), 0.35 * noise(0.4, 3) * env(int(0.4 * SR), 0.001, 0.04)), 0.7)
+    place(T.shot("s03b_brace")[1] + 0.35, mix(0.5 * tone(210, 1.0, 0.002, 0.4), 0.3 * noise(0.3, 4) * env(int(0.3 * SR), 0.001, 0.05)), 0.5)
     place(T.shot("s03c_lock")[1] + 0.55, tone(2600, 0.06, 0.0005, 0.02), 0.25)
-    place(T.shot("s03c_lock")[1] + 1.15, tone(1900, 0.12, 0.0005, 0.04) + tone(2400, 0.1, 0.0005, 0.03), 0.2)
+    place(T.shot("s03c_lock")[1] + 1.15, mix(tone(1900, 0.12, 0.0005, 0.04), tone(2400, 0.1, 0.0005, 0.03)), 0.2)
     cr = T.shot("s03d_load")[1] + 1.0
     m = int(1.0 * SR)
     creak = np.sin(2 * np.pi * (70 + 20 * np.sin(np.arange(m) / SR * 6)) * np.arange(m) / SR) * env(m, 0.2, 0.6)
@@ -557,9 +561,9 @@ def mix_audio(out_wav):
         for i in range(6):
             place(a + i * 0.07, tone(1800, 0.03, 0.0005, 0.01), 0.06)
     for key in ("en1", "en2", "en3", "green", "amber", "red", "r1", "r2", "r3", "r4"):
-        place(T.V(key)[0], tone(1320, 0.12, 0.002, 0.06) + 0.5 * tone(1980, 0.1, 0.002, 0.04), 0.08)
-    place(T.V("record")[0] + 1.1, tone(70, 0.5, 0.001, 0.12) + 0.4 * noise(0.4, 7) * env(int(0.4 * SR), 0.001, 0.03), 0.5)
-    place(T.V("end1")[0], tone(55, 3.0, 0.002, 1.2) + 0.5 * tone(110, 2.5, 0.002, 0.9), 0.35)
+        place(T.V(key)[0], mix(tone(1320, 0.12, 0.002, 0.06), 0.5 * tone(1980, 0.1, 0.002, 0.04)), 0.08)
+    place(T.V("record")[0] + 1.1, mix(tone(70, 0.5, 0.001, 0.12), 0.4 * noise(0.4, 7) * env(int(0.4 * SR), 0.001, 0.03)), 0.5)
+    place(T.V("end1")[0], mix(tone(55, 3.0, 0.002, 1.2), 0.5 * tone(110, 2.5, 0.002, 0.9)), 0.35)
     # the voice-over on top (the bed ducks under it)
     vo_p = os.path.join(ROOT, "renders", "cns", "vo", "vo_full.wav")
     with wave.open(vo_p) as w:
