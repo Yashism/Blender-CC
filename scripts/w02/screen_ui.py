@@ -34,11 +34,11 @@ AMBER = (250, 170, 30)
 ORDERS0, ORDERS1 = 1184, 1246
 
 
-def top_bar(d, title):
+def top_bar(d, title, col=MUTED):
     UI.rounded(d, (24, 22, 292, 84), 16, fill=(12, 14, 18))
     d.text((48, 53), "RAMS", font=UI.font(40, "ExtraBold"), fill=CREAM, anchor="lm")
     d.ellipse((248, 41, 272, 65), fill=UI.GREEN)
-    d.text((W - 40, 53), title, font=UI.font(34), fill=MUTED, anchor="rm")
+    d.text((W - 40, 53), title, font=UI.font(34), fill=col, anchor="rm")
 
 
 def orders(frame):
@@ -90,7 +90,7 @@ def sent(frame):
     t = (frame - T.E["sent"]) / T.FPS
     im = Image.new("RGB", (W, H), TEAL)
     d = ImageDraw.Draw(im)
-    top_bar(d, "REPORT A HIT")
+    top_bar(d, "REPORT A HIT", CREAM)
     k = min(1.0, 0.6 + 0.4 * t / 0.15)
     cx, cy, r = W / 2, 290, 120 * k
     d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=CREAM)
