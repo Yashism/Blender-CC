@@ -259,6 +259,22 @@ def source_for(frame):
     raise FileNotFoundError(src % frame)
 
 
+def vcrop_centre(frame):
+    """Where the 9:16 crop sits in the 16:9 frame (0..1, centre of the crop), per shot: the
+    subject is off-centre in a few wides, and the group shot pans from the cab to Pickles."""
+    if frame <= T.SHOT["s01_hook"][2]:
+        return 0.40 + 0.12 * min(1.0, (frame - 1) / 35)
+    if 151 <= frame <= T.SHOT["s03_rush"][2]:
+        return 0.62
+    if T.SHOT["s09_stitch"][1] <= frame <= 700:
+        return 0.42
+    a, b = T.SHOT["s10_group"][1], T.SHOT["s10_group"][2]
+    if a <= frame <= b:
+        t = (frame - a) / (b - a)
+        return 0.22 + 0.62 * t * t * (3 - 2 * t)
+    return 0.5
+
+
 def build_frame(frame):
     sid, start, _e, _c = T.shot_at(frame)
     mw, mh = CFG["size"]
@@ -276,7 +292,7 @@ def build_frame(frame):
     master = src.convert("RGBA")
     draw_caption(master, frame, "master")
     cw = int(round(mh * 9 / 16))
-    x0 = (mw - cw) // 2
+    x0 = int(round(min(max(vcrop_centre(frame) * mw - cw / 2, 0), mw - cw)))
     vert = src.crop((x0, 0, x0 + cw, mh)).resize((vw, vh), Image.LANCZOS).convert("RGBA")
     draw_caption(vert, frame, "vertical")
     return master.convert("RGB"), vert.convert("RGB")
