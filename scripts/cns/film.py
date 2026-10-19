@@ -106,7 +106,7 @@ class Film:
             m = bpy.data.materials.new("cns_clay")
             m.use_nodes = True
             b = m.node_tree.nodes["Principled BSDF"]
-            b.inputs["Base Color"].default_value = (0.82, 0.83, 0.85, 1)
+            b.inputs["Base Color"].default_value = (0.6, 0.65, 0.72, 1)
             b.inputs["Roughness"].default_value = 0.65
             self.clay = m
         for o in bpy.data.objects:
@@ -256,7 +256,7 @@ def main():
         film.show_inspector(key == "s06_en")
         office = key in ("s01_cert", "s04_cert", "s05_snap")
         for L_ in sets.lights:
-            L_.data.energy = 900.0
+            L_.data.energy = 360.0 if key == "s09_twin" else 900.0            # white clay blows out at full power
         for L_ in sets.office_lights:
             L_.data.energy *= 1.0
         ts = time.time()
