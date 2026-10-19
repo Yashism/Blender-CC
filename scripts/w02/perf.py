@@ -34,7 +34,7 @@ KEY_STATS = P5.KEY_STATS
 PK_EYE_Z, BOLT_EYE_Z = 1.13, 0.64
 CRINKLE = Vector((PR.UP_FACE_X, PR.UP_Y, PR.CRINKLE_Z))
 TAG = Vector((PR.UP_FACE_X - 0.006, PR.UP_Y, PR.TAG_Z))
-GROUP_CAM = Vector((1.2, -1.5, 1.35))
+GROUP_CAM = Vector((1.4, -1.5, 1.35))
 
 
 # ======================================================================== world positions
@@ -258,6 +258,7 @@ def animate_pickles(pickles_root):
     arm = next(o for o in root.children_recursive if o.type == "ARMATURE")
     rg = Rig(arm)
     snaps = P5._pk_setup(root, rg)
+    snaps["thumb_l"] = _pk_thumb_left(root, rg)
     P5._ANCHORS.clear()
     YAW = T.PICKLES_YAW
     stop = E["pickles_stop"]
@@ -265,7 +266,10 @@ def animate_pickles(pickles_root):
     homeL = Vector((rg.head["IK_foot.L"].x, P5.PK_STANCE_Y))
     homeR = Vector((rg.head["IK_foot.R"].x, P5.PK_STANCE_Y))
     feet = [dict(home=homeL, off=0.0, lift=0.07), dict(home=homeR, off=0.5, lift=0.07)]
-    gait = P5.Gait(T.pickles_x, feet, P5._pk_stance, P5._pk_duty, nominal=12)
+    th = E["thumbs"]
+    # for the thumbs up he leans out from behind the cage to his left (south, toward the camera)
+    scripted = {0: [(th - 12, th - 6, (homeL.x + 0.13, P5.PK_STANCE_Y - 0.03), 0.05)]}
+    gait = P5.Gait(T.pickles_x, feet, P5._pk_stance, P5._pk_duty, nominal=12, scripted=scripted)
     toe_off = {t: rg.tail[f"IK_foot.{t}"] - rg.head[f"IK_foot.{t}"] for t in "LR"}
     hipj = {t: rg.head[f"thigh.{t}"] for t in "LR"}
     chain = rg.length("thigh.L", "shin.L")
@@ -278,7 +282,6 @@ def animate_pickles(pickles_root):
 
     c, m = E["pk_look_crinkle"], E["pk_look_mittens"]
     s9 = T.SHOT["s09_stitch"][1]
-    th = E["thumbs"]
     # (weight fn, target fn)
     looks = [
         (lambda f: env(f, c - 2, c + 4, m - 4, m), lambda f: CRINKLE),
@@ -309,7 +312,8 @@ def animate_pickles(pickles_root):
                 ank = flat
             ankles.append(ank)
             P.place(f"IK_foot.{t}", ank, Rq((1, 0, 0), p))
-        hx = 0.012 * math.sin(cyc) * mw
+        w_out = env(f, th - 12, th - 4, F1, F1)
+        hx = 0.012 * math.sin(cyc) * mw + 0.085 * w_out
         hy = P5.PK_HIPS_FWD - 0.02 * fast
         joints = [hipj[t] + Vector((hx, hy, 0)) for t in "LR"]
         drop = P5._reach_drop(joints, ankles, [chain, chain])
@@ -325,6 +329,9 @@ def animate_pickles(pickles_root):
         P.rot("spine.02", (1, 0, 0), lean_fwd * 0.35)
         P.rot("spine.03", (1, 0, 0), lean_fwd * 0.2 - 6 * shrug)
         P.rot("spine.02", (0, 0, 1), -3.0 * math.sin(cyc) * mw)
+        P.rot("spine.01", (0, 1, 0), 7 * w_out)                 # the lean out to his left
+        P.rot("spine.02", (0, 1, 0), 9 * w_out)
+        P.rot("spine.03", (0, 1, 0), 7 * w_out)
         take = env(f, c + 2, c + 4, c + 10, c + 18)                # sees the crinkle: a little take
         P.rot("spine.03", (1, 0, 0), -4 * take)
         P.rot("neck", (1, 0, 0), -4.0 - 0.35 * lean_fwd)
@@ -346,12 +353,12 @@ def animate_pickles(pickles_root):
         for k in range(1, 6):
             sway = 6.0 * mw * math.sin(cyc - 0.35 * k) + 3.0 * (1 - mw) * osc(f, 96, 0.08 * k)
             P.rot(f"tail.{k:02d}", (0, 0, 1), sway * (0.5 + 0.15 * k))
-        w_tu = env(f, th - 6, th, F1, F1)
-        P.blend(snaps["thumb"], w_tu, ["IK_hand.R", "fingers.R", "thumb.R"])
+        w_tu = env(f, th - 6, th, F1, F1)              # left hand: the side facing the camera
+        P.blend(snaps["thumb_l"], w_tu, ["IK_hand.L", "fingers.L", "thumb.L"])
         if w_tu > 0:
             pump = env(f, th, th + 2, th + 4, th + 8)
-            P.move("IK_hand.R", (0, 0, 0.03 * pump))
-            P.rot("spine.03", (0, 0, 1), -6 * w_tu)
+            P.move("IK_hand.L", (0, 0, 0.03 * pump))
+            P.rot("spine.03", (0, 0, 1), 6 * w_tu)
         return P
 
     poses_all = {f: pose(f) for f in range(F0, F1 + 1)}
@@ -374,6 +381,22 @@ def animate_pickles(pickles_root):
     P5.key_face_prop(root, keys)
     P5._ANCHORS.clear()
     return arm
+
+
+def _pk_thumb_left(root, rg):
+    """Thumbs up with the left hand, out to his left at shoulder height (the builder's fist,
+    mirrored from ep05's right-hand thumbs up). The right hand stays on the push bar."""
+    from builders import pickles as PK
+    arm = rg.arm
+    pb = arm.pose.bones
+    PK.pose_rest(root)
+    q = Rq((0, 0, 1), 45) @ Rq((1, 0, 0), -100)
+    PK._place(arm, "IK_hand.L", Vector((0.34, -0.15, 0.88)), q)
+    PK._rot(pb["fingers.L"], (0, 0, 1), -85)
+    PK._rot(pb["thumb.L"], (1, 0, 0), -80)
+    snap = P5.snapshot(rg)
+    PK.pose_rest(root)
+    return snap
 
 
 # ================================================================================ BOLT

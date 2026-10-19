@@ -61,7 +61,7 @@ E = dict(
     sent=592,
     bolt_turn=[652, 666],    # Bolt turns to face the upright
     tag_on=674,              # presses the AMBER tag on
-    stitches=[692, 718],
+    stitches=[688, 708],
     thumbs=756,
     wink=772,
 )

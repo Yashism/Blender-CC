@@ -152,12 +152,12 @@ def hit_upright(coll):
     for v in me.vertices:
         x, y, z = v.co
         dz = z - CRINKLE_Z
-        fold = max(0.0, 1.0 - abs(dz) / 0.085) ** 1.6           # the V of the fold
+        fold = max(0.0, 1.0 - abs(dz) / 0.075) ** 1.5           # the V of the fold
         bow = math.sin(math.pi * min(1.0, max(0.0, z / 1.5))) * (1.0 if z < 1.5 else 0.0)
         across = 1.0 - (abs(y) / (d / 2)) ** 2 * 0.5            # deepest mid-face
         co = v.co + Vector((0.014 * bow, 0, 0))                 # the whole column bows in a little
         if x < 0:                                               # the aisle face (toward -X)
-            push = 0.036 * fold * across
+            push = 0.04 * fold * across
             co += Vector((push, 0, -0.2 * push * (1 if dz > 0 else -1)))
         else:
             co += Vector((0.008 * fold, 0, 0))
@@ -165,7 +165,47 @@ def hit_upright(coll):
             co += Vector((0, math.copysign(0.012 * fold, y), 0))
         sk.data[v.index].co = co
     sk.value = 0.0
+    _scuff(ob, mat)
     return ob
+
+
+def _scuff(ob, mat):
+    """Scraped paint around the fold: the faces of the aisle face near CRINKLE_Z get a copy of
+    the rack-blue felt that mixes (through a ragged noise mask) to bare grey when its 'scuff'
+    Value node goes 0 -> 1 (keyed by the lead on the bump)."""
+    sc = mat.copy()
+    sc.name = "w02_scuff"
+    nt = sc.node_tree
+    mul = next(n for n in nt.nodes if n.type == "MIX" and n.blend_type == "MULTIPLY")
+    blue = tuple(mul.inputs[6].default_value)
+    val = nt.nodes.new("ShaderNodeValue")
+    val.name = val.label = "scuff"
+    val.outputs[0].default_value = 0.0
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    nz = nt.nodes.new("ShaderNodeTexNoise")
+    nz.inputs["Scale"].default_value = 130.0
+    nz.inputs["Detail"].default_value = 8.0
+    nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeMapRange")
+    ramp.inputs["From Min"].default_value = 0.54
+    ramp.inputs["From Max"].default_value = 0.62
+    nt.links.new(nz.outputs["Fac"], ramp.inputs["Value"])
+    gate = nt.nodes.new("ShaderNodeMath")
+    gate.operation = "MULTIPLY"
+    nt.links.new(ramp.outputs["Result"], gate.inputs[0])
+    nt.links.new(val.outputs[0], gate.inputs[1])
+    mix = nt.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.inputs[6].default_value = blue
+    mix.inputs[7].default_value = (0.2, 0.22, 0.25, 1.0)          # bare steel grey (linear)
+    nt.links.new(gate.outputs[0], mix.inputs["Factor"])
+    nt.links.new(mix.outputs[2], mul.inputs[6])
+    ob.data.materials.append(sc)
+    for poly in ob.data.polygons:
+        c = poly.center
+        if poly.normal.x < -0.5 and abs(c.z - CRINKLE_Z) < 0.035:
+            poly.material_index = 1
+    return sc
 
 
 # ------------------------------------------------------------------ the card, the tag, the needle

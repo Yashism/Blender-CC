@@ -65,7 +65,7 @@ def pk_head(fr):
     return Vector((T.pickles_x(fr), T.CAGE_Y, 1.12))
 
 
-GROUP_CAM = Vector((1.2, -1.5, 1.35))
+GROUP_CAM = Vector((1.4, -1.5, 1.35))
 
 
 def bolt_root(fr):
@@ -349,6 +349,15 @@ def key_props(p):
     for fc in rig._fcurves(key.animation_data.action):
         for kp in fc.keyframe_points:
             kp.interpolation = "CONSTANT"
+    sc = bpy.data.materials.get("w02_scuff")
+    if sc:
+        v = sc.node_tree.nodes["scuff"].outputs[0]
+        for fr, x in ((T.FRAME_START, 0.0), (E["bump"] - 2, 0.0), (E["bump"], 1.0)):
+            v.default_value = x
+            v.keyframe_insert("default_value", frame=fr)
+        for fc in rig._fcurves(sc.node_tree.animation_data.action):
+            for kp in fc.keyframe_points:
+                kp.interpolation = "CONSTANT"
     # card in Bolt's mouth until the stitching shot; then the needle
     s9 = T.SHOT["s09_stitch"][1]
     vis = {"card": lambda fr: fr < s9, "needle": lambda fr: s9 <= fr < E["stitches"][1] + 16}
@@ -427,8 +436,8 @@ def build_cameras(coll):
 
     over_shoulder = (-0.36, 0.1, 1.8)          # by her right ear, FL-02 local: square on to the screen
     scr = tuple(SCREEN_AT)
-    mast_cam = (0.0, -1.5, 1.95)               # in front of FL-02, through the mast window
-    mit_face = (0.0, 0.18, 1.62)
+    mast_cam = (0.0, -1.5, 1.72)               # in front of FL-02, under the RAMS camera
+    mit_face = (0.0, 0.18, 1.64)
     pk_cam = Vector((2.9, 1.5, 1.32))          # north of Pickles, under the end board
     fork_pov = Vector((0.95, 3.0, 0.92))       # between the raised forks, looking at Bolt
     a1 = S["s01_hook"]
@@ -453,9 +462,9 @@ def build_cameras(coll):
          lambda fr: pk_head(fr) + Vector((-0.12, 0.0, -0.06)), 38, 2.8),
         ("s04b_mittens", *span("s04_pickles", 0.5, 1), lambda fr: fl_rel(fr, mast_cam),
          lambda fr: fl_rel(fr, mit_face), 45, 2.8),
-        # s04b: the crinkle from above the left fork, as the forks back away from it
-        ("s04c_crinkle", *span("s04b_crinkle", 0, 1), lambda fr: Vector((1.42, 2.55, 0.98)),
-         lambda fr: CRINKLE + Vector((-0.01, 0.02, -0.01)), 40, 2.8),
+        # s04b: the crinkle, square on from the aisle, as the fork tip backs away from it
+        ("s04c_crinkle", *span("s04b_crinkle", 0, 1), lambda fr: Vector((1.12, 1.92, 0.82)),
+         lambda fr: CRINKLE + Vector((0.0, 0.0, -0.005)), 45, 2.8),
         # s05: from between the forks: Bolt trots up the aisle with the card
         ("s05_bolt", *span("s05_bolt", 0, 1), lambda fr: fork_pov,
          lambda fr: bolt_head(fr).lerp(bolt_rel(fr, (0.0, -0.3, 0.6)), _ss((fr - 380) / 20)),
@@ -476,12 +485,12 @@ def build_cameras(coll):
         # s09: Bolt turns to the upright and presses the tag on; close on the second stitch
         ("s09a_tag", *span("s09_stitch", 0, 0.54), lambda fr: Vector((1.12, 2.55, 0.8)),
          lambda fr: Vector((1.52, 1.8, 0.56)), 32, 2.8),
-        ("s09b_stitch", *span("s09_stitch", 0.54, 1), lambda fr: Vector((1.22, 1.58, 0.47)),
-         lambda fr: TAG + Vector((0.0, 0.0, 0.02)), 45, 2.8),
+        ("s09b_stitch", *span("s09_stitch", 0.54, 1), lambda fr: Vector((1.3, 2.2, 0.72)),
+         lambda fr: TAG + Vector((0.0, 0.0, 0.02)), 45, 5.6),
         # s10: the three of them, the tagged upright, the lights
         ("s10_group", *span("s10_group", 0, 1),
-         lambda fr: GROUP_CAM + Vector((0.0, 0.25 * (fr - 745) / 47, 0.0)),
-         lambda fr: Vector((2.27, 2.35, 1.5)), 28, 5.6),
+         lambda fr: GROUP_CAM + Vector((0.0, 0.2 * (fr - 745) / 47, 0.0)),
+         lambda fr: GROUP_CAM + Vector((1.1, 3.85, 0.15)), 26, 5.6),
     ]
     for name, a, b, loc, tgt, lens, fstop in segs:
         cam, target = studio.camera(f"CAM_{name}", tuple(loc(a)), tuple(tgt(a)),
