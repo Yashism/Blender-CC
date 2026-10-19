@@ -37,3 +37,7 @@ renders/omnibox_ai/product/
 renders/omnibox_ai/style/
 renders/omnibox_ai/comp/
 renders/omnibox_ai/temp_audio.wav
+renders/cns/shots/
+renders/cns/comp/
+renders/cns/vo/*.wav
+renders/cns/temp_*.wav
