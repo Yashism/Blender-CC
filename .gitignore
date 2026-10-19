@@ -37,3 +37,6 @@ renders/w02/post/
 renders/w02/logs/
 renders/w02/*.wav
 blender/w02_*.blend
+assets/mocap/
+# v2 characters: test renders (the review reel is committed separately)
+renders/chars/
