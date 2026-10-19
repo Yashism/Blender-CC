@@ -60,6 +60,16 @@ def import_model(path, coll, height, yaw=0.0, name="Char_body"):
     M = Matrix.Scale(s, 4) @ R @ Matrix.Translation((-c[0], -c[1], -lo[2]))
     ob.data.transform(M)
     ob.data.update()
+    # glTF splits vertices along UV seams; weld them back so the surface is one piece (the UVs
+    # stay per face corner) and decimation, weights and cuts can cross the seams
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    n = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    print(f"[import] {name}: welded {n - len(bm.verts)} seam vertices")
+    bm.to_mesh(ob.data)
+    bm.free()
     ob.data.shade_smooth()
     return ob
 

@@ -311,7 +311,7 @@ def _cap(name, r, upper, coll, segs=40, rings=20):
 
 
 def eye_assembly(prefix, side, center, r, iris, lid_color, coll, open_up=38.0, open_lo=42.0,
-                 lash="#141416", yaw=0.0, pupil_aspect=1.0):
+                 lash="#141416", yaw=0.0, pupil_aspect=1.0, iris_deg=40.0, pupil_deg=19.0):
     """Eyeball + upper and lower lid shells for one eye. center in rest (armature) space.
 
     The lids are built open (upper edge open_up degrees above the eye's axis, lower open_lo below)
@@ -328,7 +328,8 @@ def eye_assembly(prefix, side, center, r, iris, lid_color, coll, open_up=38.0, o
     me.shade_smooth()
     ball = bpy.data.objects.new(f"{prefix}_eye.{side}", me)
     geo._link(ball, coll)
-    me.materials.append(eye_material(f"{prefix}_eye_mat", iris, pupil_aspect=pupil_aspect))
+    me.materials.append(eye_material(f"{prefix}_eye_mat", iris, iris_deg=iris_deg, pupil_deg=pupil_deg,
+                                     pupil_aspect=pupil_aspect))
     ball.location = c                                   # the iris looks straight ahead
     lids = {}
     lid_mat = solid(f"{prefix}_lid_mat", "#FFFFFF", rough=0.6, attr="Col")

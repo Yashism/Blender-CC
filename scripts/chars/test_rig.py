@@ -27,7 +27,7 @@ def overlay(path, arm, view, scale, zc, res):
     px = np.array(img.pixels[:]).reshape(H, W, 4)
 
     def to_px(p):
-        h = p.x if view == "front" else -p.y
+        h = p.x if view == "front" else p.y
         return (h / scale + 0.5) * W, (0.5 + (p.z - zc) / scale) * H
 
     def line(a, b, col, w=1):
@@ -72,12 +72,27 @@ def world_rot(arm, bone, axis, deg):
     return M.inverted() @ q @ M
 
 
-def pose_sheet(arm, mouth, face):
-    """Frames 1..6: rest, arms up / out, squat, head turn + open mouth, blink + look, wave."""
+def key_face(k, face, frame, expr="neutral", blink=0.0, look=None, talk=0.0):
+    bones, _ = face.pose(expr, blink=blink, look=look, talk=talk)
+    for b, v in bones.items():
+        if v[0] == "q":
+            k.quat(b, frame, v[1])
+        else:
+            k.loc(b, frame, v[1])
+            k.quat(b, frame, v[2])
+
+
+FACES = [("neutral", 0, None, 0), ("happy", 0, None, 9), ("big_smile", 0, None, 0), ("surprised", 0, (18, -4), 0),
+         ("worried", 0, None, 0), ("angry", 0, None, 4), ("sad", 0, None, 0), ("happy", 1.0, None, 0)]
+
+
+def pose_sheet(arm, face):
+    """Frames 1..6: rest, arms up / out, squat, head turn + talk, look, wave; frames 11..18: the
+    face sheet (FACES)."""
     k = perform.Keyer(arm)
     pb = arm.pose.bones
     names = [b.name for b in pb if not b.name.startswith(("IK_", "pole_"))]
-    for f in range(1, 7):
+    for f in list(range(1, 7)) + list(range(11, 11 + len(FACES))):
         for n in names:
             k.quat(n, f, Quaternion())
             k.loc(n, f, Vector())
@@ -94,30 +109,58 @@ def pose_sheet(arm, mouth, face):
         k.quat(f"foot.{s}", 3, world_rot(arm, f"foot.{s}", (1, 0, 0), 40))
         k.quat(f"upper_arm.{s}", 3, world_rot(arm, f"upper_arm.{s}", (1, 0, 0), 60))
     k.quat("spine", 3, world_rot(arm, "spine", (1, 0, 0), -20))
-    # 4: head turn and tilt, mouth open
+    # 4: head turn and tilt, talking
+    key_face(k, face, 4, "happy", talk=12)
     k.quat("neck", 4, world_rot(arm, "neck", (0, 0, 1), 25))
     k.quat("head", 4, world_rot(arm, "head", (0, 1, 0), 12))
-    k.quat("jaw", 4, perform.rot_basis(arm, "jaw", (1, 0, 0), 16))
-    if mouth is not None:
-        k.shape(mouth, "open", 4, 1.0)
-        for f in (1, 2, 3, 5, 6):
-            k.shape(mouth, "open", f, 0.0)
-    # 5: blink half + surprised brows + look left
-    bones, _ = face.pose("surprised", blink=0.0, look=(20, -6))
-    for b, v in bones.items():
-        if v[0] == "q":
-            k.quat(b, 5, v[1])
-        else:
-            k.loc(b, 5, v[1])
-            k.quat(b, 5, v[2])
-    bones, _ = face.pose("happy", blink=1.0)
-    for b, v in bones.items():
-        if b.startswith("lid"):
-            k.quat(b, 6, v[1])
-    # 6: wave: right arm up, forearm up, hand tilt
+    # 5: surprised, looking aside
+    key_face(k, face, 5, "surprised", look=(20, -6))
+    # 6: wave: right arm up, forearm up, hand tilt, happy blink
+    key_face(k, face, 6, "happy", blink=1.0)
     k.quat("upper_arm.R", 6, world_rot(arm, "upper_arm.R", (0, 1, 0), 70))
     k.quat("forearm.R", 6, world_rot(arm, "forearm.R", (0, 1, 0), 70))
     k.quat("hand.R", 6, world_rot(arm, "hand.R", (0, 1, 0), 20))
+    for i, (expr, blink, look, talk) in enumerate(FACES):
+        key_face(k, face, 11 + i, expr, blink=blink, look=look, talk=talk)
+    k.finish()
+    for fc in perform._fcurves(k.act):
+        for kp in fc.keyframe_points:
+            kp.interpolation = "CONSTANT"
+
+
+def quad_sheet(arm, face):
+    """Quadruped frames 1..6: rest, curious head tilt + tail up, crouch (paws planted by IK),
+    paw raised, sniffing with a tail swing, ears perked / jaw shut; 11..: the face sheet."""
+    k = perform.Keyer(arm)
+    pb = arm.pose.bones
+    names = [b.name for b in pb]
+    for f in list(range(1, 7)) + list(range(11, 11 + len(FACES))):
+        for n in names:
+            k.quat(n, f, Quaternion())
+            k.loc(n, f, Vector())
+    for b in pb:
+        for c in b.constraints:
+            if c.type == "IK":
+                c.influence = 1.0
+    k.quat("neck", 2, world_rot(arm, "neck", (0, 0, 1), 25))
+    k.quat("head", 2, world_rot(arm, "head", (0, 1, 0), 18))
+    k.quat("tail.01", 2, world_rot(arm, "tail.01", (1, 0, 0), 35))
+    k.quat("tail.02", 2, world_rot(arm, "tail.02", (1, 0, 0), 15))
+    k.loc("hips", 3, perform.loc_basis(arm, "hips", (0, 0.03, -0.09)))
+    k.loc("spine", 3, Vector())
+    k.quat("chest", 3, world_rot(arm, "chest", (1, 0, 0), 8))
+    k.quat("neck", 3, world_rot(arm, "neck", (1, 0, 0), -10))
+    k.loc("IK_fpaw.R", 4, perform.loc_basis(arm, "IK_fpaw.R", (0, -0.12, 0.16)))
+    k.quat("head", 4, world_rot(arm, "head", (0, 1, 0), -12))
+    k.quat("neck", 5, world_rot(arm, "neck", (1, 0, 0), -40))
+    k.quat("head", 5, world_rot(arm, "head", (1, 0, 0), -15))
+    for i, n in enumerate(("tail.01", "tail.02", "tail.03")):
+        k.quat(n, 5, world_rot(arm, n, (0, 0, 1), 25 - 5 * i))
+    k.quat("ear.L", 6, world_rot(arm, "ear.L", (0, 1, 0), -45))
+    k.quat("ear.R", 6, world_rot(arm, "ear.R", (1, 0, 0), -30))
+    k.quat("jaw", 6, perform.rot_basis(arm, "jaw", (1, 0, 0), -14))
+    for i, (expr, blink, look, talk) in enumerate(FACES):
+        key_face(k, face, 11 + i, expr, blink=blink, look=look, talk=talk)
     k.finish()
     for fc in perform._fcurves(k.act):
         for kp in fc.keyframe_points:
@@ -140,11 +183,14 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     if a.save:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(a.save), compress=True)
-    face = perform.Face(arm, mouth=None)
-    pose_sheet(arm, mouth, face)
+    face = perform.Face(arm)
+    quad = bool(arm.get("quadruped"))
+    (quad_sheet if quad else pose_sheet)(arm, face)
     skip = set(a.skip.split(","))
     cam, tgt, floor = kit.studio(target=(0, 0, 0.62), dist=3.4, lens=55, coll=geo.collection("STUDIO"))
     h = spec["height"]
+    if quad:
+        h = max(h, 1.0)                                  # long body: frame the length, not the height
     if "ortho" not in skip:
         scene.frame_set(1)
         for view in ("front", "side"):
@@ -161,12 +207,31 @@ def main():
             continue
         scene.frame_set(f)
         ang = math.radians(35 if f != 3 else 70)
-        cam.location = (math.sin(ang) * 3.4, -math.cos(ang) * 3.4, 0.78)
-        tgt.location = (0, 0, 0.62)
-        if f in (4, 5):
-            cam.location = (math.sin(ang) * 1.7, -math.cos(ang) * 1.7, 1.0)
-            tgt.location = (0, -0.1, 0.95)
+        if quad:
+            ang = math.radians((40, 40, 70, 30, 60, 25)[f - 1])
+            tgt.location = (0, -0.02, 0.38)
+            cam.location = (math.sin(ang) * 2.3, -math.cos(ang) * 2.3, 0.7)
+        else:
+            cam.location = (math.sin(ang) * 3.4, -math.cos(ang) * 3.4, 0.78)
+            tgt.location = (0, 0, 0.62)
+            if f in (4, 5):
+                cam.location = (math.sin(ang) * 1.7, -math.cos(ang) * 1.7, 1.0)
+                tgt.location = (0, -0.1, 0.95)
         scene.render.filepath = os.path.join(os.path.abspath(a.out), f"pose_{f}.png")
+        bpy.ops.render.render(write_still=True)
+    # face sheet: a close, slightly low three-quarter view of the head
+    head = arm.matrix_world @ arm.data.bones["head"].tail_local
+    eye = arm.matrix_world @ arm.data.bones["eye.L"].head_local
+    scene.render.resolution_x, scene.render.resolution_y = 480, 480
+    for i in range(len(FACES)):
+        if f"f{i}" in skip:
+            continue
+        scene.frame_set(11 + i)
+        ang = math.radians(18)
+        d = 0.85 if not quad else 0.7
+        tgt.location = (0, eye.y + 0.06, eye.z - 0.03)
+        cam.location = (math.sin(ang) * d, -math.cos(ang) * d + eye.y, eye.z - 0.01)
+        scene.render.filepath = os.path.join(os.path.abspath(a.out), f"face_{i}.png")
         bpy.ops.render.render(write_still=True)
     print("rig check ->", a.out)
 

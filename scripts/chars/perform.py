@@ -114,9 +114,14 @@ class Face:
     """Face controls of one character. blink_up / blink_lo: lid rotations (deg) that close the
     eyes from the open rest; mouth: the mouth-line object (smile / frown shape keys)."""
 
-    def __init__(self, arm, mouth=None, blink_up=32.0, blink_lo=-24.0):
+    def __init__(self, arm, mouth=None, blink_up=None, blink_lo=None):
         self.arm, self.mouth = arm, mouth
-        self.blink_up, self.blink_lo = blink_up, blink_lo
+        # per-rig tuning stored on the armature: lid travel to close, jaw and brow gains (a long
+        # jaw needs fewer degrees for the same opening; brows that deform the skin move less)
+        self.blink_up = arm.get("blink_up", 32.0) if blink_up is None else blink_up
+        self.blink_lo = arm.get("blink_lo", -24.0) if blink_lo is None else blink_lo
+        self.jaw_gain = arm.get("jaw_gain", 1.0)
+        self.brow_gain = arm.get("brow_gain", 1.0)
         self.k = Keyer(arm)
 
     def pose(self, expr, blink=0.0, look=None, talk=0.0):
@@ -132,14 +137,14 @@ class Face:
         for s, sx in (("L", 1), ("R", -1)):
             out[f"lid_up.{s}"] = ("q", rot_basis(self.arm, f"lid_up.{s}", (1, 0, 0), lu))
             out[f"lid_lo.{s}"] = ("q", rot_basis(self.arm, f"lid_lo.{s}", (1, 0, 0), ll))
-            out[f"brow.{s}"] = ("lq", loc_basis(self.arm, f"brow.{s}", (0, 0, by)),
-                                rot_basis(self.arm, f"brow.{s}", (0, 1, 0), sx * bt))
+            out[f"brow.{s}"] = ("lq", loc_basis(self.arm, f"brow.{s}", (0, 0, by * self.brow_gain)),
+                                rot_basis(self.arm, f"brow.{s}", (0, 1, 0), sx * bt * self.brow_gain))
             q = Quaternion((0, 0, 1), math.radians(eyes[0])) @ Quaternion((1, 0, 0), math.radians(eyes[1]))
             M = _rest(self.arm, f"eye.{s}")
             out[f"eye.{s}"] = ("q", M.inverted() @ q @ M)
             if f"ear.{s}" in self.arm.pose.bones:
                 out[f"ear.{s}"] = ("q", rot_basis(self.arm, f"ear.{s}", (0, 1, 0), sx * ears))
-        out["jaw"] = ("q", rot_basis(self.arm, "jaw", (1, 0, 0), jaw + talk))
+        out["jaw"] = ("q", rot_basis(self.arm, "jaw", (1, 0, 0), (jaw + talk) * self.jaw_gain))
         return out, {"smile": smile, "frown": frown}
 
     def key(self, frame, expr="neutral", blink=0.0, look=None, talk=0.0):
