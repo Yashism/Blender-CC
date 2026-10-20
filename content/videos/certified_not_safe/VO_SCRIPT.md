@@ -1,5 +1,41 @@
 # Certified ≠ Safe: voice-over script (ElevenLabs)
 
+## The script (paste this into ElevenLabs as one take)
+
+Use **Eleven Multilingual v2** so the `<break>` pauses are honoured. The pauses also let the import split the take
+into the film's 24 lines.
+
+```
+Your racks are certified safe. <break time="0.9s" />
+On one day. <break time="1.2s" />
+But every day after that, your warehouse keeps working. <break time="0.9s" />
+A forklift clips an upright. <break time="0.8s" />
+A brace gets bent. <break time="0.8s" />
+A beam lock goes missing. <break time="0.8s" />
+A pallet is heavier than the beam was rated for. <break time="1.0s" />
+None of that is on the certificate. <break time="1.2s" />
+A stability certificate proves your racks were checked on that date. It can't prove they are safe today. <break time="1.2s" />
+That's why E N fifteen six three five asks for checks every week, <break time="0.7s" />
+a formal inspection every month, <break time="0.7s" />
+and an expert inspection every year. <break time="1.0s" />
+Every damage gets a tag. <break time="0.9s" />
+Green: keep watching. <break time="0.7s" />
+Amber: repair within four weeks. <break time="0.7s" />
+Red: unload it, now. <break time="1.2s" />
+After handover, the responsibility is yours, not the rack maker's. <break time="1.0s" />
+And with no inspection record, there's no proof. <break time="1.2s" />
+RAMS inspects every rack, <break time="0.7s" />
+tags every finding, <break time="0.7s" />
+tracks every repair, <break time="0.7s" />
+and keeps it all on record. <break time="1.2s" />
+Certified once. Safe every day. <break time="1.0s" />
+Book a rack audit at rams dot digital.
+```
+
+**Import:** `python3 scripts/cns/vo.py --take <file>`. It splits the take at its 23 longest pauses and re-times the
+film. If a pause inside a line comes out longer than a break, the split will be off. If that happens, generate the
+lines one by one instead, using the table below.
+
 **Voice:** calm, confident, plain-spoken. A safety engineer explaining something to a warehouse manager, not an
 advert. Indian-English or neutral English, male or female. About 150 words a minute, with a short beat after each
 full stop.
