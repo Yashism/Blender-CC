@@ -6,16 +6,23 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 FPS = 24
-_T = json.load(open(os.path.join(ROOT, "renders", "cns", "vo", "vo_timing.json")))
+_VO_DIR = os.path.join(ROOT, "renders", "cns", "vo")
+_T = json.load(open(os.path.join(_VO_DIR, "vo_timing.json")))
 VO = {l["key"]: l for l in _T["lines"]}
 LENGTH = _T["length"]
+# the timing the current preview plates were rendered with (post remaps them onto the new voice; a fresh render
+# with film.py uses VO directly and needs no remap)
+_TR_P = os.path.join(_VO_DIR, "vo_timing_render.json")
+_TR = json.load(open(_TR_P)) if os.path.exists(_TR_P) else _T
+VO_R = {l["key"]: l for l in _TR["lines"]}
+LENGTH_R = _TR["length"]
 
 
 def V(key):
     return VO[key]["start"], VO[key]["end"]
 
 
-def _cuts():
+def _cuts(VO=VO, LENGTH=LENGTH):
     s = lambda k, pre: round(VO[k]["start"] - pre, 3)      # noqa: E731
     b = [0.0, s("after", 0.25), s("d1", 0.15), s("d2", 0.15), s("d3", 0.15), s("d4", 0.15), s("none", 0.3),
          s("proves", 0.2), s("en1", 0.3), s("tag0", 0.25), s("yours", 0.3), s("r1", 0.35), s("end1", 0.35), LENGTH]
@@ -25,6 +32,17 @@ def _cuts():
 
 
 SHOTS = _cuts()
+SHOTS_R = _cuts(VO_R, LENGTH_R)
+_ANCH = sorted({(0.0, 0.0), (LENGTH, LENGTH_R)} | {(VO[k]["start"], VO_R[k]["start"]) for k in VO if k in VO_R})
+
+
+def to_render_time(t):
+    """Film time on the current voice -> film time on the timing the plates were rendered with (piecewise linear
+    through the line starts)."""
+    for (a0, b0), (a1, b1) in zip(_ANCH, _ANCH[1:]):
+        if a0 <= t <= a1:
+            return b0 + (b1 - b0) * (t - a0) / max(1e-6, a1 - a0)
+    return t - LENGTH + LENGTH_R
 DAYS = {"s02_floor": 1, "s03a_clip": 47, "s03b_brace": 96, "s03c_lock": 140, "s03d_load": 183, "s04_cert": 183}
 
 

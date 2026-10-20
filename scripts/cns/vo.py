@@ -75,8 +75,9 @@ def load_take(src_dir, key, path):
         return w.getnframes() / w.getframerate(), w.getframerate()
 
 
-def split_take(src, out_dir):
-    """One take of the whole script -> <key>.wav per line, cut at the len(LINES) - 1 longest pauses."""
+def split_take(src, out_dir, cuts=None):
+    """One take of the whole script -> <key>.wav per line, cut at the given times (s) or else at the len(LINES) - 1
+    longest pauses."""
     raw = os.path.join(out_dir, "_take.wav")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-ac", "1", "-ar", "44100", raw], check=True)
     with wave.open(raw) as w:
@@ -97,11 +98,15 @@ def split_take(src, out_dir):
         else:
             i += 1
     need = len(LINES) - 1
+    if cuts:
+        if len(cuts) != need:
+            sys.exit(f"[vo] {len(cuts)} cuts given, need {need}")
+        runs = [(int(c * 100), int(c * 100)) for c in cuts]
     if len(runs) < need:
         sys.exit(f"[vo] only {len(runs)} pauses in the take, need {need}: leave a clear pause between lines")
     cuts = sorted(sorted(runs, key=lambda r: r[1] - r[0])[-need:])
     shortest = min(r[1] - r[0] for r in cuts) * 0.01
-    print(f"[vo] take split at {need} pauses (shortest {shortest:.2f}s)")
+    print(f"[vo] take split at {need} {'given cuts' if cuts else 'pauses'} (shortest pause {shortest:.2f}s)")
     bounds = [0] + [(r0 + r1) // 2 * hop for r0, r1 in cuts] + [len(a)]
     for (key, *_), b0, b1 in zip(LINES, bounds, bounds[1:]):
         with wave.open(os.path.join(out_dir, f"_split_{key}.wav"), "wb") as w:
@@ -118,10 +123,12 @@ def main():
     ap.add_argument("--speed", type=float, default=1.12, help="Piper length scale (>1 = slower)")
     ap.add_argument("--recorded", default=None, help="folder of recorded takes named <key>.mp3/.wav (skips Piper)")
     ap.add_argument("--take", default=None, help="one recording of the whole script (split at its pauses)")
+    ap.add_argument("--cuts", default=None, help="json file with the 23 cut times (s) for --take")
     o = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     if o.take:
-        split_take(os.path.expanduser(o.take), OUT)
+        cuts = json.load(open(os.path.expanduser(o.cuts)))["cuts"] if o.cuts else None
+        split_take(os.path.expanduser(o.take), OUT, cuts)
         o.recorded = OUT
         for key, *_ in LINES:
             os.replace(os.path.join(OUT, f"_split_{key}.wav"), os.path.join(OUT, f"_in_{key}.wav"))

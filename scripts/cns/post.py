@@ -68,7 +68,7 @@ def shadowed(img, lay, blur=8, k=0.6):
 
 def source(shot, f, size):
     d = os.path.join(SRC, shot)
-    key = (shot, f, size)
+    key = (shot, round(f, 2), size)
     if key in _IMG:
         return _IMG[key].copy()
     avail = sorted(int(n[2:6]) for n in os.listdir(d) if n.startswith("f_")) if os.path.isdir(d) else []
@@ -78,7 +78,7 @@ def source(shot, f, size):
         g = max([a for a in avail if a <= f] or [avail[0]])
         im = Image.open(os.path.join(d, f"f_{g:04d}.png")).convert("RGB").resize(size, Image.BICUBIC)
         nxt = [a for a in avail if a > f]
-        if g != f and nxt:                                    # rendered on a step: blend the neighbours
+        if f - g > 0.02 and nxt:                                    # rendered on a step: blend the neighbours
             h = nxt[0]
             im2 = Image.open(os.path.join(d, f"f_{h:04d}.png")).convert("RGB").resize(size, Image.BICUBIC)
             im = Image.blend(im, im2, (f - g) / (h - g))
@@ -99,18 +99,32 @@ def anc(shot, f):
     return recs[max([k for k in recs if k <= f] or [min(recs)])]["pts"]
 
 
-def grade(img, warm=0.0, dark=0.0):
+def _tone_lut(exp):
+    """Exposure, a gentle S and a soft highlight shoulder (nothing clips to white)."""
+    out = []
+    for v in range(256):
+        x = (v / 255.0) * exp
+        x = 0.5 + (x ** 1.06 - 0.5) * 1.08
+        if x > 0.78:
+            x = 0.78 + 0.2 * (1 - math.exp(-(x - 0.78) / 0.2))
+        out.append(int(255 * clamp(x)))
+    return out
+
+
+def grade(img, warm=0.0, dark=0.0, exp=1.0, sat=0.92):
     rgb = img.convert("RGB")
     W, H = rgb.size
-    hi = rgb.point(lambda v: max(0, v - 185) * 2).filter(ImageFilter.GaussianBlur(W / 100))
+    rgb = rgb.point(_tone_lut(exp) * 3)
+    hi = rgb.point(lambda v: int(max(0, v - 228) * 0.5)).filter(ImageFilter.GaussianBlur(W / 90))   # real highlights only
     rgb = ImageChops.add(rgb, hi)
+    rgb = ImageEnhance.Color(rgb).enhance(sat)
     if warm:
         r, g, b = rgb.split()
-        rgb = Image.merge("RGB", (r.point(lambda v: min(255, v * (1 + 0.06 * warm))), g, b.point(lambda v: v * (1 - 0.06 * warm))))
+        rgb = Image.merge("RGB", (r.point(lambda v: min(255, v * (1 + 0.05 * warm))), g, b.point(lambda v: v * (1 - 0.05 * warm))))
     vig = Image.new("L", (W, H), 0)
     ImageDraw.Draw(vig).ellipse((-W * 0.22, -H * 0.28, W * 1.22, H * 1.28), fill=255)
     vig = vig.filter(ImageFilter.GaussianBlur(W / 8))
-    rgb = Image.composite(rgb, ImageEnhance.Brightness(rgb).enhance(0.62), vig)
+    rgb = Image.composite(rgb, ImageEnhance.Brightness(rgb).enhance(0.72), vig)
     if dark:
         rgb = ImageEnhance.Brightness(rgb).enhance(1 - dark)
     return rgb.convert("RGBA")
@@ -224,15 +238,19 @@ def cross(d, x, y, r, col, a=1.0):
 
 
 # ------------------------------------------------------------------------------------ shots
-def f_of(tl):
-    return 1 + int(tl * T.FPS)
+def f_of(shot, tl):
+    """Plate frame (float) for local time tl of shot: remapped onto the timing the plates were rendered with."""
+    a, _ = T.shot(shot)[1:]
+    a_r, b_r = next(s[1:] for s in T.SHOTS_R if s[0] == shot)
+    lo = min(max(T.to_render_time(a + tl) - a_r, 0.0), b_r - a_r - 1.0 / T.FPS)
+    return 1 + lo * T.FPS
 
 
 def s01_cert(tl, ta, size):
-    img = grade(source("s01_cert", f_of(tl), size), warm=0.6)
+    img = grade(source("s01_cert", f_of("s01_cert", tl), size), warm=0.8, exp=0.86)
     W, H = size
     s = H / 720
-    p = anc("s01_cert", f_of(tl))
+    p = anc("s01_cert", int(f_of("s01_cert", tl)))
     a1 = T.V("oneday")[0]
     if p and ta > a1 - 0.1:                                       # underline the date
         k = ease((ta - a1) / 0.35)
@@ -245,17 +263,17 @@ def s01_cert(tl, ta, size):
 
 
 def s02(tl, ta, size, shot):
-    img = grade(source(shot, f_of(tl), size))
+    img = grade(source(shot, f_of(shot, tl), size))
     day_counter(img, tl, shot)
     return img
 
 
 def s04_cert(tl, ta, size):
-    img = grade(source("s04_cert", f_of(tl), size), warm=0.9, dark=0.08)
+    img = grade(source("s04_cert", f_of("s04_cert", tl), size), warm=0.9, exp=0.86)
     day_counter(img, tl, "s04_cert")
     W, H = size
     s = H / 720
-    p = anc("s04_cert", f_of(tl))
+    p = anc("s04_cert", int(f_of("s04_cert", tl)))
     if p:
         k = ease((tl - 0.6) / 0.4)
         lay = layer(size)
@@ -269,10 +287,10 @@ def s04_cert(tl, ta, size):
 def s05_snap(tl, ta, size):
     W, H = size
     s = H / 720
-    bg = grade(source("s05_snap", 1, size), dark=0.55).filter(ImageFilter.GaussianBlur(8))
+    bg = grade(source("s05_snap", 1, size), dark=0.55, exp=0.8).filter(ImageFilter.GaussianBlur(8))
     img = bg.copy()
     photo = source("s05_snap", 1, size).convert("RGB")
-    photo = ImageEnhance.Color(photo).enhance(0.35)
+    photo = ImageEnhance.Color(photo.point(_tone_lut(0.85) * 3)).enhance(0.35)
     pw = int(W * 0.34)
     ph = int(pw * 1.1)
     cx, cy = photo.width // 2, int(photo.height * 0.4)
@@ -312,7 +330,7 @@ CAL = [("en1", "WEEKLY", "Visual checks", "Your floor team"), ("en2", "MONTHLY",
 
 
 def s06_en(tl, ta, size):
-    img = grade(source("s06_en", f_of(tl), size), dark=0.12)
+    img = grade(source("s06_en", f_of("s06_en", tl), size), dark=0.12)
     W, H = size
     s = H / 720
     lay = layer(size)
@@ -343,10 +361,10 @@ TAGS = [("green", "GREEN", "Keep watching"), ("amber", "AMBER", "Repair within 4
 
 
 def s07_tags(tl, ta, size):
-    img = grade(source("s07_tags", f_of(tl), size))
+    img = grade(source("s07_tags", f_of("s07_tags", tl), size))
     W, H = size
     s = H / 720
-    p = anc("s07_tags", f_of(tl))
+    p = anc("s07_tags", int(f_of("s07_tags", tl)))
     lay = layer(size)
     d = ImageDraw.Draw(lay)
     if p:
@@ -432,10 +450,10 @@ TWIN_FIX = {"red": 0, "beam": 1, "brace": 2, "green": 0}
 
 
 def s09_twin(tl, ta, size):
-    img = grade(source("s09_twin", f_of(tl), size))
+    img = grade(source("s09_twin", f_of("s09_twin", tl), size))
     W, H = size
     s = H / 720
-    p = anc("s09_twin", f_of(tl))
+    p = anc("s09_twin", int(f_of("s09_twin", tl)))
     lay = layer(size)
     d = ImageDraw.Draw(lay)
     if p:                                       # the coloured parts get a small label; red / amber turn "Repaired"
@@ -468,7 +486,7 @@ def s09_twin(tl, ta, size):
 
 
 def s10_end(tl, ta, size):
-    img = grade(source("s10_end", f_of(tl), size), dark=0.1)
+    img = grade(source("s10_end", f_of("s10_end", tl), size), dark=0.1)
     W, H = size
     s = H / 720
     grad = layer(size)

@@ -1,172 +1,172 @@
 {
- "length": 67.2,
+ "length": 65.9,
  "lines": [
   {
    "key": "cert",
    "start": 0.6,
-   "dur": 1.776,
-   "end": 2.376,
+   "dur": 1.575,
+   "end": 2.175,
    "text": "Your racks are certified safe."
   },
   {
    "key": "oneday",
    "start": 3.3,
-   "dur": 0.848,
-   "end": 4.148,
+   "dur": 0.86,
+   "end": 4.16,
    "text": "On one day."
   },
   {
    "key": "after",
    "start": 5.4,
-   "dur": 3.181,
-   "end": 8.581,
+   "dur": 2.747,
+   "end": 8.147,
    "text": "But every day after that, your warehouse keeps working."
   },
   {
    "key": "d1",
    "start": 9.2,
-   "dur": 1.741,
-   "end": 10.941,
+   "dur": 1.402,
+   "end": 10.602,
    "text": "A forklift clips an upright."
   },
   {
    "key": "d2",
-   "start": 11.39,
-   "dur": 1.231,
-   "end": 12.621,
+   "start": 11.05,
+   "dur": 0.873,
+   "end": 11.923,
    "text": "A brace gets bent."
   },
   {
    "key": "d3",
-   "start": 13.07,
-   "dur": 1.637,
-   "end": 14.707,
+   "start": 12.37,
+   "dur": 1.331,
+   "end": 13.701,
    "text": "A beam lock goes missing."
   },
   {
    "key": "d4",
-   "start": 15.16,
-   "dur": 2.554,
-   "end": 17.714,
+   "start": 14.15,
+   "dur": 2.321,
+   "end": 16.471,
    "text": "A pallet is heavier than the beam was rated for."
   },
   {
    "key": "none",
-   "start": 18.61,
-   "dur": 1.649,
-   "end": 20.259,
+   "start": 17.37,
+   "dur": 1.368,
+   "end": 18.738,
    "text": "None of that is on the certificate."
   },
   {
    "key": "proves",
-   "start": 21.06,
-   "dur": 5.273,
-   "end": 26.333,
+   "start": 19.54,
+   "dur": 5.721,
+   "end": 25.261,
    "text": "A stability certificate proves your racks were checked on that date. It can't prove they are safe today."
   },
   {
    "key": "en1",
-   "start": 27.23,
-   "dur": 3.959,
-   "end": 31.189,
+   "start": 26.16,
+   "dur": 3.943,
+   "end": 30.103,
    "text": "That's why E N fifteen six three five asks for checks every week,"
   },
   {
    "key": "en2",
-   "start": 31.31,
-   "dur": 2.055,
-   "end": 33.365,
+   "start": 30.22,
+   "dur": 1.685,
+   "end": 31.905,
    "text": "a formal inspection every month,"
   },
   {
    "key": "en3",
-   "start": 33.48,
-   "dur": 2.45,
-   "end": 35.93,
+   "start": 32.02,
+   "dur": 1.816,
+   "end": 33.836,
    "text": "and an expert inspection every year."
   },
   {
    "key": "tag0",
-   "start": 36.63,
-   "dur": 1.451,
-   "end": 38.081,
+   "start": 34.54,
+   "dur": 1.378,
+   "end": 35.918,
    "text": "Every damage gets a tag."
   },
   {
    "key": "green",
-   "start": 38.43,
-   "dur": 1.486,
-   "end": 39.916,
+   "start": 36.27,
+   "dur": 1.619,
+   "end": 37.889,
    "text": "Green: keep watching."
   },
   {
    "key": "amber",
-   "start": 40.27,
-   "dur": 2.287,
-   "end": 42.557,
+   "start": 38.24,
+   "dur": 2.267,
+   "end": 40.507,
    "text": "Amber: repair within four weeks."
   },
   {
    "key": "red",
-   "start": 42.91,
-   "dur": 1.602,
-   "end": 44.512,
+   "start": 40.86,
+   "dur": 2.393,
+   "end": 43.253,
    "text": "Red: unload it, now."
   },
   {
    "key": "yours",
-   "start": 45.31,
-   "dur": 3.936,
-   "end": 49.246,
+   "start": 44.05,
+   "dur": 4.32,
+   "end": 48.37,
    "text": "After handover, the responsibility is yours, not the rack maker's."
   },
   {
    "key": "record",
-   "start": 49.7,
-   "dur": 2.461,
-   "end": 52.161,
+   "start": 48.82,
+   "dur": 2.723,
+   "end": 51.543,
    "text": "And with no inspection record, there's no proof."
   },
   {
    "key": "r1",
-   "start": 52.96,
-   "dur": 1.765,
-   "end": 54.725,
+   "start": 52.34,
+   "dur": 1.601,
+   "end": 53.941,
    "text": "RAMS inspects every rack,"
   },
   {
    "key": "r2",
-   "start": 54.82,
-   "dur": 1.509,
-   "end": 56.329,
+   "start": 54.04,
+   "dur": 1.294,
+   "end": 55.334,
    "text": "tags every finding,"
   },
   {
    "key": "r3",
-   "start": 56.43,
-   "dur": 1.416,
-   "end": 57.846,
+   "start": 55.43,
+   "dur": 1.3,
+   "end": 56.73,
    "text": "tracks every repair,"
   },
   {
    "key": "r4",
-   "start": 57.95,
-   "dur": 1.347,
-   "end": 59.297,
+   "start": 56.83,
+   "dur": 1.546,
+   "end": 58.376,
    "text": "and keeps it all on record."
   },
   {
    "key": "end1",
-   "start": 60.2,
-   "dur": 2.695,
-   "end": 62.895,
+   "start": 59.28,
+   "dur": 2.431,
+   "end": 61.711,
    "text": "Certified once. Safe every day."
   },
   {
    "key": "end2",
-   "start": 63.4,
-   "dur": 2.403,
-   "end": 65.803,
+   "start": 62.21,
+   "dur": 2.247,
+   "end": 64.457,
    "text": "Book a rack audit at rams dot digital."
   }
  ]
