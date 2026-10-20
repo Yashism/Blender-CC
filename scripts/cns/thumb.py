@@ -68,7 +68,7 @@ def card(h, rot):
     return out
 
 
-def ring(img, to_px, s, label):
+def ring(img, to_px, s, label, below=False):
     """A marker-pen red ring around the damage, with a label chip."""
     lay = P.layer(img.size)
     d = ImageDraw.Draw(lay)
@@ -76,7 +76,7 @@ def ring(img, to_px, s, label):
     x1, y1 = to_px(RING[2], RING[3])
     for dx, dy, w in ((0, 0, 9), (5, -4, 5)):
         d.ellipse((x0 + dx, y0 + dy, x1 + dx, y1 - dy), outline=(*RED, 255), width=max(2, int(w * s)))
-    P.chip(d, x0 + (x1 - x0) * 0.08, y0 - 52 * s, label, RED, s, 1.0, 24)
+    P.chip(d, x0 + (x1 - x0) * 0.08, y1 + 14 * s if below else y0 - 52 * s, label, RED, s, 1.0, 24)
     P.shadowed(img, lay, 6, 0.5)
 
 
@@ -138,7 +138,7 @@ def thumb_1x1(still):
     img = P.grade(bg).convert("RGBA")
     shade(img, (0, 0, W, H * 0.45), 0.88, 0.0, axis="y")
     shade(img, (0, H * 0.72, W, H), 0.0, 0.6, axis="y")
-    ring(img, to_px, s, "183 DAYS LATER")
+    ring(img, to_px, s, "183 DAYS LATER", below=True)
     c = card(int(H * 0.42), 6)
     img.alpha_composite(c, (int(-W * 0.03), int(H - c.height + H * 0.06)))
     lay = P.layer((W, H))
