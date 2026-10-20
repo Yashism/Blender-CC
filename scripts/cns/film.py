@@ -2,7 +2,9 @@
 anchors.jsonl (screen positions of the tags, the certificate date) for post.
 
     blender -b --factory-startup -P scripts/cns/film.py -- [--res 640x360] [--samples 16] [--only s01_cert,...] [--gpu]
-        [--step 1] [--frames 1,40] [--out renders/cns/shots]
+        [--step 1] [--frames 1,40] [--out renders/cns/shots] [--shard 0/2] [--resume]
+
+--shard i/n renders every n-th frame starting at i (one process per GPU); --resume skips frames already on disk.
 """
 import json
 import math
@@ -32,9 +34,10 @@ NO_SHOW = ("s05_snap_hold", "s08_yours")                       # built in post f
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     o = dict(res="640x360", samples="16", bounces="5", step="1", only=None, out=os.path.join(ROOT, "renders", "cns", "shots"))
-    if "--gpu" in a:
-        o["gpu"] = True
-        a = [v for v in a if v != "--gpu"]
+    for flag in ("gpu", "resume"):
+        if "--" + flag in a:
+            o[flag] = True
+            a = [v for v in a if v != "--" + flag]
     for i in range(0, len(a) - 1, 2):
         o[a[i].lstrip("-")] = a[i + 1]
     o["res"] = tuple(int(v) for v in o["res"].split("x"))
@@ -265,6 +268,8 @@ def main():
     scn.view_settings.look = "AgX - Medium High Contrast"
     if o.get("gpu"):
         STU.use_gpu()
+        scn.cycles.denoising_use_gpu = True
+    si, sn = (int(v) for v in o.get("shard", "0/1").split("/"))
     t0 = time.time()
     sets = ST.Sets()
     film = Film(sets)
@@ -277,7 +282,7 @@ def main():
         n = 1 if key == "s05_snap" else int(round((b - a) * T.FPS))
         out = os.path.join(o["out"], key)
         os.makedirs(out, exist_ok=True)
-        af = open(os.path.join(out, "anchors.jsonl"), "w")
+        af = open(os.path.join(out, "anchors.jsonl" if sn == 1 else f"anchors_{si}.jsonl"), "a" if o.get("resume") else "w")
         film.twin(key == "s09_twin")
         film.show_inspector(key == "s06_en")
         office = key in ("s01_cert", "s04_cert", "s05_snap")
@@ -285,6 +290,7 @@ def main():
             L_.data.energy *= 1.0
         ts = time.time()
         fr = [int(v) for v in o["frames"].split(",")] if o.get("frames") else range(1, n + 1, int(o["step"]))
+        fr = [f for f in fr if (f - 1) % sn == si]
         for f in fr:
             t = (f - 1) / T.FPS
             scn.frame_set(f)
@@ -295,7 +301,8 @@ def main():
                 sets.office_lights[0].data.energy = 260.0
             bpy.context.view_layer.update()
             scn.render.filepath = os.path.join(out, f"f_{f:04d}.png")
-            bpy.ops.render.render(write_still=True)
+            if not (o.get("resume") and os.path.exists(scn.render.filepath)):
+                bpy.ops.render.render(write_still=True)
             rec = dict(f=f, pts={})
             for k_, tg in sets.tags.items():
                 p = tg["root"].matrix_world.translation + Vector((0, 0, -0.07))

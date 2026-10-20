@@ -41,3 +41,4 @@ renders/cns/shots/
 renders/cns/comp/
 renders/cns/vo/*.wav
 renders/cns/temp_*.wav
+dist/

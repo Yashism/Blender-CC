@@ -91,8 +91,11 @@ def source(shot, f, size):
 
 def anc(shot, f):
     if shot not in _ANC:
-        p = os.path.join(SRC, shot, "anchors.jsonl")
-        _ANC[shot] = {json.loads(l)["f"]: json.loads(l) for l in open(p)} if os.path.exists(p) else {}
+        d = os.path.join(SRC, shot)                       # anchors.jsonl, or anchors_<i>.jsonl from sharded renders
+        _ANC[shot] = {}
+        for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            if n.startswith("anchors") and n.endswith(".jsonl"):
+                _ANC[shot].update({json.loads(l)["f"]: json.loads(l) for l in open(os.path.join(d, n)) if l.strip()})
     recs = _ANC[shot]
     if not recs:
         return None
