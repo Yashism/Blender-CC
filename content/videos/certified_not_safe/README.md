@@ -13,7 +13,7 @@ watch muted. Square and 9:16 cuts can follow.
 | `renders/cns/storyboard.jpg` | One still per beat |
 | `scripts/cns/vo.py` | The voice-over script and timing (Piper TTS); writes `renders/cns/vo/vo_timing.json` |
 | `scripts/cns/cert.py` | The generic certificate prop (no real company, inspector or logo) |
-| `scripts/cns/set.py`, `film.py` | Blender sets and shots |
+| `scripts/cns/set.py`, `film.py` | Blender sets and shots. The warehouse is the Bolt series set (`scripts/builders/set_aisle4.py`) with the hero rack parts rebuilt for damage |
 | `scripts/cns/post.py` | Overlays, captions, sound bed, encode |
 
 ## Beats
@@ -28,7 +28,7 @@ watch muted. Square and 9:16 cuts can follow.
 | 27–36 | Inspector walks the aisle | That's why EN 15635 asks for checks every week, a formal inspection every month, and an expert inspection every year. | WEEKLY / MONTHLY / YEARLY cards |
 | 36–45 | Tags on the damaged bays | Every damage gets a tag. Green: keep watching. Amber: repair within four weeks. Red: unload it, now. | RAG labels tracked to the tags |
 | 45–53 | Graphic | After handover, the responsibility is yours, not the rack maker's. And with no inspection record, there's no proof. | Rack maker → YOU; insurance claim card, NO PROOF stamp |
-| 53–60 | Digital-twin view of the repaired aisle | RAMS inspects every rack, tags every finding, tracks every repair, and keeps it all on record. | Checklist builds; all tags green |
+| 53–60 | Digital twin: the aisle in black-and-white clay | RAMS inspects every rack, tags every finding, tracks every repair, and keeps it all on record. | The damaged uprights, beams and brace light up red / amber / green, then turn green and straighten as they are repaired; checklist builds |
 | 60–67 | End card | Certified once. Safe every day. Book a rack audit at rams dot digital. | CTA pill, free checklist line, logo |
 
 ## Fact check (keep the claims this narrow)
