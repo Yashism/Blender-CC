@@ -318,4 +318,5 @@ def main():
         print(f"[cns] {key}: {n} frames in {time.time() - ts:.0f}s", flush=True)
 
 
-main()
+if __name__ == "__main__":
+    main()
