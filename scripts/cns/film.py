@@ -2,7 +2,7 @@
 anchors.jsonl (screen positions of the tags, the certificate date) for post.
 
     blender -b --factory-startup -P scripts/cns/film.py -- [--res 640x360] [--samples 16] [--only s01_cert,...] [--gpu]
-        [--step 1] [--out renders/cns/shots]
+        [--step 1] [--frames 1,40] [--out renders/cns/shots]
 """
 import json
 import math
@@ -21,6 +21,8 @@ from mathutils import Vector  # noqa: E402
 from cns import set as ST  # noqa: E402
 from cns import timeline as T  # noqa: E402
 from oai import studio as STU  # noqa: E402
+
+HX, F_N = ST.HX, ST.FACE_N
 
 DAMAGE_ALL = dict(dent=1.0, scrape=1.0, bend=1.0, sag=1.0, lock=1.0, heavy=1.0)
 TAGS_ALL = {"red": 1.0, "amber": 1.0, "green": 1.0}
@@ -101,33 +103,45 @@ class Film:
         self.people_coll.hide_render = not on
 
     def twin(self, on):
-        """The Digital Twin look: everything white clay except the tags (which glow)."""
+        """The Digital Twin look: black and white. Everything white clay on black; the damaged parts carry their own
+        materials (Sets.rag_mats) so they can light up red / amber / green."""
+        S = self.S
         if self.clay is None:
             m = bpy.data.materials.new("cns_clay")
             m.use_nodes = True
             b = m.node_tree.nodes["Principled BSDF"]
-            b.inputs["Base Color"].default_value = (0.6, 0.65, 0.72, 1)
-            b.inputs["Roughness"].default_value = 0.65
+            b.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1)
+            b.inputs["Roughness"].default_value = 0.7
             self.clay = m
-        for o in bpy.data.objects:
-            if o.type != "MESH" or o.name.startswith(("tag_", "cns_")):
+            m = bpy.data.materials.new("cns_clay_floor")
+            m.use_nodes = True
+            b = m.node_tree.nodes["Principled BSDF"]
+            b.inputs["Base Color"].default_value = (0.012, 0.012, 0.014, 1)
+            b.inputs["Roughness"].default_value = 0.5
+            self.clay_floor = m
+        rag = {o.name: S.rag_mats[k] for k, obs in S.hero_parts.items() for o in obs}
+        floor = ("Set_floor", "Set_walkway", "Set_zebra", "Set_stop_lines", "Set_lane_marks")
+        for o in bpy.data.objects:                  # materials live on the (shared) mesh data: save per datablock
+            if o.type not in ("MESH", "FONT") or o.name.startswith("tag_"):
                 continue
+            key = (o.type, o.data.name)
             if on:
-                if o.name not in self.saved:
-                    self.saved[o.name] = [s.material for s in o.material_slots]
-                for s in o.material_slots:
-                    s.material = self.clay
-            elif o.name in self.saved:
-                for s, m in zip(o.material_slots, self.saved[o.name]):
-                    s.material = m
+                if key not in self.saved:
+                    self.saved[key] = [sl.material for sl in o.material_slots]
+                for sl in o.material_slots:
+                    sl.material = rag.get(o.name, self.clay_floor if o.name.startswith(floor) else self.clay)
+            elif key in self.saved:
+                for sl, m in zip(o.material_slots, self.saved[key]):
+                    sl.material = m
         if not on:
             self.saved = {}
         for o in bpy.data.objects:                                   # the twin floats: no building around it
-            if o.name.startswith(("wall_", "roof", "hb", "off_", "cert", "desk", "monitor", "binder", "pot", "leaf", "clock")):
+            if o.name.startswith(ST.TWIN_HIDE) or o.name.startswith("tag_"):
                 o.hide_render = on
-        bg = self.S.world.node_tree.nodes["Background"]
-        bg.inputs[0].default_value = (0.012, 0.014, 0.018, 1) if on else (0.2, 0.21, 0.23, 1)
+        bg = S.world.node_tree.nodes["Background"]
+        bg.inputs[0].default_value = (0.004, 0.004, 0.005, 1) if on else (0.2, 0.21, 0.23, 1)
         bg.inputs[1].default_value = 1.0 if on else 0.25
+        S.light_mode(on)
 
     # ------------------------------------------------------------------ shots (t = seconds into the shot, ta = film time)
     def s01_cert(self, t, ta):
@@ -151,32 +165,35 @@ class Film:
         t_imp = 0.95
         if t < t_imp:
             u = t / t_imp
-            x, y = lerp(-1.5, 0.785, u), lerp(0.85, 1.2, u * u)
+            x, y = lerp(-1.5, 0.785, u), lerp(0.72, 1.07, u * u)
         else:
             back = min(1.0, (t - t_imp) / 0.25)
-            x, y = 0.785 - 0.06 * math.sin(back * math.pi * 0.5), 1.2
+            x, y = 0.785 - 0.06 * math.sin(back * math.pi * 0.5), 1.07
         dent = min(1.0, max(0.0, (t - t_imp) / 0.08))
         self.S.update(dict(fk=(x, y, math.pi), dent=dent, heavy=0.0, tags={"red": pop(t, t_imp + 0.55)}))
-        loc = Vector((3.9, 0.55, 0.52)) + shake(t, t_imp, 0.02, 9)
-        return self.camera(loc, (2.62, 1.8, 0.48), 30, 4.0, (2.7, 1.8, 0.45))
+        loc = Vector((3.9, 0.45, 0.52)) + shake(t, t_imp, 0.02, 9)
+        return self.camera(loc, (2.62, F_N, 0.48), 30, 4.0, (HX[0], F_N, 0.45))
 
     def s03b_brace(self, t, ta):
         bend = T.ease((t - 0.35) / 0.3)
         self.S.update(dict(dent=1.0, bend=bend, heavy=0.0, tags={"red": 1.0, "amber": pop(t, 0.8)}))
-        loc = Vector((6.4, 0.45, 1.35)) + shake(t, 0.35, 0.01, 10)
-        return self.camera(loc, (5.4, 2.35, 1.45), 36, 5.6, (5.4, 2.35, 1.5))
+        bm = self.S.brace_mid
+        loc = Vector((HX[1] + 0.9, 0.5, 0.62)) + shake(t, 0.35, 0.01, 10)
+        return self.camera(loc, bm, 36, 5.6, bm)
 
     def s03c_lock(self, t, ta):
         lock = max(0.0, min(1.0, (t - 0.55) / 0.6))
         self.S.update(dict(dent=1.0, bend=1.0, lock=lock, heavy=0.0, tags=dict(red=1.0, amber=1.0)))
-        return self.camera((3.12, 1.28, 2.0), (2.76, 1.82, 1.85), 55, 4.0, (2.76, 1.82, 1.86))
+        lk = self.S.lock_home
+        return self.camera(lk + Vector((0.36, -0.54, 0.15)), lk, 55, 4.0, lk)
 
     def s03d_load(self, t, ta):
         heavy = T.ease((t - 0.15) / 0.7)
         sag = T.ease((t - 1.0) / 0.9)
         self.S.update(dict(dent=1.0, bend=1.0, lock=1.0, heavy=heavy, sag=sag, tags=dict(red=1.0, amber=1.0)))
-        loc = Vector(keys([(0, (4.05, 0.25, 0.8)), (2.5, (4.05, 0.45, 0.85))], t)) + shake(t, 1.0, 0.004, 6)
-        return self.camera(loc, (4.05, 2.1, 1.9), 26)
+        xc = (ST.BAY_X0 + ST.BAY_X1) / 2
+        loc = Vector(keys([(0, (xc, 0.2, 0.45)), (2.5, (xc, 0.4, 0.5))], t)) + shake(t, 1.0, 0.004, 6)
+        return self.camera(loc, (xc, 1.9, 1.25), 26)
 
     def s04_cert(self, t, ta):
         S = self.S
@@ -201,12 +218,12 @@ class Film:
             "green": self._glow(ta, "green"), "amber": self._glow(ta, "amber"), "red": self._glow(ta, "red")}))
         a = T.shot("s07_tags")[1]
         g, am, r = (T.V(k)[0] - a for k in ("green", "amber", "red"))
-        kf = [(0.0, (9.7,)), (g - 0.1, (8.75,)), (am - 0.7, (8.72,)), (am - 0.05, (6.05,)),     # hold on each tag
-              (r - 0.7, (6.02,)), (r - 0.05, (3.35,)), (T.shot("s07_tags")[2] - a, (3.1,))]     # while it's read
-        x = keys(kf, t)[0]
-        loc = (x, 0.42, 1.38)
-        tgt = (x - 0.62, 1.8, 1.3)
-        return self.camera(loc, tgt, 38, 3.2, (x - 0.62, 1.8, 1.3))
+        o = 0.65
+        kf = [(0.0, (HX[2] + 1.6,)), (g - 0.1, (HX[2] + o,)), (am - 0.7, (HX[2] + o - 0.03,)), (am - 0.05, (HX[1] + o,)),
+              (r - 0.7, (HX[1] + o - 0.03,)), (r - 0.05, (HX[0] + o,)), (T.shot("s07_tags")[2] - a, (HX[0] + o - 0.25,))]
+        x = keys(kf, t)[0]                                                        # hold on each tag while it's read
+        tgt = (x - 0.62, F_N, 1.36)
+        return self.camera((x, 0.36, 1.46), tgt, 38, 3.2, tgt)
 
     @staticmethod
     def _glow(ta, key):
@@ -214,9 +231,18 @@ class Film:
         return T.ease((ta - s + 0.1) / 0.3) * (1.0 - 0.6 * T.ease((ta - e - 0.2) / 0.6))
 
     def s09_twin(self, t, ta):
-        self.S.update(dict(DAMAGE_ALL, tags=TAGS_ALL, tag_glow={"red": 1.0, "amber": 1.0, "green": 1.0}))
-        loc = keys([(0, (14.5, -2.8, 9.2)), (7, (12.0, -3.3, 7.6))], t)
-        return self.camera(loc, (4.2, 1.9, 1.0), 30)
+        on = T.ease((ta - T.V("r2")[0] + 0.1) / 0.5)                        # "tags every finding": parts light up
+        fix = [T.ease((ta - T.V("r3")[0] - d) / 0.5) for d in (0.0, 0.25, 0.5)]   # "tracks every repair": go green
+        G = ST.TAG_COL["green"]
+
+        def col(c, f):
+            return tuple(a + (b - a) * f for a, b in zip(c, G))
+        rag = {"red": (col(ST.TAG_COL["red"], fix[0]), on), "beam": (col(ST.TAG_COL["red"], fix[1]), on),
+               "amber": (col(ST.TAG_COL["amber"], fix[2]), on), "green": (G, on)}
+        self.S.update(dict(dent=1 - fix[0], scrape=1.0, bend=1 - fix[2], sag=1 - fix[1], lock=1.0 if fix[1] < 0.5 else 0.0,
+                           heavy=1.0 - fix[1], rag=rag))
+        loc = keys([(0, (10.6, -4.6, 5.6)), (7, (9.4, -3.9, 4.9))], t)
+        return self.camera(loc, (5.8, 2.3, 1.2), 28)
 
     def s10_end(self, t, ta):
         self.S.update(dict(dent=0.0, scrape=0.0, bend=0.0, sag=0.0, lock=0.0, heavy=0.0,
@@ -255,12 +281,11 @@ def main():
         film.twin(key == "s09_twin")
         film.show_inspector(key == "s06_en")
         office = key in ("s01_cert", "s04_cert", "s05_snap")
-        for L_ in sets.lights:
-            L_.data.energy = 360.0 if key == "s09_twin" else 900.0            # white clay blows out at full power
         for L_ in sets.office_lights:
             L_.data.energy *= 1.0
         ts = time.time()
-        for f in range(1, n + 1, int(o["step"])):
+        fr = [int(v) for v in o["frames"].split(",")] if o.get("frames") else range(1, n + 1, int(o["step"]))
+        for f in fr:
             t = (f - 1) / T.FPS
             scn.frame_set(f)
             cam = getattr(film, key)(t, a + t)
@@ -276,7 +301,8 @@ def main():
                 p = tg["root"].matrix_world.translation + Vector((0, 0, -0.07))
                 v = world_to_camera_view(scn, cam, p)
                 rec["pts"][k_] = [round(v.x, 4), round(1 - v.y, 4), round(v.z, 3)]
-            for k_, p in (("cert_date", sets.cert_date), ("cert", sets.cert_centre)):
+            for k_, p in (("cert_date", sets.cert_date), ("cert", sets.cert_centre), ("beam", sets.beam_centre),
+                          ("brace", sets.brace_mid)):
                 v = world_to_camera_view(scn, cam, p)
                 rec["pts"][k_] = [round(v.x, 4), round(1 - v.y, 4), round(v.z, 3)]
             af.write(json.dumps(rec) + "\n")

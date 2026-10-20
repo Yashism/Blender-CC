@@ -1,12 +1,13 @@
 """Certified != Safe: the sets.
 
-AISLE (origin): two rack lines facing each other across a 3.6 m aisle, five bays each (BAY 2.7 m, beams at 1.9 / 3.8 /
-5.7 m), loaded pallets, high-bays. The north line's first frames are real geometry (not instances) so they can take
-damage, driven by shape keys:
-  frame x = 2.7  aisle-side upright DENTED by a forklift (RED tag)
-  frame x = 5.4  a BRACE BENT in the frame                 (AMBER tag)
-  frame x = 8.1  a small scrape                             (GREEN tag)
-  bay 2.7..5.4, level 1: the front beam SAGS under an overweight pallet; its BEAM LOCK pops out and falls.
+AISLE: the Bolt series warehouse (builders/set_aisle4.py: felt racks, wire decks, labelled cartons, column guards,
+end-of-aisle boards, floor markings, lamps), turned so its Aisle 4 runs along +X here (the Cross Aisle B corner sits
+just behind x = 0). The north rack line is the set's NW block; its lane face is at y = FACE_N. Three of its frames
+and one bay are cut out of the shared rack mesh and rebuilt as separate objects so they can take damage (shape keys):
+  frame HX[0] = 2.7   aisle-side upright DENTED by a forklift   (RED tag)
+  frame HX[1]         a BRACE BENT in the frame                 (AMBER tag)
+  frame HX[2]         a small scrape above the column guard     (GREEN tag)
+  bay HX[0]..HX[1], level 1: the beams SAG under an overweight drum pallet; the front BEAM LOCK pops out and falls.
 OFFICE (x = -40): a quiet office wall with the framed stability certificate (plain -> stamped SAFE), a desk, a window.
 
 Everything that changes over time is set by Sets.update(state) from film.py.
@@ -18,36 +19,52 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
+from builders import layout_ep05 as LE
+from builders import set_aisle4 as SA
 from lib import geo
+from lib import mats as M
 from rtls import fleet as F
-from rtls import layout as L
 from rtls import mat as RM
-from rtls import props as K
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 ASSETS = os.path.join(ROOT, "assets", "cns")
-AISLE = 3.6
-YN = AISLE / 2 + L.RACK_D / 2          # north rack line centre
-YS = -YN
-FACE_N = AISLE / 2                     # aisle face of the north line (y)
-BEAMS = (1.9, 3.8, 5.7)
-UP_H = 6.2
-UP_W, UP_D = 0.09, 0.075
+UP_W, UP_D = SA.UP_W, SA.UP_D
+UP_H = LE.RACK_HEIGHT
+OX = 2.7 - (LE.RACK_Y0 + SA.FRAME_V[1])          # set y -> film x offset (frame 1 of the NW block lands on x = 2.7)
+HX = [LE.RACK_Y0 + SA.FRAME_V[k] + OX for k in (1, 2, 3)]
+Y_UP = LE.RACK_X0 + SA.UP_U[0]                    # aisle-side upright centre line (y)
+Y_UP2 = LE.RACK_X0 + SA.UP_U[1]                   # its row's back upright
+FACE_N = Y_UP - UP_D / 2                          # aisle face of the uprights
+BEAMS = tuple(SA.BEAM_TOPS)
+B1 = BEAMS[0]
+BAY_X0, BAY_X1 = HX[0] + UP_W / 2, HX[1] - UP_W / 2
 OFFICE = Vector((-40.0, 0.0, 0.0))
 TAG_COL = {"red": (0.85, 0.06, 0.04), "amber": (1.0, 0.55, 0.02), "green": (0.1, 0.62, 0.22)}
+TWIN_HIDE = ("Set_walls", "Set_ceiling", "Set_truss", "Set_lamp", "Set_skylight", "Set_sign", "Set_exit",
+             "off_", "cert", "desk", "monitor", "binder", "pot", "leaf", "clock", "Set_NE_")    # NE = the rack line across the aisle
 
 
-def _subdivided_box(name, size, loc, cuts_z=0, cuts_x=0, mat=None, coll=None):
+def set_to_film(co):
+    """set_aisle4 world (x, y, z) -> film world: rotate -90 deg about Z, shift x by OX."""
+    return Vector((co[1] + OX, -co[0], co[2]))
+
+
+def _sliced_box(name, size, loc, axis=2, n=0, bevel=0.0, mat=None, coll=None, extra=None):
+    """Bevelled box with n evenly spaced edge loops along axis (so shape keys can bend it). extra(bm) adds parts."""
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
     bmesh.ops.scale(bm, vec=Vector(size), verts=bm.verts)
-    if cuts_z:
-        edges = [e for e in bm.edges if abs((e.verts[0].co - e.verts[1].co).normalized().z) > 0.99]
-        bmesh.ops.subdivide_edges(bm, edges=edges, cuts=cuts_z, use_grid_fill=True)
-    if cuts_x:
-        edges = [e for e in bm.edges if abs((e.verts[0].co - e.verts[1].co).normalized().x) > 0.99]
-        bmesh.ops.subdivide_edges(bm, edges=edges, cuts=cuts_x, use_grid_fill=True)
+    if bevel:
+        bmesh.ops.bevel(bm, geom=list(bm.edges), offset=bevel, offset_type="OFFSET", segments=1, profile=0.5,
+                        affect="EDGES", clamp_overlap=True)
+    no = Vector([1.0 if i == axis else 0.0 for i in range(3)])
+    half = size[axis] / 2 - bevel - 1e-4
+    for i in range(1, n):
+        c = -half + 2 * half * i / n
+        bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), plane_co=no * c, plane_no=no)
+    if extra:
+        extra(bm)
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
@@ -57,6 +74,33 @@ def _subdivided_box(name, size, loc, cuts_z=0, cuts_x=0, mat=None, coll=None):
     ob.location = loc
     (coll or bpy.context.scene.collection).objects.link(ob)
     return ob
+
+
+def _rod(name, a, b, r, n, mat, coll, segs=8):
+    """Round bar a -> b with n rings along it (local z runs along the bar, origin at its middle)."""
+    a, b = Vector(a), Vector(b)
+    d = b - a
+    ln = d.length
+    bm = bmesh.new()
+    rings = []
+    for i in range(n + 1):
+        z = -ln / 2 + ln * i / n
+        rings.append([bm.verts.new((math.cos(2 * math.pi * k / segs) * r, math.sin(2 * math.pi * k / segs) * r, z))
+                      for k in range(segs)])
+    for ra, rb in zip(rings, rings[1:]):
+        for k in range(segs):
+            f = bm.faces.new((ra[k], ra[(k + 1) % segs], rb[(k + 1) % segs], rb[k]))
+            f.smooth = True
+    bm.faces.new(list(reversed(rings[0])))
+    bm.faces.new(rings[-1])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(mat)
+    ob = bpy.data.objects.new(name, me)
+    coll.objects.link(ob)
+    ob.matrix_world = Matrix.Translation((a + b) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4()
+    return ob, ln
 
 
 def _shape(ob, name, fn):
@@ -81,64 +125,32 @@ def _emit_mat(name, color, s=0.0, base=None):
     return m
 
 
+def _bump(z, centre, width):
+    u = (z - centre) / width
+    return math.exp(-u * u * 3.0)
+
+
 class Sets:
     def __init__(self):
         self.P = RM.build()
         self.coll = geo.collection("CNS")
-        self.mats = {}
+        self.set_coll = geo.collection("CNS_SET")
         self._aisle()
         self._hero()
         self._tags()
+        self._lights()
         self._forklift()
         self._office()
         F.finish_sources()
 
-    # ------------------------------------------------------------------ the aisle
+    # ------------------------------------------------------------------ the aisle: the Bolt series warehouse
     def _aisle(self):
-        P, c = self.P, self.coll
-        geo.box("floor", (60, 30, 0.2), loc=(6, 0, -0.1), mat=P["floor"], coll=c, bevel=0)
-        for y, nm in ((YN + 3.2, "n"), (YS - 3.2, "s")):
-            geo.box(f"wall_{nm}", (60, 0.25, 10), loc=(6, y, 5), mat=P["wall"], coll=c, bevel=0)
-        geo.box("wall_e", (0.25, 30, 10), loc=(22, 0, 5), mat=P["wall"], coll=c, bevel=0)
-        geo.box("wall_w", (0.25, 30, 10), loc=(-10, 0, 5), mat=P["wall"], coll=c, bevel=0)
-        geo.box("roof", (60, 30, 0.2), loc=(6, 0, 10.1), mat=P["roof"], coll=c, bevel=0)
-        for x0, x1, y in ((-2, 16, FACE_N - 0.35), (-2, 16, -FACE_N + 0.35)):     # aisle edge lines
-            geo.box("aisle_line", (x1 - x0, 0.1, 0.006), loc=((x0 + x1) / 2, y, 0.003), mat=P["paint_yellow"], coll=c,
-                    bevel=0)
-        frame = K.rack_frame_src(P, UP_H, L.RACK_D)
-        beams = K.rack_beams_src(P, L.RACK_D, BEAMS)
-        loads = K.load_library(P)
-        self.loads = loads
-        import random
-        rng = random.Random(21)
-        for yc in (YN, YS):
-            for i in range(7):
-                x = -2.7 + i * L.BAY
-                hero_frame = yc == YN and i in (2, 3, 4)            # x = 2.7, 5.4, 8.1 are built by _hero
-                if not hero_frame:
-                    K.instance("rk_frame", frame, c, (x, yc, 0))
-                if i < 6:
-                    if not (yc == YN and i == 2):                    # the hero bay's beams are built by _hero
-                        K.instance("rk_beams", beams, c, (x, yc, 0))
-                    for z in (0.0,) + BEAMS[:-1]:
-                        if yc == YN and i == 2 and z == BEAMS[0]:
-                            continue                                 # the overweight pallet goes here
-                        for k in (0, 1):
-                            if rng.random() < 0.85:
-                                K.instance("rk_load", rng.choice(loads), c, (x + 0.68 + k * 1.34, yc, z), math.pi / 2,
-                                           scale=0.95)
-        hb = K.high_bay_src(P)
-        for x in range(-6, 20, 5):
-            for y in (-1.0, 1.0):
-                K.instance("hb", hb, c, (x, y, 9.0))
-        self.lights = []
-        for x in (-1.0, 5.0, 11.0):
-            ld = bpy.data.lights.new("aisle_light", "AREA")
-            ld.shape, ld.size, ld.size_y, ld.energy, ld.color = "RECTANGLE", 5.0, 2.5, 900.0, (1.0, 0.95, 0.88)
-            o = bpy.data.objects.new("aisle_light", ld)
-            c.objects.link(o)
-            o.location = (x, 0, 8.6)
-            self.lights.append(o)
+        self.root = SA.build(self.set_coll)
+        self.root.rotation_euler = (0, 0, -math.pi / 2)
+        self.root.location = (OX, 0, 0)
+        bpy.context.view_layer.update()
+        self.m = {k: bpy.data.materials["Set_" + n] for k, n in (
+            ("blue", "rack_blue"), ("orange", "rack_orange"), ("deck", "wire_deck"))}
         w = bpy.data.worlds.new("cns_world")
         bpy.context.scene.world = w
         w.use_nodes = True
@@ -146,84 +158,136 @@ class Sets:
         w.node_tree.nodes["Background"].inputs[1].default_value = 0.25
         self.world = w
 
-    # ------------------------------------------------------------------ the hero bay (real geometry, damage)
-    def _upright(self, name, x, y):
-        ob = _subdivided_box(name, (UP_W, UP_D, UP_H), (x, y, UP_H / 2), cuts_z=60, mat=self.P["rack_up"], coll=self.coll)
+    def _cut(self, ob, mats, test):
+        """Delete the faces of ob (with one of mats) whose film-space centroid passes test(Vector)."""
+        idx = {i for i, m in enumerate(ob.data.materials) if m in mats}
+        mw = ob.matrix_world
+        bm = bmesh.new()
+        bm.from_mesh(ob.data)
+        dead = [f for f in bm.faces if f.material_index in idx and test(mw @ f.calc_center_median())]
+        bmesh.ops.delete(bm, geom=dead, context="FACES")
+        bm.to_mesh(ob.data)
+        bm.free()
+        return len(dead)
+
+    # ------------------------------------------------------------------ the hero frames and bay (real geometry, damage)
+    def _hero(self):
+        c, m = self.coll, self.m
+        fr = bpy.data.objects["Set_NW_frame"]
+        fr.data = fr.data.copy()                                      # the other blocks keep the intact rack
+        fr.data.name = "Set_NW_frame_cut"
+        # film space of the set: the root carries the turn, so matrix_world already maps set -> film
+        ups = [(HX[0], "dent"), (HX[2], "scrape")]
+        n = self._cut(fr, {m["blue"]}, lambda p: any(abs(p.x - x) < 0.05 for x, _ in ups) and abs(p.y - Y_UP) < 0.04
+                      and 0.02 < p.z < UP_H + 0.05)
+        ya, yb, za, zb = Y_UP + UP_D / 2, Y_UP2 - UP_D / 2, 0.18, 0.18 + 0.62        # the lowest diagonal
+        A, B = Vector((HX[1], ya, za)), Vector((HX[1], yb, zb))
+
+        def on_brace(p, a=A, b=B):
+            d = b - a
+            t = (p - a).dot(d) / d.length_squared
+            return 0.03 < t < 0.97 and (p - (a + d * t)).length < 0.017
+        nb = self._cut(fr, {m["blue"]}, on_brace)
+        if nb == 0:                                                   # zig-zag runs the other way in this frame
+            A, B = Vector((HX[1], ya, zb)), Vector((HX[1], yb, za))
+            nb = self._cut(fr, {m["blue"]}, lambda p: on_brace(p, A, B))
+        nbay = self._cut(fr, {m["orange"], m["deck"]}, lambda p: BAY_X0 + 0.01 < p.x < BAY_X1 - 0.01
+                         and Y_UP - 0.04 < p.y < Y_UP2 + 0.04 and B1 - 0.14 < p.z < B1 + 0.04)
+        print(f"[cns] hero cut: uprights {n}, brace {nb}, bay {nbay} faces", flush=True)
+        self.hero = {}
+        for x, key in ups:
+            self.hero[key] = _sliced_box(f"cns_up_{key}", (UP_W, UP_D, UP_H - 0.01), (x, Y_UP, UP_H / 2), 2, 70, 0.008,
+                                         m["blue"], c)
+        h0 = UP_H / 2
+        # 1) the dent: low on the aisle-side upright where a forklift's counterweight hits; pushed into the rack
+        self.dent = _shape(self.hero["dent"], "dent", lambda co: Vector((
+            0.010 * math.sin(co.x * 45) * _bump(co.z + h0, 0.42, 0.22),
+            0.03 * _bump(co.z + h0, 0.42, 0.2) * (1.0 if co.y < 0 else 0.55), 0.0)))
+        self.scrape = _shape(self.hero["scrape"], "dent", lambda co: Vector((
+            0.0, 0.005 * _bump(co.z + h0, 0.6, 0.12) * (1.0 if co.y < 0 else 0.4), 0.0)))
+        # 2) the brace in frame HX[1] that gets bent out of the frame plane
+        brace, ln = _rod("cns_brace", A, B, 0.012, 24, m["blue"], c)
+        self.hero["brace"] = brace
+        self.bend = _shape(brace, "bent", lambda co: Vector((0.09 * math.cos(math.pi * co.z / ln), 0, 0)))
+        self.brace_mid = (A + B) / 2
+        # 3) the hero bay's level-1 beams and wire deck: sag under the drum pallet
+        span = BAY_X1 - BAY_X0
+        xc = (BAY_X0 + BAY_X1) / 2
+        sag = lambda co, d=0.07: Vector((0, 0, -d * math.cos(math.pi * co.x / span)))     # noqa: E731
+        self.beams, self.sags = [], []
+        for side, yy in (("front", Y_UP), ("back", Y_UP2)):
+            bmo = _sliced_box(f"cns_beam_{side}", (span, SA.BEAM_T, SA.BEAM_H), (xc, yy, B1 - SA.BEAM_H / 2), 0, 36,
+                              0.008, m["orange"], c)
+            self.beams.append(bmo)
+            self.sags.append(_shape(bmo, "sag", sag if side == "front" else (lambda co: sag(co, 0.06))))
+        dw = Y_UP2 - Y_UP - SA.BEAM_T
+
+        def channels(bm):
+            for f in (-0.3, 0.0, 0.3):
+                t = bmesh.new()
+                bmesh.ops.create_cube(t, size=1.0)
+                bmesh.ops.scale(t, vec=(0.03, dw, 0.03), verts=t.verts)
+                bmesh.ops.translate(t, vec=(f * span, 0, -0.02), verts=t.verts)
+                me = bpy.data.meshes.new("tmp")
+                t.to_mesh(me)
+                t.free()
+                bm.from_mesh(me)
+                bpy.data.meshes.remove(me)
+        deck = _sliced_box("cns_deck", (span - 0.01, dw, SA.DECK_T), (xc, (Y_UP + Y_UP2) / 2, B1 + SA.DECK_T / 2), 0, 36,
+                           0.003, m["deck"], c, extra=channels)
+        self.sags.append(_shape(deck, "sag", lambda co: sag(co, 0.065)))
+        self.beam_centre = Vector((xc, Y_UP, B1 - 0.1))
+        # the beam lock at the front beam's HX[0] end
+        self.lock = geo.box("cns_beam_lock", (0.014, 0.012, 0.045), loc=(BAY_X0 + 0.014, Y_UP - SA.BEAM_T / 2 - 0.006,
+                            B1 - 0.035), mat=M.plastic("CNS_lock_red", "alert_red", rough=0.4), coll=c, bevel=0.002)
+        self.lock_home = self.lock.location.copy()
+        # the level-1 loads of that bay: slot p0 takes the overweight drum pallet, p1 rides the sag down
+        self.load_p0 = bpy.data.objects["Set_NW_load_A_b1_p0_l1"]
+        self.load_p1 = bpy.data.objects["Set_NW_load_A_b1_p1_l1"]
+        self.load_p0.hide_render = True
+        for n_ in ("Set_NW_load_A_b1_p1_l0", "Set_NW_load_A_b2_p0_l0"):    # empty floor slots either side of the
+            bpy.data.objects[n_].hide_render = True                          # bent brace, so the camera can see it
+        self.load_p1_home = self.load_p1.location.copy()
+        self.heavy = self._drum_pallet(self.load_p0.matrix_world.translation.copy())
+        self.heavy_home = self.heavy.location.copy()
+        self.hero_parts = {"red": [self.hero["dent"]], "beam": self.beams + [deck], "amber": [brace],
+                           "green": [self.hero["scrape"]]}
+
+    def _drum_pallet(self, loc):
+        """Four blue felt drums with white hazard labels on a felt pallet: the load that is too heavy for the beam."""
+        mb = SA.MB()
+        mm = SA._mats()
+        SA._pallet(mb, mm, yaw=math.pi / 2)
+        drum = M.felt("CNS_drum", "#22408C", fiber=70, sheen=0.5, mottle=0.06)
+        rim = M.plastic("CNS_drum_rim", "#1A2F66", rough=0.35)
+        h = SA.HMAX_LEVEL - SA.PALLET_H - 0.03
+        prof = [(0.0, 0.25), (0.02, 0.262), (0.04, 0.262), (0.05, 0.25), (h * 0.33 - 0.01, 0.25), (h * 0.33, 0.258),
+                (h * 0.33 + 0.01, 0.25), (h * 0.66 - 0.01, 0.25), (h * 0.66, 0.258), (h * 0.66 + 0.01, 0.25),
+                (h - 0.05, 0.25), (h - 0.04, 0.262), (h - 0.02, 0.262), (h, 0.245)]
+        for dx in (-0.29, 0.29):
+            for dy in (-0.27, 0.27):
+                z0 = SA.PALLET_H + 0.002
+                mb.lathe(prof, 28, loc=(dx, dy, z0), mats=[rim, rim, rim] + [drum] * 9 + [rim], cap_bottom=True,
+                         cap_top=True)
+                if dy < 0:                                            # hazard labels face the aisle (-y)
+                    mb.box((0.16, 0.004, 0.12), (dx, dy - 0.251, z0 + h * 0.5), mat=mm["label"])
+                    mb.box((0.05, 0.003, 0.05), (dx, dy - 0.254, z0 + h * 0.5 + 0.01), (0, 0.785, 0), mat=mm["red"])
+                mb.lathe([(0.0, 0.04), (0.012, 0.04)], 12, loc=(dx + 0.1, dy + 0.08, z0 + h), mat=rim, cap_top=True)
+        ob = bpy.data.objects.new("cns_heavy_pallet", mb.mesh("cns_heavy_pallet"))
+        self.coll.objects.link(ob)
+        ob.location = loc
         return ob
 
-    def _hero(self):
-        P, c = self.P, self.coll
-        self.hero = {}
-        for x in (2.7, 5.4, 8.1):
-            front = self._upright(f"up_front_{x}", x, FACE_N + UP_D / 2)
-            back = self._upright(f"up_back_{x}", x, FACE_N + L.RACK_D - UP_D / 2)
-            mb = K.MB()
-            zs = [0.15] + [0.15 + i * 0.9 for i in range(1, int((UP_H - 0.3) / 0.9) + 1)]
-            for i, (za, zb) in enumerate(zip(zs, zs[1:])):
-                if x == 5.4 and i == 1:
-                    continue                                          # the hero brace is built separately
-                ya, yb = (FACE_N + 0.05, FACE_N + L.RACK_D - 0.05) if i % 2 == 0 else (FACE_N + L.RACK_D - 0.05, FACE_N + 0.05)
-                mb.bar((x, ya, za), (x, yb, zb), 0.03, 0)
-            mb.done(f"bracing_{x}", [P["galv"]], c)
-            for o in (front, back):
-                o.data.polygons.foreach_set("use_smooth", [False] * len(o.data.polygons))
-                foot = geo.box("footplate", (0.16, 0.14, 0.008), loc=(x, o.location.y, 0.004), mat=P["steel_dark"], coll=c,
-                               bevel=0)
-            self.hero[x] = dict(front=front, back=back)
-        # 1) the dent: aisle-side upright at x = 2.7, low down where a forklift's counterweight hits
-        up = self.hero[2.7]["front"]
-        self.dent = _shape(up, "dent", lambda co: Vector((
-            0.012 * math.sin(co.x * 40) * self._bump(co.z + UP_H / 2, 0.42, 0.22),
-            0.034 * self._bump(co.z + UP_H / 2, 0.42, 0.2) * (1.0 if co.y < 0 else 0.55),
-            0.0)))
-        self.scrape = _shape(self.hero[8.1]["front"], "dent", lambda co: Vector((
-            0.0, 0.006 * self._bump(co.z + UP_H / 2, 0.55, 0.12) * (1.0 if co.y < 0 else 0.4), 0.0)))
-        # 2) the brace at x = 5.4 that gets bent (out of the frame plane)
-        za, zb = 1.05, 1.95
-        a = Vector((5.4, FACE_N + L.RACK_D - 0.05, za))
-        b = Vector((5.4, FACE_N + 0.05, zb))
-        d = b - a
-        brace = _subdivided_box("brace_hero", (0.03, 0.03, d.length), (0, 0, 0), cuts_z=24, mat=P["galv"], coll=c)
-        brace.matrix_world = Matrix.Translation((a + b) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4()
-        L_ = d.length
-        self.bend = _shape(brace, "bent", lambda co: Vector((0.11 * math.sin(math.pi * (co.z / L_ + 0.5)), 0, 0)))
-        # 3) the hero bay's beams (2.7 .. 5.4), level 1 front beam sags; the beam lock at its x = 2.7 end
-        x0, x1 = 2.7 + UP_W / 2, 5.4 - UP_W / 2
-        self.beams = []
-        for z in BEAMS:
-            for side, yy in (("front", FACE_N + 0.05), ("back", FACE_N + L.RACK_D - 0.05)):
-                bmo = _subdivided_box(f"beam_{z}_{side}", (x1 - x0, 0.05, 0.12), ((x0 + x1) / 2, yy, z - 0.06),
-                                      cuts_x=30 if z == BEAMS[0] else 0, mat=P["rack_beam"], coll=c)
-                self.beams.append(bmo)
-                if z == BEAMS[0]:
-                    span = x1 - x0
-                    sk = _shape(bmo, "sag", lambda co, s=span: Vector((0, 0, -0.085 * math.sin(math.pi * (co.x / s + 0.5)))))
-                    if side == "front":
-                        self.sag_front = sk
-                    else:
-                        self.sag_back = sk
-        self.lock = geo.box("beam_lock", (0.014, 0.022, 0.045), loc=(x0 + 0.012, FACE_N + 0.022, BEAMS[0] - 0.05),
-                            mat=_emit_mat("cns_lock_red", (0.8, 0.05, 0.03), 0.0), coll=c, bevel=0.002)
-        self.lock_home = self.lock.location.copy()
-        # the overweight pallet that lands on that level (drums, heavy)
-        self.heavy = K.instance("heavy_pallet", K.load_variant(P, "drums", 901), c, (4.05, YN, BEAMS[0]), math.pi / 2)
-        self.heavy_home = self.heavy.location.copy()
-
-    @staticmethod
-    def _bump(z, centre, width):
-        u = (z - centre) / width
-        return math.exp(-u * u * 3.0)
-
-    # ------------------------------------------------------------------ inspection tags (hang on the uprights)
+    # ------------------------------------------------------------------ inspection tags (card tags tied to the uprights)
     def _tags(self):
         self.tags = {}
-        for key, x in (("red", 2.7), ("amber", 5.4), ("green", 8.1)):
+        for key, x in (("red", HX[0]), ("amber", HX[1]), ("green", HX[2])):
             m = _emit_mat(f"cns_tag_{key}", TAG_COL[key], 0.3)
-            root = geo.empty(f"tag_{key}", (x, FACE_N - 0.004, 1.32), self.coll)
-            card = geo.box(f"tag_{key}_card", (0.085, 0.004, 0.12), loc=(0, -0.004, -0.07), mat=m, coll=self.coll,
+            root = geo.empty(f"tag_{key}", (x, FACE_N - 0.004, 1.42), self.coll)
+            card = geo.box(f"tag_{key}_card", (0.105, 0.004, 0.155), loc=(0, -0.004, -0.095), mat=m, coll=self.coll,
                            bevel=0.004)
             card.parent = root
-            strip = geo.box(f"tag_{key}_label", (0.07, 0.0045, 0.03), loc=(0, -0.0045, -0.05),
+            strip = geo.box(f"tag_{key}_label", (0.085, 0.0045, 0.036), loc=(0, -0.0045, -0.065),
                             mat=self.P["paint_white"], coll=self.coll, bevel=0)
             strip.parent = root
             tie = geo.box(f"tag_{key}_tie", (UP_W + 0.012, UP_D + 0.012, 0.008), loc=(0, UP_D / 2 + 0.004, 0.0),
@@ -231,6 +295,45 @@ class Sets:
             tie.parent = root
             root.scale = (0.001, 0.001, 0.001)
             self.tags[key] = dict(root=root, mat=m)
+        # twin colours for the damaged parts (assigned by Film.twin)
+        self.rag_mats = {k: _emit_mat(f"cns_rag_{k}", (1, 1, 1), 0.0, base=(0.8, 0.8, 0.8)) for k in self.hero_parts}
+
+    # ------------------------------------------------------------------ daylight rig (the warehouse is closed: no sun)
+    def _lights(self):
+        self.lights = []
+
+        def area(name, loc, energy, size, size_y=None, tgt=None, cam=True, col=(1.0, 0.95, 0.88)):
+            ld = bpy.data.lights.new(name, "AREA")
+            ld.shape = "RECTANGLE"
+            ld.size, ld.size_y, ld.energy, ld.color = size, size_y or size, energy, col
+            o = bpy.data.objects.new(name, ld)
+            self.coll.objects.link(o)
+            o.location = loc
+            if tgt:
+                o.rotation_euler = (Vector(tgt) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+            o.visible_camera = cam
+            o["base"] = energy
+            self.lights.append(o)
+            return o
+        for x in (-6.0, -1.5, 3.0, 7.5, 12.0, 16.5):                      # high-bay strips over the lane
+            area("cns_hb", (x, 0.0, 6.7), 420.0, 2.6, 0.5)
+        for y in (-6.0, 6.0):                                             # the neighbouring aisles
+            for x in (0.0, 9.0):
+                area("cns_hb_side", (x, y, 6.7), 300.0, 2.6, 0.5)
+        area("cns_fill", (5.0, -1.0, 6.4), 650.0, 12.0, 4.0, cam=False, col=(0.92, 0.95, 1.0))
+        for i, (x, y) in enumerate(LE.LAMPS):                            # the set's hanging lamps, on
+            p = set_to_film((x, y, LE.LAMP_Z - 0.25))
+            ld = bpy.data.lights.new(f"cns_lamp_{i}", "SPOT")
+            ld.energy, ld.color, ld.spot_size, ld.spot_blend = 700.0, (1.0, 0.82, 0.6), math.radians(95), 0.55
+            o = bpy.data.objects.new(ld.name, ld)
+            self.coll.objects.link(o)
+            o.location = p
+            o["base"] = 700.0
+            self.lights.append(o)
+
+    def light_mode(self, twin):
+        for o in self.lights:
+            o.data.energy = o["base"] * (0.35 if twin else 1.0)
 
     # ------------------------------------------------------------------ forklift + operator
     def _forklift(self):
@@ -320,19 +423,21 @@ class Sets:
     # ------------------------------------------------------------------ state
     def update(self, s):
         """s: dict with dent, scrape, bend, sag, lock (0 in place .. 1 fallen), heavy (0 up .. 1 placed), stamp,
-        tags {key: 0..1}, tag_glow, fk (x, y, heading) or None."""
+        tags {key: 0..1}, tag_glow, all_green, rag {part: (rgb, amount)} (twin colours), fk (x, y, heading) or None."""
         self.dent.value = s.get("dent", 0.0)
         self.scrape.value = s.get("scrape", 0.0)
         self.bend.value = s.get("bend", 0.0)
-        self.sag_front.value = s.get("sag", 0.0)
-        self.sag_back.value = s.get("sag", 0.0) * 0.85
+        sg = s.get("sag", 0.0)
+        for sk in self.sags:
+            sk.value = sg
         k = s.get("lock", 0.0)                                      # pops out, tumbles, falls
         self.lock.hide_render = k >= 1.0
-        self.lock.location = self.lock_home + Vector((0.02 * k, -0.12 * k, -1.8 * k * k))
+        self.lock.location = self.lock_home + Vector((0.02 * k, -0.12 * k, -(B1 - 0.03) * k * k))
         self.lock.rotation_euler = (5.0 * k, 3.0 * k, 0)
         h = s.get("heavy", 1.0)
-        self.heavy.location = self.heavy_home + Vector((0, 0, 0.25 * (1 - h) - 0.085 * s.get("sag", 0.0)))
+        self.heavy.location = self.heavy_home + Vector((0, 0, 0.25 * (1 - h) - 0.055 * sg))
         self.heavy.hide_render = h <= 0.0
+        self.load_p1.location = self.load_p1_home + Vector((0, 0, -0.04 * sg))
         self.cert_mix.inputs[0].default_value = s.get("stamp", 1.0)
         for key, t in self.tags.items():
             col = TAG_COL["green"] if s.get("all_green") else TAG_COL[key]       # after repair: every tag green
@@ -341,8 +446,14 @@ class Sets:
             b.inputs["Emission Color"].default_value = (*col, 1)
             v = max(0.001, s.get("tags", {}).get(key, 0.0))
             t["root"].scale = (v, v, v)
-            t["mat"].node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = \
-                0.3 + 3.0 * s.get("tag_glow", {}).get(key, 0.0)
+            b.inputs["Emission Strength"].default_value = 0.3 + 3.0 * s.get("tag_glow", {}).get(key, 0.0)
+        clay = (0.8, 0.8, 0.8)
+        for part, mat in self.rag_mats.items():
+            col, a = s.get("rag", {}).get(part, ((1, 1, 1), 0.0))
+            b = mat.node_tree.nodes["Principled BSDF"]
+            b.inputs["Base Color"].default_value = (*[c0 + (c1 - c0) * a for c0, c1 in zip(clay, col)], 1)
+            b.inputs["Emission Color"].default_value = (*col, 1)
+            b.inputs["Emission Strength"].default_value = (4.0 if part == "amber" else 1.6) * a    # thin brace: brighter
         fk = s.get("fk")
         if fk:
             F.place(self.fk, fk[0], fk[1], fk[2])

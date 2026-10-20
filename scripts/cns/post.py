@@ -426,6 +426,11 @@ CHECK = [("r1", "Every rack inspected"), ("r2", "Every finding tagged"), ("r3", 
          ("r4", "All on record")]
 
 
+TWIN_LABELS = [("red", "red", "Upright: impact", -150, -60), ("beam", "red", "Beam: overloaded", -40, 70),
+               ("brace", "amber", "Brace: bent", 50, 40), ("green", "green", "Upright: scrape", 40, -70)]
+TWIN_FIX = {"red": 0, "beam": 1, "brace": 2, "green": 0}
+
+
 def s09_twin(tl, ta, size):
     img = grade(source("s09_twin", f_of(tl), size))
     W, H = size
@@ -433,15 +438,17 @@ def s09_twin(tl, ta, size):
     p = anc("s09_twin", f_of(tl))
     lay = layer(size)
     d = ImageDraw.Draw(lay)
-    if p:
-        for key, title, sub in TAGS:
+    if p:                                       # the coloured parts get a small label; red / amber turn "Repaired"
+        on = ease((ta - T.V("r2")[0] - 0.2) / 0.4)
+        for i, (key, col, title, dx, dy) in enumerate(TWIN_LABELS):
             q = p.get(key)
-            if not q or q[2] <= 0:
+            if not q or q[2] <= 0 or on <= 0:
                 continue
+            fixed = col != "green" and ta >= T.V("r3")[0] + 0.25 * TWIN_FIX[key] + 0.3
             x, y = q[0] * W, q[1] * H
-            r = (10 + 8 * ((tl * 1.2 + "gar".index(key[0]) * 0.3) % 1)) * s
-            d.ellipse((x - r, y - r, x + r, y + r), outline=rgba(RAG[key], 0.9), width=max(2, int(2.5 * s)))
-            d.ellipse((x - 5 * s, y - 5 * s, x + 5 * s, y + 5 * s), fill=rgba(RAG[key], 1))
+            c = RAG["green" if fixed else col]
+            d.line((x, y, x + dx * s, y + dy * s), fill=rgba(WHITE, 0.85 * on), width=max(2, int(2 * s)))
+            chip(d, x + dx * s, y + dy * s - 14 * s, "Repaired" if fixed else title, c, s, on, 17)
     px0, py0 = W - 400 * s, 70 * s
     k0 = ease(tl / 0.4)
     d.rounded_rectangle((px0, py0, W - 40 * s, py0 + 330 * s), radius=16 * s, fill=(14, 15, 18, int(225 * k0)))
