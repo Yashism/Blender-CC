@@ -3,6 +3,7 @@ timed to it; vo_timing.json gives every line's start and length. A recorded voic
 replace it later: keep the same lines and roughly the same starts.
 
     python3 scripts/cns/vo.py [--voice ~/tools/piper/en_US-ryan-high.onnx]
+    python3 scripts/cns/vo.py --recorded ~/elevenlabs_takes    # one file per line, named <key>.mp3 / .wav
 """
 import argparse
 import json
@@ -57,17 +58,32 @@ def synth(text, path, voice, length_scale):
         return w.getnframes() / w.getframerate(), w.getframerate()
 
 
+def load_take(src_dir, key, path):
+    """A recorded take (any format ffmpeg reads) -> mono 44.1 kHz wav at path, edges trimmed of silence."""
+    src = next((os.path.join(src_dir, key + e) for e in (".wav", ".mp3", ".m4a", ".flac")
+                if os.path.exists(os.path.join(src_dir, key + e))), None)
+    if src is None:
+        sys.exit(f"[vo] missing take for '{key}' in {src_dir}")
+    trim = "silenceremove=start_periods=1:start_threshold=-45dB,areverse," \
+           "silenceremove=start_periods=1:start_threshold=-45dB,areverse"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-af", trim, "-ac", "1", "-ar", "44100", path],
+                   check=True)
+    with wave.open(path) as w:
+        return w.getnframes() / w.getframerate(), w.getframerate()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--voice", default=os.path.expanduser("~/tools/piper/en_US-ryan-high.onnx"))
     ap.add_argument("--speed", type=float, default=1.12, help="Piper length scale (>1 = slower)")
+    ap.add_argument("--recorded", default=None, help="folder of recorded takes named <key>.mp3/.wav (skips Piper)")
     o = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     timing, clips = [], []
     t_end = 0.0
     for key, start, text, gap in LINES:               # each line starts at its target, or after the last one ends
         p = os.path.join(OUT, f"{key}.wav")
-        dur, sr = synth(text, p, o.voice, o.speed)
+        dur, sr = load_take(os.path.expanduser(o.recorded), key, p) if o.recorded else synth(text, p, o.voice, o.speed)
         start = round(max(start, t_end + gap), 2)
         t_end = start + dur
         timing.append(dict(key=key, start=start, dur=round(dur, 3), end=round(t_end, 3), text=text))
