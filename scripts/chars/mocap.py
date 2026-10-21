@@ -161,14 +161,11 @@ def _smooth_quats(qs, win=2):
     return [Quaternion(tuple(map(float, r))) for r in a]
 
 
-def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, smooth=2,
-             mapping=MOCAP_MAP, arm_spread=None):
-    """Bake the clip onto arm (an armature built from chars/biped.bones) as an action named name.
-    frames: (first, last) source frames at 120 fps (1-based); face: heading (deg) the clip is
-    turned to (-90 = walking toward -Y); arm_spread: degrees each whole arm swings out sideways
-    about the shoulder, for bodies rounder than the actor's (default: the rig's "arm_spread").
-    Returns the action."""
-    import bpy
+def track(arm, path, frames=None, fps=24, face=-90.0, smooth=2, mapping=MOCAP_MAP, arm_spread=None):
+    """The clip retargeted onto arm, as data: dict(world={bone: [world Quaternion per frame]},
+    hips=[armature-space hips displacement (Vector) per frame], dist=np.array of the distance
+    walked so far (rig units), n=frames). Used by retarget() and by performances that sample the
+    clip by distance (no foot sliding at any travel speed) and layer on top of it."""
     joints, data, dt = read_bvh(path)
     if frames:
         data = data[frames[0] - 1:frames[1]]
@@ -203,7 +200,6 @@ def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, s
         s_dir = rest_direction(J[src], CHILD.get(src))
         t_dir = rest[ours].col[1].normalized()
         Q[ours] = t_dir.rotation_difference(s_dir)
-    order = [b.name for b in bones]                    # parents before children
 
     world = {n: [] for n in Q}
     for f in idx:
@@ -222,6 +218,47 @@ def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, s
                 for n in (f"upper_arm.{s}", f"forearm.{s}", f"hand.{s}"):
                     if n in world:
                         world[n][fi] = R @ world[n][fi]
+    hips = []
+    for f in idx:
+        p = np.array(rot) @ (W["Hips"][1][f] - p0)
+        p[2] = (W["Hips"][1][f][2] - ankle_s) * k + ankle_t - hips_rest_t
+        p[:2] *= k
+        hips.append(Vector(p))
+    xy = np.array([[h.x, h.y] for h in hips])
+    dist = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))])
+    return dict(world=world, hips=hips, dist=dist, n=len(idx))
+
+
+def sample(tr, s):
+    """World rotations and hips displacement of a track at fractional frame s (0-based)."""
+    s = min(max(s, 0.0), tr["n"] - 1.0)
+    i = int(math.floor(s))
+    j = min(i + 1, tr["n"] - 1)
+    t = s - i
+    world = {}
+    for n, qs in tr["world"].items():
+        a, b = qs[i], qs[j]
+        if a.dot(b) < 0:
+            b = -b
+        world[n] = a.slerp(b, t)
+    return world, tr["hips"][i].lerp(tr["hips"][j], t)
+
+
+def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, smooth=2,
+             mapping=MOCAP_MAP, arm_spread=None):
+    """Bake the clip onto arm (an armature built from chars/biped.bones) as an action named name.
+    frames: (first, last) source frames at 120 fps (1-based); face: heading (deg) the clip is
+    turned to (-90 = walking toward -Y); arm_spread: degrees each whole arm swings out sideways
+    about the shoulder, for bodies rounder than the actor's (default: the rig's "arm_spread").
+    Returns the action."""
+    import bpy
+    tr = track(arm, path, frames, fps, face, smooth, mapping, arm_spread)
+    world = tr["world"]
+    bones = arm.data.bones
+    rest = {b.name: b.matrix_local.to_3x3() for b in bones}
+    restq = {n: m.to_quaternion() for n, m in rest.items()}
+    order = [b.name for b in bones]                    # parents before children
+    idx = range(tr["n"])
 
     act = bpy.data.actions.new(name)
     arm.animation_data_create()
@@ -254,12 +291,10 @@ def retarget(arm, path, name, frames=None, fps=24, in_place=False, face=-90.0, s
             else:
                 posed[n] = base
         # hips translation (armature space -> the hips bone's rest frame)
-        p = np.array(rot) @ (W["Hips"][1][f] - p0)
+        p = tr["hips"][f].copy()
         if in_place:
-            p[:2] = 0.0
-        p[2] = (W["Hips"][1][f][2] - ankle_s) * k + ankle_t - hips_rest_t
-        p[:2] *= k
-        loc = rest["hips"].inverted() @ Vector(p)
+            p.x = p.y = 0.0
+        loc = rest["hips"].inverted() @ p
         for i in range(3):
             fc('pose.bones["hips"].location', i, "hips").keyframe_points.insert(frame, loc[i],
                                                                                  options={"FAST"})

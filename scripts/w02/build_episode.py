@@ -42,7 +42,7 @@ def log(msg):
 
 
 F_END = T.LAST_3D
-TWOS = range(T.FRAME_START, F_END + 1, 2)
+EVERY = range(T.FRAME_START, F_END + 1)       # v2: everything moves on every frame
 SCREEN_AT = Vector((-0.38, -0.24, 1.32))      # cab screen glass centre, FL-02 local (in her reach)
 
 
@@ -62,14 +62,14 @@ def mit_eye(fr):
 
 
 def pk_head(fr):
-    return Vector((T.pickles_x(fr), T.CAGE_Y, 1.12))
+    return Vector((T.pickles_x(fr), T.CAGE_Y, 1.08))
 
 
 GROUP_CAM = Vector((1.4, -1.5, 1.35))
 
 
 def bolt_root(fr):
-    return Vector((T.BOLT_X, T.bolt_y(fr), 0.0))
+    return Vector((T.bolt_x(fr), T.bolt_y(fr), 0.0))
 
 
 def bolt_rel(fr, off):
@@ -97,7 +97,7 @@ def build(args):
     C = {n: geo.collection(n) for n in ("Characters", "Set", "Props", "Forklift", "Lights",
                                         "Cameras", "FX")}
 
-    from builders import set_aisle4, fl02, mittens, bolt, pickles, roll_cage
+    from builders import set_aisle4, fl02, roll_cage
     set_aisle4.build(geo.collection("SET_AISLE4", C["Set"]))
     swap_hit_upright(C["Set"])
     PR.diwali_lights(geo.collection("W02_LIGHTS", C["Set"]))
@@ -105,16 +105,17 @@ def build(args):
     log("set + dressing")
 
     fl = fl02.build(geo.collection("FL02", C["Forklift"]))
-    mit = mittens.build(geo.collection("MITTENS", C["Characters"]))
-    for ob in bpy.data.objects:
-        if ob.get("tt_only"):
-            ob.hide_render = ob.hide_viewport = True
+    # the v2 cast (chars/generated.py): rigged from the generated models, faces that animate
+    from chars import generated as G
+    mit, _, _, _ = G.build(G.SPEC["mittens"], geo.collection("MITTENS", C["Characters"]))
     mit.parent = fl
-    mit.location = fl02.SEAT
+    mit.location = T.MIT_ROOT
     move_cab_screen(fl)
+    roll_cage.PUSH_Z = T.PUSH_Z
     cage = roll_cage.build(geo.collection("ROLLCAGE", C["Props"]))
-    pk = pickles.build(geo.collection("PICKLES", C["Characters"]))
-    bo = bolt.build(geo.collection("BOLT", C["Characters"]))
+    pk, _, _, _ = G.build(G.SPEC["pickles"], geo.collection("PICKLES", C["Characters"]))
+    pk.scale = (T.PK_SCALE,) * 3
+    bo, _, _, _ = G.build(G.SPEC["bolt"], geo.collection("BOLT", C["Characters"]))
     log("cast")
 
     props = place_props(C["Props"], bo)
@@ -216,9 +217,8 @@ def move_cab_screen(fl):
 
 
 def screen_local(fl):
-    """Screen glass centre in Mittens' rig space (her root sits at the FL-02 seat)."""
-    from builders import fl02
-    return SCREEN_AT - Vector(fl02.SEAT)
+    """Screen glass centre in Mittens' rig space (her root sits on the FL-02 seat)."""
+    return SCREEN_AT - Vector(T.MIT_ROOT)
 
 
 def place_props(coll, bo):
@@ -226,13 +226,13 @@ def place_props(coll, bo):
     arm = next(o for o in bo.children_recursive if o.type == "ARMATURE")
     bpy.context.view_layer.update()
     card = PR.report_card(coll)
-    card.location = (0.0, -0.405, 0.435)               # top edge in his teeth, text forward
-    card.rotation_euler = (math.radians(-8), 0, 0)
-    rig.attach(card, arm, "head")
+    card.location = (0.0, -0.505, 0.497)               # top edge in his teeth, text forward
+    card.rotation_euler = (math.radians(-6), 0, 0)
+    rig.attach(card, arm, "jaw")
     ndl = PR.needle(coll)
-    ndl.location = (0.012, -0.37, 0.49)
-    ndl.rotation_euler = (math.radians(14), 0, math.radians(4))
-    rig.attach(ndl, arm, "head")
+    ndl.location = (0.012, -0.455, 0.566)              # eye end in his teeth, point forward
+    ndl.rotation_euler = (math.radians(10), 0, math.radians(4))
+    rig.attach(ndl, arm, "jaw")
     tag, stitches = PR.amber_tag(coll)
     return dict(card=card, needle=ndl, tag=tag, stitches=stitches,
                 upright=bpy.data.objects["W02_hit_upright"])
@@ -272,21 +272,21 @@ def crinkle_key(coll):
 # ================================================================== animation
 
 def key_root_motion(fl, cage, pk, bo):
-    key_fn(fl, "location", lambda fr: T.fl_state(fr)[0], TWOS, index=0, step=2)
-    key_fn(fl, "location", lambda fr: T.fl_state(fr)[1], TWOS, index=1, step=2)
-    key_fn(fl, "rotation_euler", lambda fr: math.radians(T.fl_state(fr)[2]), TWOS, index=2, step=2)
+    key_fn(fl, "location", lambda fr: T.fl_state(fr)[0], EVERY, index=0)
+    key_fn(fl, "location", lambda fr: T.fl_state(fr)[1], EVERY, index=1)
+    key_fn(fl, "rotation_euler", lambda fr: math.radians(T.fl_state(fr)[2]), EVERY, index=2)
     for ob in (cage, pk):
         ob.rotation_euler = (0, 0, math.radians(T.PICKLES_YAW))
         ob.location.y = T.CAGE_Y
-    key_fn(cage, "location", T.cage_x, TWOS, index=0, step=2)
-    key_fn(pk, "location", T.pickles_x, TWOS, index=0, step=2)
-    bo.location.x = T.BOLT_X
-    key_fn(bo, "location", T.bolt_y, TWOS, index=1, step=2)
-    key_fn(bo, "rotation_euler", lambda fr: math.radians(T.bolt_yaw(fr)), TWOS, index=2, step=2)
+    key_fn(cage, "location", T.cage_x, EVERY, index=0)
+    key_fn(pk, "location", T.pickles_x, EVERY, index=0)
+    key_fn(bo, "location", T.bolt_x, EVERY, index=0)
+    key_fn(bo, "location", T.bolt_y, EVERY, index=1)
+    key_fn(bo, "rotation_euler", lambda fr: math.radians(T.bolt_yaw(fr)), EVERY, index=2)
     x0 = T.pickles_x(T.FRAME_START)
     for c in [o for o in bpy.data.objects if o.name.startswith("RollCage_castor_") and
               o.name.endswith("_wheel")]:
-        key_fn(c, "rotation_euler", lambda fr: -(x0 - T.pickles_x(fr)) / 0.05, TWOS, index=0, step=2)
+        key_fn(c, "rotation_euler", lambda fr: -(x0 - T.pickles_x(fr)) / 0.05, EVERY, index=0)
 
 
 def key_fl_mechanics(fl):
@@ -295,18 +295,18 @@ def key_fl_mechanics(fl):
     for key, r in (("FL", 0.33), ("FR", 0.33), ("RL", 0.26), ("RR", 0.26)):
         wh = bpy.data.objects.get(f"FL02_wheel_{key}")
         sign = 1 if key.endswith("L") else -1           # right wheels are turned 180 deg
-        key_fn(wh, "rotation_euler", lambda fr, r=r, s=sign: s * -T.fl_state(fr)[3] / r, TWOS,
-               index=0, step=2)
+        key_fn(wh, "rotation_euler", lambda fr, r=r, s=sign: s * -T.fl_state(fr)[3] / r, EVERY,
+               index=0)
     # rear-wheel steering follows the yaw rate (rear steer: the tail swings out of the turn)
     for key in ("RL", "RR"):
         st = bpy.data.objects.get(f"FL02_steer_{key}")
         if st:
             key_fn(st, "rotation_euler", lambda fr: -math.radians(
                 max(-30.0, min(30.0, 6.0 * (T.fl_state(fr + 1)[2] - T.fl_state(fr - 1)[2])))),
-                TWOS, index=2, step=2)
+                EVERY, index=2)
     sp = bpy.data.objects.get("FL02_beacon_spinner")
     if sp:
-        key_fn(sp, "rotation_euler", lambda fr: fr * 2 * math.pi / 20.0, TWOS, index=2, step=2)
+        key_fn(sp, "rotation_euler", lambda fr: fr * 2 * math.pi / 20.0, EVERY, index=2)
     fl["beacon"] = 1.0
     ld = bpy.data.lights.new("FL02_follow_fill", "AREA")
     ld.energy = 90
@@ -434,10 +434,10 @@ def build_cameras(coll):
         n = en - st + 1
         return st + int(round(fa * n)), (st + int(round(fb * n)) - 1) if fb < 1 else en
 
-    over_shoulder = (-0.36, 0.1, 1.8)          # by her right ear, FL-02 local: square on to the screen
+    over_shoulder = (-0.47, 0.0, 1.76)         # by her right ear, FL-02 local: square on to the screen
     scr = tuple(SCREEN_AT)
     mast_cam = (0.0, -1.5, 1.72)               # in front of FL-02, under the RAMS camera
-    mit_face = (0.0, 0.18, 1.64)
+    mit_face = (0.0, -0.1, 1.66)
     pk_cam = Vector((2.9, 1.5, 1.32))          # north of Pickles, under the end board
     fork_pov = Vector((0.95, 3.0, 0.92))       # between the raised forks, looking at Bolt
     a1 = S["s01_hook"]
@@ -483,14 +483,14 @@ def build_cameras(coll):
         ("s08b_relief", *span("s08_report", 0.62, 1), lambda fr: fl_rel(fr, mast_cam),
          lambda fr: fl_rel(fr, mit_face), 45, 2.8),
         # s09: Bolt turns to the upright and presses the tag on; close on the second stitch
-        ("s09a_tag", *span("s09_stitch", 0, 0.54), lambda fr: Vector((1.12, 2.55, 0.8)),
-         lambda fr: Vector((1.52, 1.8, 0.56)), 32, 2.8),
-        ("s09b_stitch", *span("s09_stitch", 0.54, 1), lambda fr: Vector((1.3, 2.2, 0.72)),
+        ("s09a_tag", *span("s09_stitch", 0, 0.54), lambda fr: Vector((1.25, 2.75, 0.68)),
+         lambda fr: Vector((1.5, 1.82, 0.5)), 32, 2.8),
+        ("s09b_stitch", *span("s09_stitch", 0.54, 1), lambda fr: Vector((1.38, 2.12, 0.62)),
          lambda fr: TAG + Vector((0.0, 0.0, 0.02)), 45, 5.6),
         # s10: the three of them, the tagged upright, the lights
         ("s10_group", *span("s10_group", 0, 1),
          lambda fr: GROUP_CAM + Vector((0.0, 0.2 * (fr - 745) / 47, 0.0)),
-         lambda fr: GROUP_CAM + Vector((1.1, 3.85, 0.15)), 26, 5.6),
+         lambda fr: GROUP_CAM + Vector((1.3, 3.8, -0.18)), 24, 5.6),
     ]
     for name, a, b, loc, tgt, lens, fstop in segs:
         cam, target = studio.camera(f"CAM_{name}", tuple(loc(a)), tuple(tgt(a)),

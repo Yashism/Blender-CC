@@ -107,6 +107,7 @@ EXPRESSIONS = {
     "sheepish":   (12,   -8,     0.004, 8,        0,   0.35, 0.15, 14,   (14, 10)),
     "angry":      (10,   -6,    -0.006, -16,      0,   0.0,  0.6,  6,    (0, 0)),
     "determined": (6,    -4,    -0.002, -8,       0,   0.25, 0.0, -4,    (0, 0)),
+    "squint":     (24,   -18,   -0.003, -4,       0,   0.6,  0.0, 4,     (0, 0)),
 }
 
 
@@ -160,15 +161,20 @@ class Face:
                 if name in self.mouth.data.shape_keys.key_blocks:
                     self.k.shape(self.mouth, name, frame, val)
 
-    def perform(self, beats, f0, f1, blinks=True, talk=None, seed=7):
+    def perform(self, beats, f0, f1, blinks=True, talk=None, seed=7, look_fn=None, blink_at=(),
+                no_blink=()):
         """beats: [(frame, expression[, look])] held until the next beat with a 5-frame blend;
-        automatic blinks every 2.5-4.5 s; talk: [(start, end)] jaw-flap ranges."""
+        automatic blinks every 2.5-4.5 s (plus blink_at frames, none inside the no_blink ranges);
+        talk: [(start, end)] jaw-flap ranges; look_fn(frame) -> (yaw, pitch) | None steers the eyes
+        every frame (relative to the head)."""
         rng = np.random.default_rng(seed)
         bl = []
         f = f0 + int(rng.integers(20, 50))
         while f < f1 - 6:
-            bl.append(f)
+            if not any(a <= f <= b for a, b in no_blink):
+                bl.append(f)
             f += int(rng.integers(60, 108))
+        bl = sorted(bl + list(blink_at))
         beats = sorted(beats)
 
         def state(fr):
@@ -198,7 +204,7 @@ class Face:
                     ph = (fr - a) / 4.2
                     tk = 9.0 * (0.5 + 0.5 * math.sin(ph * math.pi * 2 + 0.3 * math.sin(ph * 1.7))) * \
                         min(1.0, (fr - a) / 3, (z - fr) / 3)
-            self.key(fr, blend(fr), blink=b, talk=tk)
+            self.key(fr, blend(fr), blink=b, talk=tk, look=look_fn(fr) if look_fn else None)
         self.k.finish()
 
 

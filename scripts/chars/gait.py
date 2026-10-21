@@ -92,7 +92,9 @@ class Poser:
             wq, head = want(n, P)
             q = Quaternion()
             loc = Vector()
-            if wq is not None:
+            if isinstance(wq, tuple):                         # ("basis", q): a local rotation as is
+                q = wq[1]
+            elif wq is not None:
                 q = base.to_quaternion().inverted() @ wq
             if head is not None and not self.connected[n]:
                 loc = base.to_3x3().inverted() @ (head - base.translation)
@@ -256,103 +258,140 @@ def _neutral_state(dog):
                 flex={}, toe={}, neck=(0, 0, 0), head=(0, 0, 0), tail=[], scap={})
 
 
-def locomote(arm, gait="walk", frames=120, speed=None, fps=24, start=(0.0, 0.0), heading=0.0,
-             turn=0.0, ease=12, name=None, tail_carry=10.0):
-    """Travel forward (-Y at heading 0) for `frames`, easing in and out of the gait over `ease`
-    frames (standing at both ends). turn: degrees per second of heading change."""
-    dog = Dog(arm)
+def travel(dog, path, frames, gait="walk", fps=24, speed=None, turn_radius=0.22, in_object=True,
+           tail_carry=10.0):
+    """Per-frame gait states for a dog whose body follows path(f) -> (x, y, yaw_deg) in the world
+    over the given frames (yaw 0 = facing -Y). The gait advances with the distance travelled plus
+    the turning arc, so it steps when turning on the spot, and it settles (all four paws down)
+    wherever the body holds still. in_object: the path is the armature object's (an episode's
+    root), so the root bone stays put and the paws are given in rig space; otherwise the root bone
+    carries the path."""
     g = GAITS[gait]
-    period = g["period"] * fps
-    stride = None
-    span = {k: (L["neutral"].y) for k, L in dog.leg.items()}
     if speed is None:
         speed = {"walk": 0.6, "trot": 1.35}[gait]
     stride = speed * g["period"]                               # metres per cycle
-    # path: speed ramps in and out; the gait phase advances with the distance travelled
-    v = np.array([speed * smooth01(min(f / ease, (frames - 1 - f) / ease, 1.0)) for f in range(frames)])
-    dist = np.concatenate([[0.0], np.cumsum(v[:-1] / fps)])
-    phase = dist / stride
-    hd = np.array([heading + turn * f / fps for f in range(frames)])
-    pos = np.zeros((frames, 2))
-    pos[0] = start
-    for f in range(1, frames):
-        a = math.radians(hd[f - 1])
-        pos[f] = pos[f - 1] + v[f - 1] / fps * np.array([math.sin(a), -math.cos(a)])
+    frames = list(frames)
+    n = len(frames)
+    P = np.array([path(f) for f in frames], dtype=float)       # x, y, yaw
+    ds = np.zeros(n)
+    ds[1:] = np.hypot(np.diff(P[:, 0]), np.diff(P[:, 1])) + np.abs(np.radians(np.diff(P[:, 2]))) * turn_radius
+    moving_raw = np.clip(ds * fps / speed, 0.0, 1.0)
+    # moving segments (a little hysteresis so a slow ease-in still counts)
+    active = moving_raw > 0.02
+    segs, i = [], 0
+    while i < n:
+        if active[i]:
+            j = i
+            while j + 1 < n and active[j + 1]:
+                j += 1
+            segs.append((max(0, i - 1), j))
+            i = j + 1
+        else:
+            i += 1
 
     def body(fr):
-        """Root transform at a fractional frame."""
-        fr = min(max(fr, 0.0), frames - 1.0)
+        fr = min(max(fr, 0.0), n - 1.0)
         i = int(math.floor(fr))
-        j = min(i + 1, frames - 1)
+        j = min(i + 1, n - 1)
         t = fr - i
-        p = pos[i] * (1 - t) + pos[j] * t
-        return p, hd[i] * (1 - t) + hd[j] * t
+        return P[i, :2] * (1 - t) + P[j, :2] * t, P[i, 2] * (1 - t) + P[j, 2] * t
 
-    def frame_at_phase(ph):
-        return float(np.interp(ph, phase, np.arange(frames)))
-
-    def plant(key, k_cycle):
-        """World paw position for the stance of cycle k (under its neutral at mid-stance)."""
-        o = g["phase"][key]
-        fr = frame_at_phase(k_cycle - o + g["duty"] / 2)
+    def neutral_at(key, fr):
         p, h = body(fr)
-        a = math.radians(h)
-        n = dog.leg[key]["neutral"]
-        R = Matrix.Rotation(a, 3, "Z")
-        w = R @ Vector((n.x, n.y, 0))
-        return Vector((p[0] + w.x, p[1] + w.y, n.z))
+        w = Matrix.Rotation(math.radians(h), 3, "Z") @ Vector((dog.leg[key]["neutral"].x, dog.leg[key]["neutral"].y, 0))
+        return Vector((p[0] + w.x, p[1] + w.y, dog.leg[key]["neutral"].z))
 
-    states = []
-    for f in range(frames):
-        st = _neutral_state(dog)
-        p, h = body(f)
-        st["root"] = (float(p[0]), float(p[1]), float(h))
-        ph = phase[f]
-        moving = smooth01(v[f] / max(speed, 1e-6))
-        # legs
+    states = [_neutral_state(dog) for _ in range(n)]
+    paws = [{k: neutral_at(k, i) for k in dog.leg} for i in range(n)]
+    phase = np.zeros(n)
+    for a, b in segs:
+        ph_s = np.concatenate([[0.0], np.cumsum(ds[a + 1:b + 1])]) / stride
+        ph_s += np.arange(len(ph_s)) * 1e-9                    # strictly increasing for interp
+        phase[a:b + 1] = ph_s
+
+        def frame_at_phase(ph, a=a, ph_s=ph_s):
+            return a + float(np.interp(ph, ph_s, np.arange(len(ph_s))))
+
+        def plant(key, k_cycle):
+            return neutral_at(key, frame_at_phase(k_cycle - g["phase"][key] + g["duty"] / 2))
+
+        end = ph_s[-1]
+        for i in range(a, b + 1):
+            ph = ph_s[i - a]
+            for key in dog.leg:
+                o = g["phase"][key]
+                u = (ph + o) % 1.0
+                k_cycle = math.floor(ph + o)
+                ps_, pe_ = max(k_cycle - o + g["duty"], 0.0), min(k_cycle + 1 - o, end)
+                if u < g["duty"] or pe_ - ps_ < 0.05:
+                    paws[i][key] = plant(key, k_cycle if u < g["duty"] else k_cycle + (ph >= pe_))
+                elif ph >= pe_:
+                    paws[i][key] = plant(key, k_cycle + 1)
+                else:
+                    s = min(1.0, max(0.0, (ph - ps_) / (pe_ - ps_)))
+                    pa, pb = plant(key, k_cycle), plant(key, k_cycle + 1)
+                    e = 0.5 - 0.5 * math.cos(math.pi * s)
+                    step = min(1.0, (pb - pa).length / (stride * 0.5))
+                    lift = g["lift"] * math.sin(math.pi * s) ** 0.9 * max(step, 0.35 if (pb - pa).length > 0.02 else 0)
+                    paws[i][key] = pa.lerp(pb, e) + Vector((0, 0, lift))
+                    fold = math.sin(math.pi * min(1.0, s * 1.15)) * max(min(1.0, (pb - pa).length / (stride * 0.4)),
+                                                                        0.4 if (pb - pa).length > 0.02 else 0)
+                    states[i]["flex"][key] = (68.0 if key[0] == "f" else 32.0) * fold
+                    states[i]["toe"][key] = (30.0 if key[0] == "f" else 20.0) * fold
+        for i in range(b + 1, n):                               # the hold after: paws stay put
+            if any(sa <= i <= sb for sa, sb in segs):
+                break
+            paws[i] = dict(paws[b])
+    # smooth the 'moving' weight so the body motion eases in and out
+    k = np.ones(5) / 5
+    moving = np.convolve(np.pad(moving_raw, 2, mode="edge"), k, mode="valid")
+    for i in range(n):
+        st = states[i]
+        p, h = body(i)
+        mv = float(smooth01(moving[i]))
+        ph = phase[i]
+        Rinv = Matrix.Rotation(-math.radians(h), 3, "Z")
         for key in dog.leg:
-            o = g["phase"][key]
-            u = (ph + o) % 1.0
-            k_cycle = math.floor(ph + o)
-            # this cycle's swing, clipped to the walk (a leg can't lift before the start or still be
-            # in the air when the dog stops)
-            ps_, pe_ = max(k_cycle - o + g["duty"], 0.0), min(k_cycle + 1 - o, phase[-1])
-            if u < g["duty"] or pe_ - ps_ < 0.05:
-                st["paws"][key] = plant(key, k_cycle if u < g["duty"] else k_cycle + (ph >= pe_))
-                st["flex"][key] = 0.0
-            elif ph >= pe_:
-                st["paws"][key] = plant(key, k_cycle + 1)
-                st["flex"][key] = 0.0
+            w = paws[i][key]
+            if in_object:
+                st["paws"][key] = Rinv @ Vector((w.x - p[0], w.y - p[1], w.z))
             else:
-                s = min(1.0, max(0.0, (ph - ps_) / (pe_ - ps_)))
-                a, b = plant(key, k_cycle), plant(key, k_cycle + 1)
-                e = 0.5 - 0.5 * math.cos(math.pi * s)
-                lift = g["lift"] * math.sin(math.pi * s) ** 0.9 * min(1.0, (b - a).length / (stride * 0.5))
-                st["paws"][key] = a.lerp(b, e) + Vector((0, 0, lift))
-                fold = math.sin(math.pi * min(1.0, s * 1.15)) * min(1.0, (b - a).length / (stride * 0.4))
-                st["flex"][key] = (68.0 if key[0] == "f" else 32.0) * fold
-                st["toe"][key] = (30.0 if key[0] == "f" else 20.0) * fold
-            # the shoulder blade swings with its leg
-            if key[0] == "f":
-                rel = (st["paws"][key] - Vector((p[0], p[1], 0)))
-                rel = Matrix.Rotation(-math.radians(h), 3, "Z") @ rel
-                st["scap"][key] = 10.0 * (rel.y - dog.leg[key]["neutral"].y) / max(stride * 0.5, 1e-3) * moving
-        # body: two bobs per cycle, roll toward the swing side, lateral spine flex, nod
+                st["paws"][key] = w
+            if key[0] == "f":                                   # the shoulder blade swings with its leg
+                rel = Rinv @ Vector((w.x - p[0], w.y - p[1], 0))
+                st["scap"][key] = 10.0 * (rel.y - dog.leg[key]["neutral"].y) / max(stride * 0.5, 1e-3) * mv
+        st["root"] = (0.0, 0.0, 0.0) if in_object else (float(p[0]), float(p[1]), float(h))
         c2 = math.cos(4 * math.pi * ph)
         c1 = math.sin(2 * math.pi * ph)
-        bob = -g["bob"] * c2 * moving
-        st["pelvis"] = (bob - 0.004 * moving, 0, 0.6 * c2 * moving, g["roll"] * c1 * moving,
-                        g["yaw"] * c1 * moving)
-        st["chest"] = (bob * 0.8 - 0.006 * moving, 0, -0.8 * c2 * moving, -0.6 * g["roll"] * c1 * moving,
-                       -0.7 * g["yaw"] * c1 * moving)
-        st["neck"] = (g["nod"] * math.cos(4 * math.pi * ph + 0.6) * moving, 0.6 * g["yaw"] * c1 * moving,
-                      0.5 * g["roll"] * c1 * moving)
-        st["head"] = (-0.5 * g["nod"] * math.cos(4 * math.pi * ph + 0.6) * moving, 0, 0)
-        # tail: carried up a little, swaying with the stride (a travelling wave along it)
-        n = len(dog.tail)
-        st["tail"] = [(tail_carry * moving / n, g["tail"] * math.sin(2 * math.pi * ph - 0.7 * i) * moving / n * 1.6)
-                      for i in range(n)]
-        states.append(st)
+        bob = -g["bob"] * c2 * mv
+        st["pelvis"] = (bob - 0.004 * mv, 0, 0.6 * c2 * mv, g["roll"] * c1 * mv, g["yaw"] * c1 * mv)
+        st["chest"] = (bob * 0.8 - 0.006 * mv, 0, -0.8 * c2 * mv, -0.6 * g["roll"] * c1 * mv, -0.7 * g["yaw"] * c1 * mv)
+        st["neck"] = (g["nod"] * math.cos(4 * math.pi * ph + 0.6) * mv, 0.6 * g["yaw"] * c1 * mv, 0.5 * g["roll"] * c1 * mv)
+        st["head"] = (-0.5 * g["nod"] * math.cos(4 * math.pi * ph + 0.6) * mv, 0, 0)
+        nt = len(dog.tail)
+        st["tail"] = [(tail_carry * mv / nt, g["tail"] * math.sin(2 * math.pi * ph - 0.7 * j) * mv / nt * 1.6)
+                      for j in range(nt)]
+        st["moving"] = mv
+        st["phase"] = ph
+    return states
+
+
+def locomote(arm, gait="walk", frames=120, speed=None, fps=24, start=(0.0, 0.0), heading=0.0,
+             turn=0.0, ease=12, name=None, tail_carry=10.0):
+    """Travel forward (-Y at heading 0) for `frames`, easing in and out of the gait over `ease`
+    frames (standing at both ends), the rig's root bone carrying the path. turn: degrees per
+    second of heading change."""
+    dog = Dog(arm)
+    if speed is None:
+        speed = {"walk": 0.6, "trot": 1.35}[gait]
+    v = [speed * smooth01(min(f / ease, (frames - 1 - f) / ease, 1.0)) for f in range(frames)]
+    pts = [(start[0], start[1], heading)]
+    for f in range(1, frames):
+        h = heading + turn * (f - 1) / fps
+        a = math.radians(h)
+        pts.append((pts[-1][0] + v[f - 1] / fps * math.sin(a), pts[-1][1] - v[f - 1] / fps * math.cos(a),
+                    heading + turn * f / fps))
+    states = travel(dog, lambda f: pts[f], range(frames), gait, fps, speed, in_object=False, tail_carry=tail_carry)
     act, k = dog.bake(states, name or f"{arm['character']}_{gait}")
     act["speed"] = speed
     act["gait"] = gait

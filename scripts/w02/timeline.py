@@ -41,7 +41,7 @@ E = dict(
     freeze=44,               # Mittens freezes
     dart=[66, 82, 98],       # eyes left / right / left
     orders=[121, 150],       # the order count ticks up on the cab screen
-    pickles_go=100,          # Pickles hurries in with the roll cage (from the west)
+    pickles_go=60,           # Pickles hurries in with the roll cage (from the east)
     pickles_stop=200,
     pk_look_crinkle=222,
     pk_look_mittens=236,
@@ -129,15 +129,22 @@ def fl_state(frame):
 # He hurries the loaded cage WEST along Cross Aisle B (cage leading, as in Ep. 5) and stops just
 # east of the aisle mouth, facing west: the crinkle is ahead-right of him, the cab further right,
 # and the cage stays clear of Bolt's path and of the group shot.
+# v2: the cast walk on motion capture, so the pace has to suit Pickles' short legs (quick little
+# steps, ~0.7 m/s): he starts earlier and closer, out of the early shots.
 CAGE_Y = 0.55
-PICKLES_X = [(FRAME_START, 8.4), (E["pickles_go"], 8.4), (E["pickles_stop"], 2.9)]
-PICKLES_BEHIND_CAGE = 0.375 + 0.36   # Pickles' root, behind (east of) the cage origin
+PICKLES_X = [(FRAME_START, 6.6), (E["pickles_go"], 6.6), (E["pickles_go"] + 12, 6.45),
+             (E["pickles_stop"] - 14, 3.06), (E["pickles_stop"], 2.9)]
+PUSH_Z = 0.80                        # the cage's push bar, lowered to his reach
+PICKLES_BEHIND_CAGE = 0.362 + 0.27   # Pickles' root, behind (east of) the cage origin
 PICKLES_YAW = -90.0
+PK_SCALE = 1.35 / 1.25               # Pickles stands 1.35 m, as in Ep. 5 / W01
+MIT_ROOT = (0.0, 0.14, 1.0)          # Mittens' root in FL-02: on the seat top, toward its front
 
 # ------------------------------------------------------------------ Bolt
 # He trots north up Aisle 4 with the card in his mouth, stops level with the hit upright, and
 # later turns right (east) to face it for the stitching.
 BOLT_X = 1.17
+BOLT_XS = [(FRAME_START, BOLT_X), (E["bolt_turn"][0], BOLT_X), (E["bolt_turn"][1], BOLT_X - 0.13)]
 BOLT_Y = [(FRAME_START, -2.8), (E["bolt_go"], -2.8), (E["bolt_stop"], 1.815)]
 BOLT_YAW = [(FRAME_START, 180.0), (E["bolt_turn"][0], 180.0), (E["bolt_turn"][1], 90.0)]
 
@@ -173,6 +180,7 @@ def smooth(keys):
 
 
 pickles_x = smooth(PICKLES_X)
+bolt_x = smooth(BOLT_XS)          # he steps back a little as he turns (his muzzle is long)
 bolt_y = smooth(BOLT_Y)
 bolt_yaw = smooth(BOLT_YAW)
 
