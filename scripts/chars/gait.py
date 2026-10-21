@@ -188,6 +188,8 @@ class Dog:
                         legs[key] = self.solve_leg(key, P, st, qp if key[0] == "h" else qc, Ry)
                     return legs[key][n], None
             if n.startswith("tail."):
+                if n in st.get("tail_dir", {}):               # aimed outright (armature space)
+                    return ps.aim(n, st["tail_dir"][n], qp), None
                 i = self.tail.index(n)
                 tl = st.get("tail", [])
                 pitch, yw = tl[i] if i < len(tl) else (0.0, 0.0)

@@ -46,3 +46,5 @@ assets/characters_v2/*.blend
 assets/characters_v2/*.blend1
 renders/w02/frames_v2/
 renders/w02/test_v2*/
+renders/fun/
+blender/potato*.blend
