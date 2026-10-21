@@ -12,7 +12,7 @@ Reporting is normal and nobody gets blamed.
 - Light, upbeat launch-style music (no cinematic score, no movie-trailer sound).
 - Short lines a driver can read in a glance.
 
-## The script (24 fps, animated on twos)
+## The script (24 fps; v2 animates on every frame)
 
 | Time | Picture | On screen | Sound |
 | --- | --- | --- | --- |
@@ -46,7 +46,9 @@ Reporting is normal and nobody gets blamed.
 
 ## Production (Blender, Bolt's Night Shift pipeline)
 
-Built on the Ep. 5 set, cast and engine; everything W02-specific lives in `scripts/w02/`:
+Built on the Ep. 5 set. **v2 (October 2026):** the cast is the v2 Pickles, Mittens and Bolt
+(`docs/CHARACTERS_V2.md`: generated models, mocap and the dog gait engine, faces that animate),
+keyed on every frame instead of on twos. Everything W02-specific lives in `scripts/w02/`:
 
 | File | What it does |
 | --- | --- |
@@ -54,18 +56,20 @@ Built on the Ep. 5 set, cast and engine; everything W02-specific lives in `scrip
 | `props.py` | Diwali lights, marigolds, the dentable end upright (`crinkle` shape key), the card, the AMBER tag and stitches, the needle |
 | `screen_ui.py` | The in-cab screen sequence (orders ticker, report form, sent) |
 | `build_episode.py` | Builds the scene, keys root motion, props, screen and cameras; renders stills or frames |
-| `perf.py` | Mittens, Pickles and Bolt's performance on the Ep. 5 gait and pose engine |
+| `perf.py` | The v2 cast's performance: Mittens seated at the wheel (IK hands, looks, the SEND tap, wink), Pickles pushing the cage on a motion-captured walk played by distance, Bolt on the gait engine (trot, turning steps, paw press, stitches); faces, tails and ears |
 | `sfx.py` | Music cut (default Mixkit "Just Keep Walking") and the felt-world sound design, mixed to -14 LUFS |
 | `post.py` | Paper-strip captions, the rule / stat / end cards, 16:9 and 9:16, SRT |
 
 Staging notes: FL-02 drives with the forks raised (tine tops at 0.63 m) and the left tine tip
 meets the upright's aisle face at the fold height on frame 36. The cab screen is swung in on its
 arm to within Mittens' reach so she can tap it. Pickles parks east of the aisle mouth so the cage
-stays out of Bolt's path and the group shot.
+stays out of Bolt's path and the group shot. v2: Pickles walks at a pace his legs can carry
+(he sets off at frame 60 from x 6.6, out of the early shots), the cage's push bar sits at 0.80 m
+for his reach, and Bolt steps back 13 cm as he turns to the upright (his muzzle is longer).
 
 ```
 python3 scripts/w02/screen_ui.py
-blender -b --factory-startup -P scripts/w02/build_episode.py -- --playblast renders/w02/frames --step 2
+blender -b --factory-startup -P scripts/w02/build_episode.py -- --playblast renders/w02/frames_v2 --step 1
 python3 scripts/w02/sfx.py
-python3 scripts/w02/post.py
+python3 scripts/w02/post.py --src 'renders/w02/frames_v2/f_%04d.png'
 ```

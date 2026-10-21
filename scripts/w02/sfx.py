@@ -239,7 +239,7 @@ def main():
     a_, b_ = E["orders"]
     for f in range(a_, b_ + 1, 3):
         add(sfx, tick(3000, 0.03), ft(f), 0.05, pan=-0.3)
-    go, stop = E["pickles_go"], E["pickles_stop"]
+    go, stop = max(E["pickles_go"], T.SHOT["s03_rush"][1]), E["pickles_stop"]   # under the music, not the hush
     add(sfx, rattle(ft(stop) - ft(go) + 0.3), ft(go), 0.3, pan=-0.4)
     # sneaking away: the reversing alarm gives her away
     r0, r1 = E["fl_reverse"]
