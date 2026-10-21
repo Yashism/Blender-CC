@@ -24,8 +24,8 @@ def card(sid, k, W, H):
     img = Image.new("RGB", (W, H), (0, 0, 0))
     d = ImageDraw.Draw(img)
     lines = T.CARDS[sid]
-    big = ImageFont.truetype(SERIF, int(H * 0.085))
-    small = ImageFont.truetype(SMALL, int(H * 0.05))
+    big = ImageFont.truetype(SERIF, int(H * 0.095))
+    small = ImageFont.truetype(SMALL, int(H * 0.068))
     y = H * (0.42 if len(lines) > 1 else 0.47)
     for text, at, style in lines:
         if k < at:
