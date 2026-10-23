@@ -1,10 +1,12 @@
-"""RAMS Digital Twin launch film "2D to 8D": the post. Titles, the data panels, the 16:9 master
-(1920x1080) and the 9:16 vertical (1080x1920), then the encode with the sound.
+"""RAMS Digital Twin launch film "The 2 a.m. hit": the post. Assembles the shots (the twin, the
+W01 impact and dent shots, the desk), the transitions, the story stamps, the 2D to 8D titles and
+data panels, the captions, the 16:9 master (1920x1080) and the 9:16 vertical (1080x1920).
 
-    python3 scripts/twin/post.py [--src renders/twin/frames] [--frames 1-1574] [--jobs 4] [--no-encode]
+    python3 scripts/twin/post.py [--twin renders/twin/story] [--desk renders/twin/desk]
+        [--frames 1-2303] [--jobs 4] [--no-encode] [--clip c01_night]
 
-The 3D frames (960x540) are scaled up and every line of type is drawn at full resolution, so the
-words stay sharp. Numbers in the panels are illustrative (the film says so on screen).
+Draft renders may skip frames (rendered on twos): a missing frame takes the nearest one in the
+same shot. Numbers in the panels are illustrative (the film says so on screen).
 """
 import argparse
 import json
@@ -210,6 +212,32 @@ def logo(width):
     return _logo[width]
 
 
+_axis = []
+
+
+def logo_axis():
+    """Where the word DIGITAL is centred, as a fraction of the logo's width. The corner mark makes
+    the logo wider on the right, so anything centred with the logo centres on this, not on the image."""
+    if not _axis:
+        import numpy as np
+        a = np.asarray(Image.open(LOGO).convert("RGBA"))[:, :, 3] > 40
+        rows = a.any(1)
+        bot = len(rows) - 1
+        while not rows[bot]:
+            bot -= 1
+        top = bot
+        while top > 0 and rows[top - 1]:
+            top -= 1                                   # the DIGITAL line: the lowest band of ink
+        cols = np.nonzero(a[top:bot + 1].any(0))[0]
+        _axis.append((cols.min() + cols.max() + 1) / 2 / a.shape[1])
+    return _axis[0]
+
+
+def blit_logo(c, lg, cx, y, alpha=1.0):
+    """The logo with DIGITAL centred on x = cx."""
+    blit(c, lg, cx - logo_axis() * lg.width, y, alpha)
+
+
 def inr(v):
     """Indian digit grouping: 132470 -> 1,32,470."""
     s = str(int(round(v)))
@@ -291,41 +319,94 @@ SECS = [s for s in T.SECTIONS if s[3]]
 
 
 def section_at(f):
-    for s in SECS:
-        if T.bar(s[1]) <= f < T.bar(s[2]):
-            return s
+    for sec in SECS:
+        if T.f(sec[1]) <= f < T.f(sec[2]):
+            return sec
     return None
+
+
+TWIN0, TWIN1 = T.f(T.SEC["d2"][1]), T.f(T.SEC["d8"][2])      # the stretch the 2D-8D furniture shows on
 
 
 # ------------------------------------------------------------------ elements
 
-def el_hook(c, lay, f):
-    a = window(f, 6, 92, 12, 12)
-    if a <= 0:
-        return
-    dy = -10 * ease_out(ramp(f, 6, 40))
-    if lay.mode == "h":
-        text(c, (lay.W / 2, lay.H / 2 + 20), "Every warehouse starts as a drawing.", font("title", 62), WHITE, a,
-             "ms", shadow=True, dy=dy)
-    else:
-        for k, s in enumerate(("Every warehouse starts", "as a drawing.")):
-            text(c, (lay.W / 2, 300 + 84 * k), s, font("title", 72), WHITE, a, "ms", shadow=True, dy=dy)
+def el_stamp(c, lay, f):
+    """Where and when: 02:14 in the aisle, Monday morning at the desk, Tuesday's audit."""
+    v = lay.mode == "v"
+    for t0, t1, big, small, extra in (
+            (0.4, 10.3, "02:14", "PEAK SEASON  ·  AISLE 03", (8.3, "Incident log: no entry")),
+            (11.2, 15.0, "07:52", "MONDAY", None),
+            (79.5, 83.4, "08:52", "TUESDAY  ·  AUDIT DAY", None)):
+        a = window(f, T.f(t0), T.f(t1), 14, 12)
+        if a <= 0:
+            continue
+        x = lay.m
+        y = lay.H - 150 if not v else 1268
+        text(c, (x, y), big, font("counter", 76 if not v else 96), WHITE, a, shadow=True)
+        text(c, (x + 4, y + 44 if not v else y + 56), small, font("ui_s", 20 if not v else 26), (214, 222, 232), a,
+             tracking=2.0, shadow=True)
+        if extra and f >= T.f(extra[0]):
+            ea = a * ease_out(ramp(f, T.f(extra[0]), 10))
+            yy = y + (84 if not v else 108)
+            dot(c, (x + 10, yy - 8), 6, RED, ea)
+            text(c, (x + 26, yy), extra[1], font("ui_m", 22 if not v else 28), (255, 150, 140), ea, shadow=True)
+
+
+def _caption_lines(s_, fnt, maxw):
+    words, out, cur = s_.split(), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if fnt.getlength(t) > maxw and cur:
+            out.append(cur)
+            cur = w
+        else:
+            cur = t
+    if cur:
+        out.append(cur)
+    if len(out) == 2 and fnt.getlength(out[0]) > 1.6 * fnt.getlength(out[1]):
+        words = s_.split()                         # balance the two lines
+        best = min(range(1, len(words)), key=lambda k: abs(fnt.getlength(" ".join(words[:k])) -
+                                                            fnt.getlength(" ".join(words[k:]))))
+        out = [" ".join(words[:best]), " ".join(words[best:])]
+    return out
+
+
+def el_caption(c, lay, f):
+    """Burned-in captions for muted autoplay: each VO line while it is spoken."""
+    v = lay.mode == "v"
+    t = T.sec(f)
+    for ln in T.VO:
+        t0 = ln[3]
+        t1 = t0 + (ln[2] - ln[1]) + 0.3
+        if not (t0 - 0.05 <= t <= t1):
+            continue
+        a = min(ease_out((t - t0 + 0.05) / 0.12), ease_io((t1 - t) / 0.15))
+        fnt = font("ui_m", 34 if not v else 36)
+        lines = _caption_lines(ln[4], fnt, 1240 if not v else 940)
+        lh = 46 if not v else 50
+        y_last = lay.H - 54 if not v else 1112
+        for i, s_ in enumerate(lines):
+            y = y_last - lh * (len(lines) - 1 - i)
+            w = fnt.getlength(s_)
+            panel(c, (lay.W / 2 - w / 2 - 16, y - 34, lay.W / 2 + w / 2 + 16, y + 12), a * 0.75, radius=8,
+                  fill=(0, 0, 0, 150), border=(0, 0, 0, 0))
+            text(c, (lay.W / 2, y), s_, fnt, WHITE, a, "ms")
 
 
 def el_dimension(c, lay, f):
     """The big counter (2D..8D) with the RAMS title and one line; rolls on each downbeat."""
     s = section_at(f)
-    end_all = T.bar(28)
-    if f >= end_all + 10 or f < T.bar(2):
+    end_all = TWIN1
+    if f >= end_all or f < TWIN0 + 8:
         return
-    out_a = 1 - ramp(f, end_all, 10)
+    out_a = 1 - ramp(f, end_all - 8, 8)
     h = lay.mode == "h"
     csz = 150 if h else 190
     x = lay.m
-    base = lay.H - 100 if h else 330
+    base = lay.H - 128 if h else 330
     cur = s or SECS[-1]
     k = SECS.index(cur)
-    f0 = T.bar(cur[1])
+    f0 = max(T.f(cur[1]), TWIN0 + 8)
     u = ease_out(ramp(f, f0, 12))
     # rolling digit: the old one rises out, the new one rises in
     num_f = font("counter", csz)
@@ -334,7 +415,7 @@ def el_dimension(c, lay, f):
         _counter(c, (x, base - 46 * u), prev, num_f, (1 - u) * out_a)
     cw = _counter(c, (x, base + 46 * (1 - u)), cur[3], num_f, (u if k > 0 or f > f0 else 1) * out_a)
     cw = max(cw, num_f.getlength("8D"))
-    fade_out = 1 - ramp(f, T.bar(cur[2]) - 7, 7) if cur[2] < 28 else 1.0
+    fade_out = 1 - ramp(f, T.f(cur[2]) - 7, 7) if cur[0] != "d8" else 1.0
     ta = ease_out(ramp(f, f0 + 4, 12)) * fade_out * out_a
     la = ease_out(ramp(f, f0 + 9, 12)) * fade_out * out_a
     if h:
@@ -374,7 +455,7 @@ def _wrap(c, xy, s, fnt, fill, alpha, maxw, lh):
 
 def el_rail(c, lay, f):
     """2D 3D ... 8D across the top, the current one lit."""
-    a = window(f, T.bar(2), T.bar(28) + 8, 10, 10)
+    a = window(f, TWIN0 + 8, TWIN1, 10, 8)
     if a <= 0:
         return
     s = section_at(f)
@@ -391,23 +472,23 @@ def el_rail(c, lay, f):
         al = 1.0 if i == k else (0.62 if i < k else 0.28)
         w = text(c, (x0 + i * step, y), sec[3], fnt, col, a * al, tracking=1.0)
         if i == k:
-            u = ease_out(ramp(f, T.bar(sec[1]), 10))
+            u = ease_out(ramp(f, T.f(sec[1]), 10))
             line(c, (x0 + i * step, y + 12), (x0 + i * step + w * u, y + 12), ORANGE, 3, a)
 
 
 def el_logo_bug(c, lay, f):
-    a = window(f, T.bar(2), T.bar(28) + 6, 12, 10) * 0.82
+    a = window(f, TWIN0 + 8, TWIN1, 12, 8) * 0.82
     if a <= 0:
         return
     lg = logo(150 if lay.mode == "h" else 170)
     if lay.mode == "h":
         blit(c, lg, lay.W - lay.m - lg.width, 50, a)
     else:
-        blit(c, lg, (lay.W - lg.width) / 2, 40, a)
+        blit_logo(c, lg, lay.W / 2, 40, a)
 
 
 def el_footnote(c, lay, f):
-    a = window(f, E["sensors"], T.bar(28), 12, 10) * 0.5
+    a = window(f, E["sensors"], TWIN1, 12, 8) * 0.5
     if a > 0:
         y = lay.H - 30 if lay.mode == "h" else lay.H - 40
         text(c, (lay.W - lay.m, y), "Sample warehouse. Illustrative data.", font("ui", 17 if lay.mode == "h" else 22),
@@ -416,66 +497,64 @@ def el_footnote(c, lay, f):
 
 # 4D -------------------------------------------------------------------------------------------
 
-def year_events():
-    f0, f1 = E["sensors"], E["year_end"]
-    return sorted(f0 + 10 + int(frac * (f1 - f0 - 20)) for _, _, frac, _ in T.YEAR_IMPACTS)
+def _clock(f):
+    """The twin's clock running back from this morning (07:52) to 02:14:37 last night."""
+    f0, fh = E["sensors"], E["hit_found"] - 4
+    u = ease_io(ramp(f, f0 + 4, fh - f0 - 4))
+    t0, t1 = 7 * 3600 + 52 * 60, 2 * 3600 + 14 * 60 + 37
+    t = t0 + (t1 - t0) * u
+    return int(t), u
 
 
-MONTHS = "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split()
-
-
-def el_year(c, lay, f):
-    f0, f1 = E["sensors"], E["year_end"]
-    a = window(f, f0, f1 + 2, 10, 8)
+def el_rewind(c, lay, f):
+    f0, f1, fh = E["sensors"], E["year_end"], E["hit_found"]
+    a = window(f, f0 + 2, f1 + 2, 10, 8)
     if a <= 0:
         return
-    u = clamp((f - f0 - 4) / (f1 - f0 - 10))
     v = lay.mode == "v"
-    if not v:
-        x0, x1, y = 1100, lay.W - lay.m, lay.H - 112
-        fm = font("ui_m", 16)
-    else:
-        x0, x1, y = lay.m + 30, lay.W - lay.m - 30, lay.panel_y + 96
-        fm = font("ui_m", 24)
-    cur = min(11, int(u * 12))
-    panel(c, (x0 - 26, y - (58 if not v else 80), x1 + 26, y + (26 if not v else 36)), a, radius=12)
-    for i, mth in enumerate(MONTHS):
-        mx = x0 + (x1 - x0) * (i + 0.5) / 12
-        text(c, (mx, y - (22 if not v else 30)), mth, fm, WHITE if i == cur else FAINT, a, "ms")
-    line(c, (x0, y), (x1, y), (255, 255, 255), 2, 0.25 * a)
-    px = x0 + (x1 - x0) * u
-    line(c, (x0, y), (px, y), ORANGE, 4 if not v else 6, a)
-    for fe in year_events():
-        if f >= fe:
-            ex = x0 + (x1 - x0) * clamp((fe - f0 - 4) / (f1 - f0 - 10))
-            dot(c, (ex, y), 5 if not v else 7, RED, a)
-    dot(c, (px, y), 8 if not v else 11, ORANGE, a, glow=True)
-    n_imp = sum(1 for fe in year_events() if f >= fe)
-    moves = int(18240 * ease_io(u))
-    P = Pn(c, lay, a, k_v=1.9, w=360)
-    if v:
-        P.y = lay.panel_y + 170
-    P.bg(170)
-    P.t(24, 40, "IMPACTS LOGGED", "ui_s", 15, DIM, tracking=1.5)
-    P.t(24, 88, str(n_imp), "ui_s", 40)
-    P.t(24 + P.w / 2, 40, "MHE MOVES", "ui_s", 15, DIM, tracking=1.5)
-    P.t(24 + P.w / 2, 88, f"{moves:,}", "ui_s", 40)
-    P.t(24, 140, "Every hit and every move, on the record", "ui", 16, FAINT)
+    t, u = _clock(f)
+    P = Pn(c, lay, a, k_v=1.9, w=420)
+    w = P.w
+    P.bg(318)
+    P.t(26, 42, "TWIN TIMELINE", "ui_s", 16, ORANGE, tracking=2.0)
+    P.t(w - 26, 42, "◀◀  REWIND" if f < fh else "LAST NIGHT", "ui_s", 15, DIM, 1.0, "rs", tracking=1.5)
+    day = "MON" if t >= 6 * 3600 else "MON"
+    P.t(26, 112, f"{t // 3600:02d}:{t // 60 % 60:02d}:{t % 60:02d}", "counter", 58)
+    P.t(26, 140, f"{day} 14 OCT", "ui_m", 16, FAINT, tracking=1.5)
+    # the night, 00:00 to 08:00, with the playhead running back
+    x0, x1, y = 26, w - 26, 186
+    P.ln(x0, y, x1, y, (255, 255, 255), 2, 0.25)
+    for hh in range(0, 9, 2):
+        xx = x0 + (x1 - x0) * hh / 8
+        P.ln(xx, y - 6, xx, y + 6, (255, 255, 255), 1, 0.35)
+        P.t(xx, y + 26, f"{hh:02d}:00", "ui", 13, FAINT, 1.0, "ms")
+    px = x0 + (x1 - x0) * (t / 3600) / 8
+    P.ln(px, y, x1 - (x1 - x0) * (8 - 7.87) / 8, y, ORANGE, 4, 1.0)
+    P.dot(px, y, 8, ORANGE, 1.0, glow=True)
+    if f >= fh:
+        ha = ease_out(ramp(f, fh, 8))
+        hx = x0 + (x1 - x0) * (2 + 14 / 60) / 8
+        P.dot(hx, y, 7, RED, ha, glow=True)
+        P.ln(26, 232, w - 26, 232, (255, 255, 255), 1, 0.15 * ha)
+        P.t(26, 266, "IMPACT  ·  R05-B07 front upright", "ui_s", 19, WHITE, ha)
+        ra = ease_out(ramp(f, T.f(44.7), 8))
+        P.dot(32, 292, 6, RED, ra)
+        P.t(48, 298, "Not reported", "ui_m", 18, (255, 150, 140), ra)
 
 
 # 5D -------------------------------------------------------------------------------------------
 
 PARTS = [  # (track key, order n in anim, label, note)
-    ("up", 0, "UPRIGHT 90×70 · 7200 mm", "Impact damage · replace"),
-    ("b1", 1, "BEAM 2700 mm · LEVEL 1", "Deflection over limit"),
-    ("b2", 2, "BEAM 2700 mm · LEVEL 2", "Connector damage"),
+    ("up", 0, "UPRIGHT 90×70 · 9000 mm", "Impact damage · replace"),
+    ("b1", 1, "BEAM 2310 mm · LEVEL 1", "Deflection over limit"),
+    ("b2", 2, "BEAM 2310 mm · LEVEL 2", "Connector damage"),
     ("br", 3, "DIAGONAL BRACE", "Bent · replace"),
     ("gd", 4, "UPRIGHT GUARD 400 mm", "New · stops repeat hits"),
     ("an0", 5, "ANCHOR BOLTS M12 × 4", "Loose · replace"),
 ]
 BOQ = [  # (row, unit price, (part orders that add one each))
-    ("Upright 90×70 × 7200 mm", 14800, (0,)),
-    ("Beam 2700 mm", 5800, (1, 2)),
+    ("Upright 90×70 × 9000 mm", 18400, (0,)),
+    ("Beam 2310 mm", 5200, (1, 2)),
     ("Diagonal brace", 1450, (3,)),
     ("Upright guard 400 mm", 3900, (4,)),
     ("Anchor bolt M12", 180, (5, 6, 7, 8)),
@@ -511,7 +590,7 @@ def el_parts(c, lay, f, track):
 
 
 def el_boq(c, lay, f):
-    a = window(f, E["parts_out"] + 14, T.bar(16) - 1, 12, 0)
+    a = window(f, E["parts_out"] + 14, E["section_close"], 12, 0)
     if a <= 0:
         return
     P = Pn(c, lay, a, k_v=1.2, top=150)
@@ -547,12 +626,15 @@ def el_boq(c, lay, f):
 
 def el_fleet(c, lay, f):
     f0, fr, fs = E["routes_long"], E["replan"], E["routes_short"]
-    a = window(f, f0 + 4, T.bar(20) - 1, 10, 0)
+    a = window(f, f0 + 4, T.f(T.SEC["d6"][2]) - 1, 10, 0)
     if a <= 0:
         return
     P = Pn(c, lay, a, k_v=1.9)
     w = P.w
-    P.bg(300)
+    P.bg(354)
+    ha = ease_out(ramp(f, E["heat"], 10)) * (1 - 0.6 * ease_out(ramp(f, fs + 40, 12)))
+    P.dot(34, 334, 7, RED, ha)
+    P.t(52, 341, "Aisle 03 carries 61% of all trips", "ui_m", 18, (255, 170, 160), ha)
     P.t(26, 42, "MHE FLEET · TODAY", "ui_s", 16, ORANGE, tracking=2.0)
     ua = ease_io(ramp(f, f0 + 4, 88))
     ub = ease_io(ramp(f, fs + 2, 66))
@@ -575,9 +657,8 @@ def el_fleet(c, lay, f):
 
 def el_maint(c, lay, f, track):
     fp, fw, fs, fc = E["predict"], E["work_order"], E["swap"], E["closed"]
-    end = T.bar(24) - 1
+    end = T.f(T.SEC["d7"][2]) - 1
     v = lay.mode == "v"
-    k = 1.18 if v else 1.0
     tr = track.get("s4_maint", {}).get(str(f))
     # the flag on the beam before the work order exists
     fa = window(f, fp + 12, fw + 6, 8, 8)
@@ -675,7 +756,7 @@ def el_safety(c, lay, f, track):
         P.t(48, 38, "IMPACT DETECTED", "ui_b", 18, WHITE, tracking=2.0)
         P.t(w - 22, 38, "14:32:07", "ui_m", 16, WHITE, 1.0, "rs")
         P.t(26, 98, "R04-B13 · Upright · Aisle 02", "ui_s", 21)
-        P.t(26, 128, "Severity RED · 0.8 g at 0.4 m", "ui", 17, DIM)
+        P.t(26, 128, "Fork strike · 0.8 g at 0.1 m · RED", "ui", 17, DIM)
         for i, (lab, ft) in enumerate((("Exclusion zone set", fz), ("Unload bays B12-B13", fu))):
             ra = ease_out(ramp(f, ft, 8))
             y = 172 + 36 * i
@@ -686,7 +767,7 @@ def el_safety(c, lay, f, track):
             x, y = lay.vp(*tr["impact"][:2])
             line(c, (P.x, P.Y(98)), (x, y), (255, 255, 255), 1, 0.4 * a)
             dot(c, (x, y), 6, RED, a, glow=True)
-    sa = window(f, fr + 18, T.bar(28) + 6, 10, 10)
+    sa = window(f, fr + 18, TWIN1, 10, 8)
     if sa > 0:
         counts, n = rag_counts()
         P = Pn(c, lay, sa, k_v=1.9)
@@ -707,25 +788,25 @@ def el_safety(c, lay, f, track):
 
 def el_outro(c, lay, f):
     t0, cta = E["title"], E["cta"]
-    if f < t0 or f >= T.END_HIT:
+    if f < t0 or f >= T.END_CARD:
         return
     v = lay.mode == "v"
     la = ease_out(ramp(f, t0, 14))
     ta = ease_out(ramp(f, t0 + 6, 14))
     sa = ease_out(ramp(f, t0 + 12, 14))
+    ax = lay.m + 330 if not v else lay.W / 2          # the column's axis: the centre of DIGITAL
     if not v:
-        x = lay.m + 8
         blit(c, title_wash(), 0, 0, la)
         lg = logo(330)
-        blit(c, lg, x - 8, 112 - 16 * (1 - la), la)
-        text(c, (x, 380 - 16 * (1 - ta)), "Digital Twin", font("title", 108), WHITE, ta, shadow=True)
-        text(c, (x + 4, 440 - 12 * (1 - sa)), "From 2D layouts to 8D models.", font("ui", 36), (214, 222, 232), sa,
-             shadow=True)
+        blit_logo(c, lg, ax, 112 - 16 * (1 - la), la)
+        text(c, (ax, 380 - 16 * (1 - ta)), "Digital Twin", font("title", 108), WHITE, ta, "ms", shadow=True)
+        text(c, (ax, 440 - 12 * (1 - sa)), "Your entire warehouse, from 2D to 8D.", font("ui", 36), (214, 222, 232),
+             sa, "ms", shadow=True)
     else:
         lg = logo(420)
-        blit(c, lg, (lay.W - lg.width) / 2, 70 - 16 * (1 - la), la)
+        blit_logo(c, lg, ax, 70 - 16 * (1 - la), la)
         text(c, (lay.W / 2, 380 - 16 * (1 - ta)), "Digital Twin", font("title", 112), WHITE, ta, "ms", shadow=True)
-        text(c, (lay.W / 2, 450 - 12 * (1 - sa)), "From 2D layouts to 8D models.", font("ui", 40), (214, 222, 232),
+        text(c, (lay.W / 2, 450 - 12 * (1 - sa)), "Your entire warehouse, from 2D to 8D.", font("ui", 40), (214, 222, 232),
              sa, "ms", shadow=True)
     ca = ease_out(ramp(f, cta, 12))
     if ca <= 0:
@@ -735,29 +816,29 @@ def el_outro(c, lay, f):
     pw = fb.getlength(lab) + 64
     ph = 66 if not v else 88
     if not v:
-        px, py = lay.m + 8, 492
+        px, py = ax - pw / 2, 486
     else:
-        px, py = (lay.W - pw) / 2, 1340
+        px, py = ax - pw / 2, 1340
     py += 14 * (1 - ca)
     shape(c, ca, lambda d, ox, oy: d.rounded_rectangle((px + ox, py + oy, px + pw + ox, py + ph + oy), ph / 2,
                                                        fill=ORANGE), (px, py, px + pw + 1, py + ph + 1))
     text(c, (px + pw / 2, py + ph / 2 + (11 if not v else 14)), lab, fb, WHITE, ca, "ms")
     url = "rams.digital"
     if not v:
-        text(c, (px + pw + 28, py + ph / 2 + 11), url, font("ui_m", 30), WHITE, ca, shadow=True)
+        text(c, (ax, py + ph + 52), url, font("ui_m", 30), WHITE, ca, "ms", shadow=True)
     else:
         text(c, (lay.W / 2, py + ph + 80), url, font("ui_m", 40), WHITE, ca, "ms")
 
 
 def end_card(lay, f):
     c = Image.new("RGBA", (lay.W, lay.H), BG + (255,))
-    k = f - T.END_HIT
+    k = f - T.END_CARD
     v = lay.mode == "v"
     lg = logo(560 if not v else 640)
     cy = lay.H / 2 - (40 if not v else 80)
     s = 1.0 + 0.02 * ease_out(ramp(k, 0, 50))
     lgs = lg.resize((int(lg.width * s), int(lg.height * s)), Image.LANCZOS)
-    blit(c, lgs, (lay.W - lgs.width) / 2, cy - lgs.height, 1.0)
+    blit_logo(c, lgs, lay.W / 2, cy - lgs.height, 1.0)
     text(c, (lay.W / 2, cy + 90), "Digital Twin", font("title", 74 if not v else 88), WHITE, ease_out(ramp(k, 4, 10)), "ms")
     text(c, (lay.W / 2, cy + 160), "rams.digital", font("ui_m", 34 if not v else 42), DIM, ease_out(ramp(k, 10, 10)), "ms")
     out = c.convert("RGB")
@@ -815,28 +896,65 @@ def bg_v():
     return _bgv
 
 
-def source(f, src):
-    p = os.path.join(src, f"f_{f:04d}.png")
+def _frame(d, f, shot):
+    """f_####.png from d, or the nearest frame of the same shot (draft renders skip frames)."""
+    p = os.path.join(d, f"f_{f:04d}.png")
     if os.path.exists(p):
         return Image.open(p).convert("RGB")
-    # previews may run before the render is done: nearest rendered frame, or black
-    for d in range(1, 40):
-        for q in (f - d, f + d):
-            p = os.path.join(src, f"f_{q:04d}.png")
-            if os.path.exists(p) and T.shot_at(q) == T.shot_at(f):
-                return Image.open(p).convert("RGB")
+    for k in range(1, 48):
+        for q in (f - k, f + k):
+            if shot[1] <= q <= shot[2]:
+                p = os.path.join(d, f"f_{q:04d}.png")
+                if os.path.exists(p):
+                    return Image.open(p).convert("RGB")
     return Image.new("RGB", (960, 540), BG)
 
 
-def compose(f, mode, src, track):
+W01 = {"s01_impact": os.path.join(ROOT, "renders", "w01", "s01_impact", "frames"),
+       "s02_dent": os.path.join(ROOT, "renders", "w01", "s02_dent", "preview")}
+
+
+def shot_frame(f):
+    """The picture for film frame f, before any transition."""
+    shot = T.shot_at(f)
+    kind = shot[3]
+    if kind.startswith("w01:"):
+        d = W01[kind[4:]]
+        n = len([x for x in os.listdir(d) if x.endswith(".png")]) if os.path.isdir(d) else 0
+        k = min(max(1, f - shot[1] + 1), max(1, n))
+        return _frame(d, k, (None, 1, n)).resize((960, 540), Image.LANCZOS)
+    d = _G["desk"] if kind == "desk" else _G["twin"]
+    return _frame(d, f, shot).resize((960, 540), Image.LANCZOS)
+
+
+# (first frame of the incoming shot, frames, kind): dissolves hold the outgoing shot's last frame
+TRANS = [(T.SHOT["m1_desk"][1], 12, "dip"), (T.SHOT["s1_plan"][1], 16, "dissolve"),
+         (T.SHOT["m2_audit"][1], 8, "dissolve"), (T.SHOT["s6_logo"][1], 10, "dissolve")]
+
+
+def source(f):
+    img = shot_frame(f)
+    for f0, n, kind in TRANS:
+        if kind == "dip":
+            if f0 - n <= f < f0:
+                img = Image.blend(img, Image.new("RGB", img.size, (0, 0, 0)), ease_io((f - (f0 - n)) / n))
+            elif f0 <= f < f0 + n:
+                img = Image.blend(Image.new("RGB", img.size, (0, 0, 0)), img, ease_io((f - f0) / n))
+        elif f0 <= f < f0 + n:
+            img = Image.blend(shot_frame(f0 - 1), img, ease_io((f - f0 + 1) / (n + 1)))
+    return img
+
+
+def compose(f, mode, track):
     lay = Lay(mode)
-    if f >= T.END_HIT:
+    if f >= T.END_CARD:
         return end_card(lay, f)
-    img = source(f, src)
+    img = source(f)
+    twin = TWIN0 <= f < TWIN1
     if mode == "h":
         c = img.resize((lay.W, lay.H), Image.LANCZOS).convert("RGBA")
-        ga = 1.0 if f >= T.bar(2) - 6 else 0.5
-        blit(c, grad_h(), 0, 0, ga * (1 - ramp(f, T.bar(28), 12) * 0.6))
+        if twin:
+            blit(c, grad_h(), 0, 0, ease_io(ramp(f, TWIN0, 12)) * (1 - ramp(f, TWIN1 - 10, 10)))
     else:
         c = bg_v().copy()
         x0, y0, w, h = lay.video
@@ -847,10 +965,10 @@ def compose(f, mode, src, track):
             ed.line((0, i, w, i), fill=BG + (int(255 * (1 - i / 70) ** 2),))
         c.alpha_composite(edge, (x0, y0))
         c.alpha_composite(edge.transpose(Image.FLIP_TOP_BOTTOM), (x0, y0 + h - 70))
-    el_hook(c, lay, f)
+    el_stamp(c, lay, f)
     el_rail(c, lay, f)
     el_logo_bug(c, lay, f)
-    el_year(c, lay, f)
+    el_rewind(c, lay, f)
     el_parts(c, lay, f, track)
     el_boq(c, lay, f)
     el_fleet(c, lay, f)
@@ -859,14 +977,15 @@ def compose(f, mode, src, track):
     el_dimension(c, lay, f)
     el_footnote(c, lay, f)
     el_outro(c, lay, f)
+    el_caption(c, lay, f)
     return c.convert("RGB")
 
 
 _G = {}
 
 
-def _init(src, modes=None):
-    _G["src"] = src
+def _init(twin, desk, modes=None):
+    _G["twin"], _G["desk"] = twin, desk
     if modes:
         _G["modes"] = modes
     p = os.path.join(OUT, "track.json")
@@ -876,14 +995,16 @@ def _init(src, modes=None):
 def _job(f):
     for mode, d in _G.get("modes", (("h", "cut16"), ("v", "cut9"))):
         out = os.path.join(OUT, d, f"{mode}_{f:04d}.png")
-        compose(f, mode, _G["src"], _G["track"]).save(out, compress_level=1)
+        compose(f, mode, _G["track"]).save(out, compress_level=1)
     return f
 
 
-# review clips: one per dimension (hook and 2D together, outro with the end card)
-CLIPS = [("c1_hook_2D", 1, T.bar(4) - 1), ("c2_3D", T.bar(4), T.bar(8) - 1), ("c3_4D", T.bar(8), T.bar(12) - 1),
-         ("c4_5D", T.bar(12), T.bar(16) - 1), ("c5_6D", T.bar(16), T.bar(20) - 1), ("c6_7D", T.bar(20), T.bar(24) - 1),
-         ("c7_8D", T.bar(24), T.bar(28) - 1), ("c8_outro", T.bar(28), T.END)]
+# review clips: one per scene
+_S = T.SEC
+CLIPS = [("c01_night", 1, T.f(_S["night"][2]) - 1), ("c02_morning", T.f(_S["morning"][1]), T.f(_S["morning"][2]) - 1),
+         ("c03_2D_3D", T.f(_S["d2"][1]), T.f(_S["d3"][2]) - 1)] + \
+        [(f"c{4 + k:02d}_{d[1:]}D", T.f(_S[d][1]), T.f(_S[d][2]) - 1) for k, d in enumerate(("d4", "d5", "d6", "d7", "d8"))] + \
+        [("c09_audit", T.f(_S["audit"][1]), T.f(_S["audit"][2]) - 1), ("c10_logo", T.f(_S["logo"][1]), T.END)]
 
 
 def encode_clip(name, f0, f1, audio, out_dir, mode="h"):
@@ -909,28 +1030,29 @@ def encode(pattern, audio, out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--src", default=os.path.join(OUT, "frames"))
+    ap.add_argument("--twin", default=os.path.join(OUT, "story"))
+    ap.add_argument("--desk", default=os.path.join(OUT, "desk"))
     ap.add_argument("--frames", default=f"1-{T.END}")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--no-encode", action="store_true")
-    approved = os.path.join(OUT, "twin_mix_approved.wav")      # the signed-off soundtrack, if there is one
-    ap.add_argument("--audio", default=approved if os.path.exists(approved) else os.path.join(OUT, "twin_mix.wav"))
-    ap.add_argument("--name", default="RAMS_digital_twin_2D_to_8D")
-    ap.add_argument("--clip", help="make one review clip (c1_hook_2D ... c8_outro), 16:9 only")
+    ap.add_argument("--audio", default=os.path.join(OUT, "story_mix.wav"))
+    ap.add_argument("--name", default="RAMS_digital_twin_2am_hit")
+    ap.add_argument("--clip", help="make review clips (c01_night ... c10_logo, comma separated), 16:9 only")
     a = ap.parse_args()
     if a.clip:
-        name, f0, f1 = next(c for c in CLIPS if c[0] == a.clip)
         os.makedirs(os.path.join(OUT, "cut16"), exist_ok=True)
-        with Pool(a.jobs, initializer=_init, initargs=(a.src, (("h", "cut16"),))) as pool:
-            list(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4))
-        out_dir = os.path.join(OUT, "clips")
+        out_dir = os.path.join(OUT, "story_clips")
         os.makedirs(out_dir, exist_ok=True)
-        print("clip", encode_clip(name, f0, f1, a.audio, out_dir))
+        for name in a.clip.split(","):
+            name, f0, f1 = next(c for c in CLIPS if c[0] == name)
+            with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, (("h", "cut16"),))) as pool:
+                list(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4))
+            print("clip", encode_clip(name, f0, f1, a.audio, out_dir), flush=True)
         return
     for d in ("cut16", "cut9"):
         os.makedirs(os.path.join(OUT, d), exist_ok=True)
     f0, f1 = (int(v) for v in a.frames.split("-"))
-    with Pool(a.jobs, initializer=_init, initargs=(a.src,)) as pool:
+    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk)) as pool:
         for k, _ in enumerate(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4)):
             if k % 100 == 0:
                 print("post", k, flush=True)

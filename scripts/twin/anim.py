@@ -194,7 +194,7 @@ def extras(G, M):
     spot = MD.mesh_ring("m_spot", 0.0, 0.45, 32)
     spot.materials.append(M["glow"])
     for k, tr in enumerate(G["trucks"]):
-        s = MD.obj(f"SPOT_{k}", spot, cD, "#3f8cff", 1.2, loc=(3.0, 0, 0.03))
+        s = MD.obj(f"SPOT_{k}", spot, cD, "#3f8cff", 0.06, loc=(3.0, 0, 0.03))
         s.parent = tr
     # rings and pins
     X["ring_me"] = MD.mesh_ring("m_ring", 0.86, 1.0)
@@ -274,29 +274,34 @@ def plan_and_extrude(G, X):
         kalpha(lb, E["extrude"] + 8, 1.0)
         kalpha(lb, E["extrude"] + 36, 0.0)
 
+    # the night shots see the real warehouse standing; the twin starts from the bare plan
+    s1 = T.SHOT["s1_plan"][1]
+
+    def from_night(ob, d, path, full, flat, index=-1):
+        khide(ob, 1, False)
+        khide(ob, s1, True)
+        khide(ob, d, False)
+        key(ob, path, 1, full, index=index, ip="CONSTANT")
+        key(ob, path, s1, flat, index=index)
+
     for (rid, i), ob in G["frames"].items():
         d = wave_delay(L.frame_x(i), rid)
-        khide(ob, 1, True)
-        khide(ob, d, False)
-        key(ob, "scale", 1, (1, 1, 0.02))
+        from_night(ob, d, "scale", (1, 1, 1), (1, 1, 0.02))
         key(ob, "scale", d, (1, 1, 0.02), ip="BACK", ease="EASE_OUT")
         key(ob, "scale", d + 13, (1, 1, 1))
     for (rid, b, lv), ob in G["beams"].items():
         d = wave_delay(L.bay_x(b), rid) + 7 + 2 * lv
-        khide(ob, 1, True)
-        khide(ob, d, False)
-        key(ob, "scale", 1, (0.02, 1, 1))
+        from_night(ob, d, "scale", (1, 1, 1), (0.02, 1, 1))
         key(ob, "scale", d, (0.02, 1, 1), ip="CUBIC", ease="EASE_OUT")
         key(ob, "scale", d + 8, (1, 1, 1))
     for (rid, b, lv), ob in G["loads"].items():
         d = wave_delay(L.bay_x(b), rid) + 13 + 2 * lv
         z0 = ob.location.z
-        khide(ob, 1, True)
-        khide(ob, d, False)
-        key(ob, "location", 1, z0 + 1.6, index=2)
+        from_night(ob, d, "location", z0, z0 + 1.6, index=2)
         key(ob, "location", d, z0 + 1.6, index=2, ip="CUBIC", ease="EASE_OUT")
         key(ob, "location", d + 9, z0, index=2)
-        key(ob, "scale", 1, (0.8, 0.8, 0.8))
+        key(ob, "scale", 1, (1, 1, 1), ip="CONSTANT")
+        key(ob, "scale", s1, (0.8, 0.8, 0.8))
         key(ob, "scale", d, (0.8, 0.8, 0.8), ip="CUBIC", ease="EASE_OUT")
         key(ob, "scale", d + 9, (1, 1, 1))
     for ob, d in ((G["walls"], E["extrude"] - 4), (G["office"], E["extrude"] + 30)):
@@ -307,9 +312,7 @@ def plan_and_extrude(G, X):
         key(ob, "scale", d + 16, (1, 1, 1))
     for k, ob in enumerate(G["chargers"]):
         d = E["extrude"] + 36 + 2 * k
-        khide(ob, 1, True)
-        khide(ob, d, False)
-        key(ob, "scale", 1, (1, 1, 0.02))
+        from_night(ob, d, "scale", (1, 1, 1), (1, 1, 0.02))
         key(ob, "scale", d, (1, 1, 0.02), ip="BACK", ease="EASE_OUT")
         key(ob, "scale", d + 10, (1, 1, 1))
 
@@ -418,8 +421,8 @@ def year(G, X):
     hit(rid, i, fh, "red", big=True)
     fr = G["frames"][(rid, i)]
     kcol(fr, fh - 1, MD.COL["frame"], 0.0)
-    kcol(fr, fh + 1, MD.COL["red"], 2.5)
-    kcol(fr, fh + 16, MD.COL["red"], 0.8)
+    kcol(fr, fh + 1, MD.COL["red"], 1.2)
+    kcol(fr, fh + 16, MD.COL["red"], 0.3)
     for ob in G["sensors"].values():
         kalpha(ob, E["section_cut"] - 1, 1.0)
         kalpha(ob, E["section_cut"], 0.0)
@@ -445,14 +448,14 @@ def boq(G, X):
     yface = face_y(rid)
     fr = G["frames"][(rid, bay)]
     kcol(fr, fc + 8, MD.COL["frame"], 0.0)
-    kcol(fr, fc + 18, MD.COL["red"], 0.7)
-    kcol(fr, fo, MD.COL["red"], 0.7)
+    kcol(fr, fc + 18, MD.COL["red"], 0.12)
+    kcol(fr, fo, MD.COL["red"], 0.12)
     kcol(fr, fo + 1, MD.COL["frame"], 0.0)
     for lv in (1, 2):
         bm = G["beams"][(rid, bay, lv)]
         kcol(bm, fc + 10, MD.COL["beam"], 0.0)
-        kcol(bm, fc + 20, MD.COL["amber"], 0.8)
-        kcol(bm, fo, MD.COL["amber"], 0.8)
+        kcol(bm, fc + 20, MD.COL["amber"], 0.12)
+        kcol(bm, fo, MD.COL["amber"], 0.12)
         kcol(bm, fo + 1, MD.COL["beam"], 0.0)
     # the parts: (key, start loc, start rot, layout loc, layout rot, colour, glow)
     lay_y = yface + side(rid) * 6.0
@@ -484,12 +487,12 @@ def boq(G, X):
         key(ob, "rotation_euler", st, r0, ip="SINE", ease="EASE_IN_OUT")
         sc0 = 0.02 if k == "gd" else 1.0
         key(ob, "scale", st, (sc0,) * 3, ip="SINE", ease="EASE_IN_OUT")
-        kcol(ob, st, col, glow * 2.5)
+        kcol(ob, st, col, glow * 0.3)
         arrive = st + 34
         key(ob, "location", arrive, l1)
         key(ob, "rotation_euler", arrive, r1)
         key(ob, "scale", arrive, thick)
-        kcol(ob, arrive, col, glow)
+        kcol(ob, arrive, col, glow * 0.06)
         # float while the BoQ builds
         go = fb + 3 * n
         for j, fr in enumerate(range(arrive + 6, go - 3, 8)):
@@ -500,8 +503,8 @@ def boq(G, X):
         key(ob, "scale", go, thick, ip="CUBIC", ease="EASE_IN")
         key(ob, "location", go + 14, (bx - 7.5, lay_y + side(rid) * 1.5, 6.0 - 0.45 * n))
         key(ob, "scale", go + 14, tuple(0.08 * v for v in thick))
-        kcol(ob, go, col, glow)
-        kcol(ob, go + 14, col, 3.0)
+        kcol(ob, go, col, glow * 0.06)
+        kcol(ob, go + 14, col, 1.2)
         khide(ob, go + 15, True)
 
 
@@ -588,16 +591,11 @@ def maintenance(G, X):
             d.along(rt, fp, end, lambda f: 3.6 * ease((f - fp) / (end - fp)))
         else:
             d.put(fp, (x - 1.4 * (k // 6), y), 0.0)
-    for (r, i), ob in G["frames"].items():
-        if r in ("R07", "R08"):
-            kcol(ob, fp, MD.COL["frame"], 0.0)
-            kcol(ob, fp + 12, MD.COL["green"], 0.05)
-            kcol(ob, E["impact"] - 30, MD.COL["green"], 0.05)
     bm = G["beams"][(rid, bay, 2)]
     kcol(bm, fp, MD.COL["beam"], 0.0)
     for j, f in enumerate(range(fp + 10, fs, 12)):
-        kcol(bm, f, "#ffd23a", 1.7 if j % 2 == 0 else 0.5)
-    kcol(bm, fs, "#ffd23a", 1.2)
+        kcol(bm, f, "#ffd23a", 0.6 if j % 2 == 0 else 0.2)
+    kcol(bm, fs, "#ffd23a", 0.45)
     y0 = bm.location.y
     out = side(rid) * 1.5
     key(bm, "location", fs, (bm.location.x, y0, bm.location.z), ip="SINE", ease="EASE_IN_OUT")
@@ -622,12 +620,12 @@ def maintenance(G, X):
     key(nb, "location", fs + 28, (bm.location.x, y0 + out, bm.location.z), ip="CUBIC", ease="EASE_OUT")
     key(nb, "location", fs + 40, (bm.location.x, y0, bm.location.z))
     kcol(nb, fs + 14, "#ffffff", 0.2)
-    kcol(nb, fs + 40, "#ffffff", 2.5)
-    kcol(nb, fs + 52, MD.COL["green"], 0.6)
-    kcol(nb, fc, MD.COL["green"], 0.6)
-    kcol(nb, fc + 6, MD.COL["green"], 1.6)
-    kcol(nb, fc + 20, MD.COL["green"], 0.45)
-    kcol(nb, E["impact"] - 30, MD.COL["green"], 0.45)
+    kcol(nb, fs + 40, "#ffffff", 0.9)
+    kcol(nb, fs + 52, MD.COL["green"], 0.2)
+    kcol(nb, fc, MD.COL["green"], 0.2)
+    kcol(nb, fc + 6, MD.COL["green"], 0.6)
+    kcol(nb, fc + 20, MD.COL["green"], 0.15)
+    kcol(nb, E["impact"] - 30, MD.COL["green"], 0.15)
     kcol(nb, E["impact"] - 29, MD.COL["beam"], 0.0)
     end7 = T.SHOT["s4_maint"][2]
     for ob in G["trucks"]:
@@ -636,9 +634,9 @@ def maintenance(G, X):
     G["beams"][(rid, bay, 2)] = nb          # the new pair takes the old one's place from here on
     for i in (bay, bay + 1):
         fr = G["frames"][(rid, i)]
-        kcol(fr, fc, MD.COL["green"], 0.05)
-        kcol(fr, fc + 6, MD.COL["green"], 1.0)
-        kcol(fr, fc + 20, MD.COL["green"], 0.05)
+        kcol(fr, fc, MD.COL["green"], 0.0)
+        kcol(fr, fc + 6, MD.COL["green"], 0.4)
+        kcol(fr, fc + 20, MD.COL["green"], 0.0)
 
 
 # ------------------------------------------------------------------ 8D and the outro
@@ -650,20 +648,16 @@ def safety(G, X):
     rid = L.IMPACT_ROW
     yf = face_y(rid)
     xu = L.frame_x(L.IMPACT_BAY + 1)
-    # restore 7D tints
-    for (r, i), ob in G["frames"].items():
-        if r in ("R07", "R08"):
-            kcol(ob, f0 - 1, MD.COL["green"], 0.05)
-            kcol(ob, f0, MD.COL["frame"], 0.0)
-    # the impact truck: down aisle A02 towards the camera, the baseleg clips the upright
+    # the impact truck: down aisle A02 towards the camera, swinging in too early; the outer fork
+    # tip (2.30 m ahead of the truck origin, 0.29 m off its centreline) clips the upright
     tr = G["trucks"][0]
     d = Driver(tr)
-    al = 0.12
+    al = 0.30
     fwd = Vector((-math.cos(al), math.sin(al)))
-    C = Vector((xu + 0.03 + 1.225 * math.cos(al) - 0.46 * math.sin(al),
-                yf + 0.02 - 1.225 * math.sin(al) - 0.46 * math.cos(al)))
+    n = Vector((math.sin(al), math.cos(al)))
+    C = Vector((xu + 0.03, yf + 0.02)) - fwd * 2.30 - n * 0.29
     P1 = C - fwd * 2.5
-    rt = L.route([(xu + 5.6, yf - 1.45), tuple(P1), tuple(C)])
+    rt = L.route([(xu + 5.6, yf - 1.6), tuple(P1), tuple(C)])
     tot = rt[1][-1]
     d.along(rt, f0, fi, lambda f: tot * ((f - f0) / (fi - f0)))
     hd = d.last
@@ -694,15 +688,15 @@ def safety(G, X):
     key(fr_ob, "rotation_euler", fi + 6, math.radians(-0.6), index=0)
     key(fr_ob, "rotation_euler", fi + 10, math.radians(-0.9), index=0)
     kcol(fr_ob, fi, MD.COL["frame"], 0.0)
-    kcol(fr_ob, fi + 1, MD.COL["red"], 3.0)
-    kcol(fr_ob, fi + 14, MD.COL["red"], 0.55)
+    kcol(fr_ob, fi + 1, MD.COL["red"], 1.2)
+    kcol(fr_ob, fi + 14, MD.COL["red"], 0.3)
     for k in range(3):
-        ring(G, X, fi + 1 + 7 * k, (xu, yf - 0.1), MD.COL["red"], r0=0.2, r1=3.6 + k, dur=22, a0=3.0)
+        ring(G, X, fi + 1 + 7 * k, (xu, yf - 0.1), MD.COL["red"], r0=0.2, r1=2.6 + k, dur=22, a0=0.16)
     for b in (L.IMPACT_BAY, L.IMPACT_BAY + 1):
         for lv in range(1, len(L.LEVELS) + 1):
             bm = G["beams"][(rid, b, lv)]
             kcol(bm, fz, MD.COL["beam"], 0.0)
-            kcol(bm, fz + 6, MD.COL["red"], 0.45)
+            kcol(bm, fz + 6, MD.COL["red"], 0.2)
     # exclusion zone wipes out from the rack face, then breathes
     z = X["zone"]
     key(z, "scale", 1, (1, 0.02, 1))
@@ -710,9 +704,9 @@ def safety(G, X):
     key(z, "scale", fz + 10, (1, L.AISLE - 0.2, 1))
     kalpha(z, 1, 0.0)
     kalpha(z, fz, 0.0)
-    kalpha(z, fz + 4, 1.1)
+    kalpha(z, fz + 4, 0.16)
     for j, f in enumerate(range(fz + 16, end, 14)):
-        kalpha(z, f, 0.85 if j % 2 == 0 else 0.5)
+        kalpha(z, f, 0.11 if j % 2 == 0 else 0.06)
     # RED means unload: the two bays empty, top level first
     n = 0
     for lv in range(len(L.LEVELS), -1, -1):
@@ -726,7 +720,7 @@ def safety(G, X):
             kcol(ld, st, tuple(ld.color[:3]), 0.0)
             key(ld, "location", st, z0, index=2, ip="CUBIC", ease="EASE_IN")
             key(ld, "scale", st, (1, 1, 1), ip="CUBIC", ease="EASE_IN")
-            kcol(ld, st + 4, MD.COL["red"], 0.6)
+            kcol(ld, st + 4, MD.COL["red"], 0.3)
             key(ld, "location", st + 12, z0 + 0.6, index=2)
             key(ld, "scale", st + 12, (0.04, 0.04, 0.04))
             khide(ld, st + 12, True)
@@ -741,7 +735,7 @@ def safety(G, X):
         state[(rid, b)] = "red"
     state[(L.HERO_ROW, L.HERO_BAY)] = "green"
     state[(L.MAINT_ROW, L.MAINT_BAY)] = "green"
-    glow = {"green": 0.32, "amber": 0.75, "red": 1.0}
+    glow = {"green": 0.07, "amber": 0.22, "red": 0.35}
     for (r, b, lv), bm in G["beams"].items():
         if r == rid and b in (L.IMPACT_BAY, L.IMPACT_BAY + 1):
             continue
@@ -924,7 +918,7 @@ def cameras():
 
 
 def night(G):
-    """02:14: a reach truck comes down aisle 03 toward the camera and swings in at R05."""
+    """02:14: a forklift comes down aisle 03 toward the camera and swings in at R05."""
     tr = G["night_truck"]
     n0, n1 = T.SHOT["n1_night"][1], T.SHOT["n1_night"][2]
     ya = L.aisle_y("A03")
@@ -960,4 +954,19 @@ def animate(G, M):
     maintenance(G, X)
     X["rag"] = safety(G, X)
     X["cams"] = cameras()
+    sync_children_hide(G["trucks"] + [G["night_truck"]])
     return X
+
+
+def sync_children_hide(obs):
+    """hide_render does not pass to children: copy each holder's visibility keys onto its parts."""
+    for ob in obs:
+        ad = ob.animation_data
+        fc = ad.action.fcurves.find("hide_render") if ad and ad.action else None
+        for q in ob.children_recursive:
+            if fc is None:
+                q.hide_render = ob.hide_render
+                continue
+            for kp in fc.keyframe_points:
+                q.hide_render = bool(kp.co.y)
+                q.keyframe_insert("hide_render", frame=int(round(kp.co.x)))

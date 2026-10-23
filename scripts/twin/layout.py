@@ -192,3 +192,11 @@ NETWORK = [[(_cross_w(), RACK_Y0 - 1.6), (_cross_e(), RACK_Y0 - 1.6)],
            [(_cross_e(), RACK_Y0 - 1.6), (_cross_e(), aisle_y("A05"))]] + \
           [[(_cross_w(), aisle_y(a)), (_cross_e(), aisle_y(a))] for a, _, _ in AISLES] + \
           [[_dock(i), (_dock(i)[0], RACK_Y0 - 1.6)] for i in range(len(DOORS))]
+
+
+# ------------------------------------------------------------------ the paper plan on the ops desk
+# The morning scene ends top-down on a printed A3 layout; the twin's first frame (CAM_A) frames the
+# slab exactly as the desk camera frames the drawing, so the paper can dissolve into the twin.
+PAPER_MM = (420.0, 297.0)                # A3 landscape
+PLAN_SCALE = 200.0                       # 1:200
+PLAN_CENTRE = (0.0, -2.0)                # the world point printed at the centre of the sheet

@@ -5,9 +5,9 @@ No music: the voiceover (assets/vo/twin_story, ElevenLabs "Noah", take B) carrie
 every story beat sits on its line. VO lists each line's cut in the take and the film time it
 starts at; the scenes and events below are placed around those.
 
-  0.0  NIGHT    2:14 a.m., aisle 03. A reach truck clips an upright. Nobody reports it.
+  0.0  NIGHT    2:14 a.m., aisle 03. A forklift clips an upright. Nobody reports it.
  10.6  MORNING  the ops head's desk: audit, insurance, a client asking; answers on paper.
- 27.6  TWIN     the paper layout becomes the twin: 2D plan, racks rise (3D).
+ 28.6  2D/3D    the paper layout becomes the twin: the plan (2D), the racks rise (3D).
  39.0  4D       scroll back to last night: 02:14, aisle 03, unreported.
  46.4  5D       the fix: the parts and the cost.
  53.8  6D       why it keeps happening: one aisle takes the traffic; re-route.
@@ -28,10 +28,12 @@ def sec(frame):
     return (frame - 1) / FPS
 
 
-# voiceover lines: (id, take start, take end, film start, text)
+# voiceover lines: (id, take start, take end, film start, text[, take]); the take is a file in
+# assets/vo/twin_story, take_b unless named. v02 was re-recorded ("forklift", not "reach truck").
+VO_TAKE = "take_b"
 VO = [
     ("v01", 0.00, 2.56, 1.00, "2:14 a.m., peak season."),
-    ("v02", 3.30, 5.20, 4.00, "A reach truck clips an upright."),
+    ("v02", 2.95, 4.64, 4.00, "A forklift clips an upright.", "open_fl_a"),
     ("v03", 5.76, 6.88, 6.60, "Nobody sees it."),
     ("v04", 7.16, 8.40, 8.00, "Nobody reports it."),
     ("v05", 10.40, 16.71, 11.60, "By morning, there's an audit on Tuesday, an insurance renewal, and a client asking if Aisle 3 is safe."),
@@ -53,14 +55,21 @@ VO = [
     ("v21", 75.03, 77.19, 91.40, "Book a demo at rams.digital."),
 ]
 
+
+
+def vo_take(line):
+    return line[5] if len(line) > 5 else VO_TAKE
+
+
 END_CARD = f(93.6)
 END = f(96.0) - 1
 
 # Scenes: (id, start s, end s, dimension label, RAMS title, line)
 SECTIONS = [
     ("night", 0.0, 10.6, None, None, None),
-    ("morning", 10.6, 27.6, None, None, None),
-    ("d3", 27.6, 39.0, "3D", "Digital Twin Visualization", "Every aisle, rack and dock, built in 3D."),
+    ("morning", 10.6, 28.6, None, None, None),
+    ("d2", 28.6, 34.3, "2D", "Digital Layout", "Every aisle, rack and dock, mapped."),
+    ("d3", 34.3, 39.0, "3D", "Digital Twin Visualization", "Your entire warehouse, built in 3D."),
     ("d4", 39.0, 46.4, "4D", "Tracking Changes Over Time", "Every impact and every move, on the record."),
     ("d5", 46.4, 53.8, "5D", "Procurement & Cost Optimization", "The exact parts, priced from the twin."),
     ("d6", 53.8, 63.2, "6D", "Sustainability & Energy Conservation", "Shorter MHE routes. Less energy, less risk."),
@@ -133,3 +142,35 @@ E = dict(
 
 # 4D: the hit we scroll back to (row, frame index, bay)
 LAST_NIGHT = ("R05", 6)
+
+# The ops desk (desk.py, desk_ui.py), film seconds on the VO words
+DESK = dict(
+    wake=11.70,            # "By morning": the laptop wakes
+    cal=12.84,             # "audit on Tuesday": calendar notification
+    ins=14.22,             # "insurance renewal": the insurer's email
+    client=15.64,          # "a client asking": the phone lights and buzzes
+    photo=16.90,           # the client's photo of the dent arrives
+    sheet=20.02,           # "spreadsheets"
+    pdf=21.08,             # "PDFs"
+    pics=21.94,            # "WhatsApp photos": the photo opens, the phone opens the chat
+    phone_off=25.4,
+    ticks=(80.20, 80.80, 81.40, 82.00, 82.60),   # audit day: the pack's items tick off
+    ready=83.69,           # "You're ready."
+)
+# Cameras inside the desk shots: (first frame, camera)
+DESK_CAMS = [
+    (f(10.6), "CAM_D1"),   # the laptop wakes, the notifications land
+    (f(15.3), "CAM_D2"),   # the phone buzzes on the desk
+    (f(18.4), "CAM_D3"),   # across the paperwork to the laptop: the windows pile up
+    (f(23.3), "CAM_D4"),   # up over the paper layout, ending top-down on the CAM_A match
+    (f(79.2), "CAM_D5"),   # audit day: the tidy desk
+    (f(82.9), "CAM_D6"),   # the laptop: ready
+]
+
+
+def desk_cam(frame):
+    cam = DESK_CAMS[0][1]
+    for f0, c in DESK_CAMS:
+        if frame >= f0:
+            cam = c
+    return cam

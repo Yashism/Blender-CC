@@ -434,7 +434,7 @@ def track_points(G, X):
         "s2_boq": {k: (lambda k=k: top_left(P[k])) for k in ("up", "b1", "b2", "br", "an0", "gd")},
         "s4_maint": {"beam": lambda: Vector((L.bay_x(L.MAINT_BAY) + 0.6, L.ROW[L.MAINT_ROW][1] + 0.05, 3.0)),
                      "new": lambda: mb.matrix_world.translation + Vector((0.6, 0.6, 0))},
-        "s5_safety": {"impact": lambda: Vector((xu, yf - 0.02, 0.45)),
+        "s5_safety": {"impact": lambda: Vector((xu, yf - 0.02, 0.15)),
                       "top": lambda: Vector((xu, yf - 0.02, L.UP_H)),
                       "zone": lambda: Vector(((L.frame_x(12) + L.frame_x(14)) / 2, yf - 1.6, 0.05))},
     }
@@ -520,7 +520,8 @@ def main():
     G = build(M)
     if o["look"] == "real":
         from twin import real as RL
-        RL.apply(G, RL.materials())
+        RMAT = RL.materials()
+        RL.apply(G, RMAT)
         RL.speed(bpy.context.scene)
     print(f"BUILD {time.time() - t:.1f}s, {len(bpy.data.objects)} objects")
     os.makedirs(o["out"], exist_ok=True)
@@ -532,6 +533,8 @@ def main():
         return
     t = time.time()
     X = A.animate(G, M)
+    if o["look"] == "real":
+        RL.real_parts(X, RMAT)
     sc = bpy.context.scene
     sc.frame_start, sc.frame_end = 1, T.END_CARD - 1
     sc.camera = bpy.data.objects["CAM_A"]

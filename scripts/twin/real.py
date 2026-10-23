@@ -1,7 +1,7 @@
 """RAMS Digital Twin film: the realistic site. The W01 photoreal kit (slotted omega uprights, box
 beams with connector plates, C-section bracing, galvanised base plates, kraft carton loads with
-labels and stretch wrap, the reach truck) assembled into the twin layout, plus the building,
-the night lighting of the real warehouse and the daylight cut-away the twin is seen in.
+labels) and FL-02, the forklift of the AI camera films, assembled into the twin layout, plus the
+building, the night lighting of the real warehouse and the daylight cut-away the twin is seen in.
 
 The pieces keep the object structure of model.py (one object per frame, per bay level of beams,
 per load slot, per truck), so every animation in anim.py drives them unchanged. Materials that
@@ -17,7 +17,7 @@ from mathutils import Matrix, Vector
 
 from builders import loads as LD
 from builders import rack_kit as RK
-from builders import reach_truck as RT
+from builders import forklift_real as FR
 from builders import warehouse_hero as WH
 from lib import realmats as RM
 from twin import layout as L
@@ -58,7 +58,7 @@ def materials():
     R = RK.materials()
     Ld = LD.materials()
     for key in ("upright", "beam", "brace", "galv"):
-        add_glow(R[key])
+        add_glow(R[key], 2.0)          # a tint on real steel, not neon
     for key, m in Ld.items():
         add_glow(m, 3.0)
     floor = RM.concrete_floor("twin_floor", maps=os.path.relpath(os.path.join(TWIN_TEX, "floor_maps.png"), RM.TEX),
@@ -274,28 +274,79 @@ def building(M, G):
 
 
 def trucks(G):
-    """Swap the clay trucks for the W01 reach truck: one built, the rest share its meshes."""
+    """Swap the clay trucks for FL-02, the counterbalance forklift of the RAMS AI camera films, in
+    real materials: one built, the rest share its meshes. The night truck carries a pallet and has
+    its work lights on."""
     c = MD.coll("MHE")
-    master = RT.build(c, "RTM", with_lights=True)
-    parts = [o for o in bpy.data.objects if o.name.startswith("RTM_") and o.type in ("MESH", "LIGHT")]
-    for k, ob in enumerate(G["trucks"] + [G["night_truck"]]):
-        # keep the clay object as the animated root; hang the real parts under it
+    before = set(bpy.data.objects)
+    FR.build(c)
+    made = [o for o in bpy.data.objects if o not in before]
+    parts = [o for o in made if o.type in ("MESH", "LIGHT")]
+    turn = Matrix.Rotation(math.pi / 2, 4, "Z")          # FL-02 faces -Y; the trucks drive along +X
+    fleet = G["trucks"] + [G["night_truck"]]
+    for k, ob in enumerate(fleet):
+        night = ob is G["night_truck"]
         for p in parts:
-            if p.type == "LIGHT" and 2 < k < len(G["trucks"]):
+            if p.type == "LIGHT" and not (night or k <= 2):
                 continue                                        # lamps only on the near trucks
             q = p.copy()
-            q.name = p.name.replace("RTM", f"MHE{k}")
+            q.name = f"MHE{k}_{p.name}"
             c.objects.link(q)
             q.parent = ob
             q.matrix_parent_inverse = Matrix.Identity(4)
-            q.matrix_basis = p.matrix_world.copy()
+            q.matrix_basis = turn @ p.matrix_world
+        if night:
+            me, _ = LD.static_load(4211, wrap=False, height=0.85)
+            ld = bpy.data.objects.new("MHE_night_load", me)
+            c.objects.link(ld)
+            ld.parent = ob
+            ld.location = (1.72, 0.0, 0.105)
+            ld.color = (1.0, 1.0, 1.0, 0.0)                    # no story glow on this load
+            for side in (-1, 1):                              # work lights on the front posts
+                sd = bpy.data.lights.new(f"MHE_night_work_{side}", "SPOT")
+                sd.energy = 260.0
+                sd.color = (1.0, 0.93, 0.82)
+                sd.spot_size = math.radians(70)
+                sd.spot_blend = 0.5
+                sd.shadow_soft_size = 0.05
+                so = bpy.data.objects.new(sd.name, sd)
+                c.objects.link(so)
+                so.parent = ob
+                so.location = (0.95, side * 0.56, 1.95)
+                so.rotation_euler = (0.0, math.radians(-68), 0.0)   # -Z -> +X, 22 deg down
         ob["clay"] = True
-    for o in [o for o in bpy.data.objects if o.name.startswith("RTM_")]:
+    for o in made:
         bpy.data.objects.remove(o, do_unlink=True)
     # the clay body itself no longer renders: an empty-looking holder for the real parts
     holder = bpy.data.meshes.new("m_truck_holder")
-    for ob in G["trucks"] + [G["night_truck"]]:
+    for ob in fleet:
         ob.data = holder
+
+
+def real_parts(X, M):
+    """5D: the damaged bay's parts as the real kit (upright with base plate, beam, brace, anchor),
+    each centred on its origin like the clay pieces they replace."""
+    def centred(parts, name, mats):
+        me = _merge(parts, name, mats)
+        lo = Vector([min(v.co[i] for v in me.vertices) for i in range(3)])
+        hi = Vector([max(v.co[i] for v in me.vertices) for i in range(3)])
+        me.transform(Matrix.Translation(-(lo + hi) / 2))
+        return me
+
+    up = centred([(RK.upright_mesh("xp_upright", 0.0, L.UP_H, False), _T(rz=math.pi / 2), 0),
+                  (RK.base_plate_mesh(), _T(rz=math.pi / 2), 1)], "m_xp_up", [M["upright"], M["galv"]])
+    beam = centred([(RK.beam_mesh(), _T(L.PITCH / 2, 0, 0, math.pi / 2), 0)], "m_xp_beam", [M["beam"]])
+    brace = centred([(RK.c_section_mesh(1.3), Matrix.Identity(4), 0)], "m_xp_brace", [M["brace"]])
+    anchor = centred([(RK.bolt_mesh(), Matrix.Identity(4), 0)], "m_xp_anchor", [M["galv"]])
+    P = X["parts"]
+    P["up"].data = up
+    P["b1"].data = P["b2"].data = beam
+    P["br"].data = brace
+    for k in range(4):
+        P[f"an{k}"].data = anchor
+    guard = add_glow(RM.painted_metal("xp_guard", "#e8b417", 0.4, 0.5, 0.2), 2.0)
+    P["gd"].data.materials.clear()
+    P["gd"].data.materials.append(guard)
 
 
 def apply(G, M):
@@ -362,7 +413,7 @@ def speed(scene):
                 ob.cycles.use_camera_cull = True
             except AttributeError:
                 pass
-    scene.cycles.transparent_max_bounces = 6
+    scene.cycles.transparent_max_bounces = 32
 
 
 def look_twin(G, scene):

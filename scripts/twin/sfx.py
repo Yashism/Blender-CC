@@ -1,18 +1,13 @@
-"""RAMS Digital Twin launch film "2D to 8D": the sound. The music bed cut to the picture, plus a
-light layer of synthesised sound design (system python3: numpy, scipy, soundfile, pyloudnorm).
+"""RAMS Digital Twin launch film "The 2 a.m. hit": the sound. No music: the voiceover carries the
+film, over a light layer of synthesised sound (system python3: numpy, scipy, soundfile, pyloudnorm).
 
-    bash scripts/w01/fetch_music.sh          # the track: Mixkit "Tech House vibes" (130.mp3)
-    python3 scripts/twin/sfx.py              # -> renders/twin/twin_mix.wav (with the voiceover)
-    python3 scripts/twin/sfx.py --no-vo      # music and sound design only
+    python3 scripts/twin/sfx.py              # -> renders/twin/story_mix.wav
+    python3 scripts/twin/sfx.py --no-sfx     # the voice alone
 
-Music: "Tech House vibes" by Alejandro Magaña, Mixkit Stock Music Free License (free for commercial
-use in a video, no credit required, https://mixkit.co/license/#musicFree). The edit: the track
-from its bar 4 (so its kick lands on the racks rising) to its bar 32, then its last four bars and
-final hit, joined on a downbeat.
-
-Voiceover: ElevenLabs "Noah - Engaging American Ads & News Pro" (eleven_v4), one take of the whole
-script (assets/vo/twin/noah_take.mp3), cut into lines and placed by assets/vo/twin/lines.json.
-The music ducks about 8 dB under the voice, the sound design 3 dB.
+Voiceover: ElevenLabs "Noah - Engaging American Ads & News Pro" (eleven_v4): take B of the script
+(assets/vo/twin_story/take_b.mp3) and the re-recorded "A forklift clips an upright."
+(open_fl_a.mp3), cut into lines and placed by timeline.VO. The effects sit about 10 LU under the
+voice and duck a further 4 dB while it speaks; every effect can be dropped with --no-sfx.
 """
 import os
 import subprocess
@@ -26,13 +21,13 @@ sys.path.insert(0, os.path.dirname(HERE))
 from twin import timeline as T  # noqa: E402
 
 E = T.E
+D = T.DESK
 SR = 48000
 DUR = T.END / T.FPS + 0.3
 N = int(SR * DUR)
 RNG = np.random.default_rng(23)
-MUSIC = os.path.join(ROOT, "assets", "music", "w01_simple", "130.mp3")
-OUT = os.path.join(ROOT, "renders", "twin", "twin_mix.wav")
-VO_DIR = os.path.join(ROOT, "assets", "vo", "twin")
+OUT = os.path.join(ROOT, "renders", "twin", "story_mix.wav")
+VO_DIR = os.path.join(ROOT, "assets", "vo", "twin_story")
 
 
 def sec(frame):
@@ -194,146 +189,193 @@ def add(bus, sig, t0, gain=1.0, pan=0.0):
     bus[i0:i0 + len(s), 1] += s * r * 1.414
 
 
-def design():
-    b = buf()
-    # hook / 2D: the drawing, a soft shimmer and a pen tick on each run as it draws
-    add(b, shimmer(sec(E["plan_done"]) - sec(E["plan_start"])), sec(E["plan_start"]), 0.18)
-    for k in range(10):
-        add(b, tick(2600 + 90 * k, 0.05, 0.2), sec(E["plan_start"]) + 1.6 + 0.26 * k, 0.12, pan=-0.5 + 0.1 * k)
-    # counter rolls on the downbeats
-    for s in T.SECTIONS:
-        if s[3]:
-            add(b, tick(1800, 0.09, 0.5), sec(T.bar(s[1])), 0.32)
-            add(b, whoosh(0.35, True, 900, 3000), sec(T.bar(s[1])) - 0.25, 0.1)
-    # 3D: the racks rise on the kick, a wave of locking clicks west to east
-    add(b, boom(1.8, 44), sec(E["extrude"]), 0.9)
-    add(b, whoosh(1.4, True, 120, 900), sec(E["extrude"]) - 1.3, 0.35)
-    for i in range(140):
-        u = RNG.uniform(0, 1)
-        t0 = sec(E["extrude"]) + 0.05 + 1.9 * u + RNG.uniform(0, 0.35)
-        add(b, click(0.012), t0, RNG.uniform(0.05, 0.16), pan=-0.8 + 1.6 * u)
-    for i in range(36):
-        u = RNG.uniform(0, 1)
-        add(b, thud(0.25, RNG.uniform(70, 110)), sec(E["extrude"]) + 0.6 + 2.0 * u, 0.06, pan=-0.7 + 1.4 * u)
-    add(b, zip_(1.4, 500, 2400, 30), sec(E["routes"]), 0.16)
-    add(b, motor(2.8, 90, 140), sec(E["trucks_go"]), 0.06)
-    # 4D: the year runs: fast clock ticks, a ping for every logged impact
-    f0, f1 = sec(E["sensors"]), sec(E["year_end"])
-    t = f0
-    while t < f1:
-        u = (t - f0) / (f1 - f0)
-        add(b, tick(3200, 0.03, 0.1), t, 0.07 * np.sin(np.pi * u) + 0.02)
-        t += 0.11 - 0.05 * np.sin(np.pi * u)
-    add(b, whoosh(1.0, True, 300, 4000), f0 - 0.8, 0.22)
-    for fe, (_, _, _, sev) in zip(sorted(E["sensors"] + 10 + int(fr * (E["year_end"] - E["sensors"] - 20))
-                                         for _, _, fr, _ in T.YEAR_IMPACTS), T.YEAR_IMPACTS):
-        add(b, ping({"green": 1568, "amber": 1175, "red": 880}[sev], 0.8), sec(fe), 0.22, pan=RNG.uniform(-0.5, 0.5))
-    # 5D: the north rows sink, the parts come out, the BoQ fills
-    add(b, whoosh(1.1, False, 80, 700), sec(E["section_cut"]), 0.35)
-    add(b, hum(1.0, 55), sec(E["section_cut"]), 0.12)
-    for n in range(9):
-        st = E["parts_out"] + 4 * n
-        add(b, whoosh(0.5, True, 600, 2400), sec(st), 0.07, pan=0.3)
-        add(b, tick(1500 + 120 * n, 0.08, 0.3), sec(st + 34), 0.16)
-        add(b, click(), sec(E["parts_to_boq"] + 3 * n + 14), 0.2, pan=-0.4)
-    add(b, whoosh(0.6, True, 800, 3000), sec(E["parts_to_boq"]), 0.15, pan=-0.3)
-    add(b, chime([1047, 1319, 1568], 1.2), sec(E["parts_to_boq"] + 34), 0.2)
-    # 6D: routes draw as driven, re-plan (rewind), draw again, the saving lands
-    add(b, zip_(3.4, 300, 900, 22), sec(E["routes_long"]) + 0.2, 0.1)
-    add(b, whoosh(0.6, False, 600, 3000), sec(E["replan"]), 0.3)
-    add(b, zip_(0.5, 2600, 500, 50), sec(E["replan"]), 0.14)
-    add(b, zip_(2.6, 600, 1500, 26), sec(E["routes_short"]), 0.11)
-    add(b, chime([1319, 1568, 2093], 1.4), sec(E["routes_short"] + 60), 0.24)
-    # 7D: the flag, the work order, the swap, closed
-    for k in range(2):
-        add(b, beep(1760, 0.08), sec(E["predict"] + 12) + 0.14 * k, 0.12)
-    add(b, chime([880, 1175], 0.9), sec(E["work_order"]), 0.2)
-    add(b, scrape(0.6), sec(E["swap"]), 0.18, pan=-0.2)
-    add(b, clang(1.2, 1.4), sec(E["swap"] + 14), 0.1)
-    add(b, scrape(0.5), sec(E["swap"] + 28), 0.16, pan=-0.2)
-    add(b, clang(1.0, 1.25), sec(E["swap"] + 40), 0.14)
-    add(b, chime([1047, 1319, 1568, 2093], 1.6), sec(E["closed"]), 0.24)
-    # 8D: the truck, the hit, the alarm, the zone, the site goes RAG, the rise
-    add(b, motor(1.05, 120, 210), sec(T.SHOT["s5_safety"][1]), 0.22, pan=0.3)
-    add(b, clang(2.2, 1.0), sec(E["impact"]), 0.9)
-    add(b, thud(0.6, 52), sec(E["impact"]), 0.8)
-    for k in range(4):
-        add(b, beep(988 if k % 2 == 0 else 740, 0.14), sec(E["impact"] + 4) + 0.18 * k, 0.24)
-    add(b, boom(1.2, 60), sec(E["zone"]), 0.4)
-    add(b, hum(2.0, 98), sec(E["zone"]), 0.08)
-    for k in range(8):
-        add(b, whoosh(0.3, True, 1500, 3000), sec(E["unload"] + 3 * k), 0.05)
-    add(b, shimmer(2.2), sec(E["rag_all"]), 0.22)
-    add(b, whoosh(2.4, True, 200, 2500), sec(E["rise"]), 0.24)
-    # outro
-    add(b, whoosh(1.0, True, 400, 3000), sec(E["title"]) - 0.6, 0.18)
-    add(b, tick(1600, 0.1, 0.5), sec(E["cta"]), 0.3)
-    wet = reverb(b[:, 0], 1.4, 0.18)[:N], reverb(b[:, 1], 1.4, 0.18, seed=4)[:N]
-    return np.stack(wet, axis=1)
+def birds(d, n=6):
+    """A few distant morning birds outside the window."""
+    out = np.zeros(int(d * SR))
+    for _ in range(n):
+        t0 = RNG.uniform(0, d - 0.6)
+        f0 = RNG.uniform(2600, 4200)
+        for k in range(RNG.integers(2, 5)):
+            cd = RNG.uniform(0.06, 0.12)
+            t = tt(cd)
+            f = f0 * (1 + 0.35 * np.sin(np.pi * t / cd)) * RNG.uniform(0.95, 1.05)
+            ch = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * t / cd) ** 2
+            i = int((t0 + k * RNG.uniform(0.12, 0.2)) * SR)
+            out[i:i + len(ch)] += ch[: max(0, len(out) - i)] * RNG.uniform(0.3, 0.8)
+    return band(out, 1800, 7000)
 
 
-# ------------------------------------------------------------------ the music edit
-
-def load_music():
-    if not os.path.exists(MUSIC):
-        raise SystemExit("music missing: run bash scripts/w01/fetch_music.sh")
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", MUSIC, "-f", "f32le", "-ac", "2", "-ar", str(SR), "-"],
-                         check=True, capture_output=True).stdout
-    return np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(np.float64)
+def buzz(d):
+    """A phone vibrating on a wooden desk."""
+    t = tt(d)
+    x = np.sign(np.sin(2 * np.pi * 172 * t)) * 0.5 + np.sin(2 * np.pi * 344 * t) * 0.3
+    x = band(x, 90, 2400) + band(noise(d), 300, 3000) * 0.15
+    return norm(x * np.minimum(1, t / 0.01) * np.minimum(1, (d - t) / 0.02))
 
 
-def snap_onset(x, t, win=0.06):
-    """The kick onset nearest t (s): the steepest rise of the low band within +-win."""
-    i0, i1 = int((t - win) * SR), int((t + win) * SR)
-    seg = band(x[i0:i1].mean(1), 30, 160)
-    e = np.convolve(seg ** 2, np.ones(96) / 96, mode="same")
-    d = np.diff(e)
-    return (i0 + int(np.argmax(d))) / SR
+def notify(f=1568):
+    return chime([f, f * 1.5], 0.8, 0.07)
 
 
-def music_edit():
-    m = load_music()
-    a_in = snap_onset(m, T.MUSIC_IN)
-    a_out = snap_onset(m, T.TRACK_BARS[32])
-    b_in = snap_onset(m, T.JUMP_TO)
-    out = np.zeros((N, 2))
-    xf = int(0.03 * SR)
-    # part A: film 0 .. bar 28
-    film_b28 = T.BAR_S[T.JUMP_BAR]
-    nA = int(film_b28 * SR)
-    segA = m[int(a_in * SR): int(a_in * SR) + nA + xf]
-    out[: len(segA)] += segA * np.concatenate([np.ones(nA), np.linspace(1, 0, len(segA) - nA)])[:, None]
-    # part B: from the track's bar 44 to its end, starting on film bar 28
-    segB = m[int(b_in * SR):]
-    n = min(len(segB), N - nA)
-    fade_in = np.minimum(1, np.arange(n) / xf)
-    out[nA:nA + n] += segB[:n] * fade_in[:, None]
-    # gentle fade on the very first and last moments
-    out[: int(0.02 * SR)] *= np.linspace(0, 1, int(0.02 * SR))[:, None]
-    end = int(T.END / T.FPS * SR)
-    fo = int(1.2 * SR)
-    out[end - fo:end] *= np.linspace(1, 0, fo)[:, None] ** 2
-    out[end:] = 0
-    print(f"music: A {a_in:.3f}-{a_in + film_b28:.3f} s (bar 32 at {a_out:.3f}), B from {b_in:.3f} s")
+def rustle(d):
+    t = tt(d)
+    x = band(noise(d), 1200, 9000) * (0.4 + 0.6 * np.abs(np.sin(2 * np.pi * 5.3 * t + RNG.uniform(0, 3))) ** 3)
+    return norm(x * np.sin(np.pi * t / d))
+
+
+def room(d, lo=60, hi=900, f=None):
+    """Steady room tone: filtered air, with an optional mains hum."""
+    x = band(noise(d), lo, hi)
+    if f:
+        x = x * 0.7 + 0.3 * norm(np.sin(2 * np.pi * f * tt(d)) + 0.4 * np.sin(2 * np.pi * 2 * f * tt(d)))
+    t = tt(d)
+    return norm(x) * np.minimum(1, t / 0.5) * np.minimum(1, (d - t) / 0.5)
+
+
+def reverse_beeper(n=3, period=0.9):
+    """A forklift's reversing beeper: it backs off; nobody stops."""
+    out = np.zeros(int((n * period + 0.5) * SR))
+    for k in range(n):
+        s = beep(1450, 0.32) * 0.8 ** k
+        i = int(k * period * SR)
+        out[i:i + len(s)] += s
     return out
 
 
+def design():
+    b = buf()
+    s = T.sec
+    # ---- 02:14, the aisle: night air and the high-bays' hum, the forklift coming, the hit
+    night_end = T.SEC["night"][2]
+    add(b, room(night_end, 50, 700, 100), 0.0, 0.18)
+    add(b, motor(3.4, 95, 150), 0.1, 0.22, pan=0.1)
+    add(b, band(noise(3.4), 400, 2200) * np.linspace(0.2, 1, int(3.4 * SR)), 0.1, 0.03)      # tyres on concrete
+    hit = T.SHOT["n2_hit"][1] / T.FPS + 38 / T.FPS                     # W01 s01_impact: contact on its frame 39
+    add(b, scrape(0.35), hit - 0.25, 0.25, pan=-0.2)
+    add(b, clang(2.4, 0.92), hit, 0.95)
+    add(b, thud(0.6, 50), hit, 0.75)
+    add(b, reverse_beeper(4, 0.85), 6.2, 0.08, pan=0.4)
+    add(b, motor(2.8, 140, 90), 6.0, 0.08, pan=0.4)
+    # ---- the morning desk
+    m0, m1 = T.SEC["morning"][1], T.SEC["morning"][2]
+    add(b, room(m1 - m0 + 0.4, 120, 2400), m0, 0.06)
+    add(b, birds(m1 - m0, 9), m0 + 0.4, 0.05, pan=-0.6)
+    add(b, chime([523, 784, 1047], 1.0, 0.09), D["wake"], 0.12)
+    add(b, notify(1568), D["cal"], 0.16, pan=0.3)
+    add(b, notify(1319), D["ins"], 0.16, pan=0.3)
+    add(b, notify(1175), D["client"], 0.12, pan=0.3)
+    for t0, dur in ((D["client"], 0.55), (D["photo"], 0.4)):
+        add(b, buzz(dur), t0, 0.32, pan=0.35)
+    for t0 in (D["sheet"], D["pdf"], D["pics"]):
+        add(b, click(0.02), t0, 0.35, pan=0.2)
+        add(b, whoosh(0.18, True, 1800, 4000), t0 - 0.05, 0.05, pan=0.2)
+    add(b, rustle(1.1), 23.6, 0.08, pan=-0.3)
+    add(b, rustle(0.8), 25.2, 0.06, pan=-0.4)
+    # paper -> twin
+    add(b, whoosh(1.2, True, 300, 3500), s(T.SHOT["s1_plan"][1]) - 0.7, 0.2)
+    add(b, shimmer(1.6), s(T.SHOT["s1_plan"][1]) - 0.2, 0.12)
+    # ---- 2D / 3D
+    add(b, shimmer(s(E["plan_done"]) - s(E["plan_start"])), s(E["plan_start"]), 0.12)
+    for k in range(10):
+        add(b, tick(2600 + 90 * k, 0.05, 0.2), s(E["plan_start"]) + 0.6 + 0.28 * k, 0.08, pan=-0.5 + 0.1 * k)
+    for sec_ in T.SECTIONS:
+        if sec_[3] and sec_[0] != "d2":
+            add(b, tick(1800, 0.09, 0.5), sec_[1], 0.18)
+    add(b, boom(1.8, 44), s(E["extrude"]), 0.55)
+    add(b, whoosh(1.4, True, 120, 900), s(E["extrude"]) - 1.2, 0.22)
+    for i in range(120):
+        u = RNG.uniform(0, 1)
+        add(b, click(0.012), s(E["extrude"]) + 0.05 + 1.9 * u + RNG.uniform(0, 0.35), RNG.uniform(0.03, 0.1),
+            pan=-0.8 + 1.6 * u)
+    add(b, zip_(1.2, 500, 2400, 30), s(E["routes"]), 0.08)
+    # ---- 4D: rewind to last night, there it is
+    f0, fh = s(E["sensors"]), s(E["hit_found"])
+    add(b, whoosh(0.8, False, 400, 4000), f0 - 0.3, 0.16)
+    t = f0
+    while t < fh - 0.1:
+        u = (t - f0) / (fh - f0)
+        add(b, tick(3400, 0.025, 0.1), t, 0.05 * np.sin(np.pi * u) + 0.015)
+        t += 0.09 - 0.05 * np.sin(np.pi * u)
+    add(b, zip_(fh - f0 - 0.2, 2600, 500, 44), f0 + 0.1, 0.06)
+    add(b, thud(0.5, 55), fh, 0.5)
+    add(b, ping(880, 1.0), fh, 0.2)
+    # ---- 5D: the parts come out, the BoQ fills
+    add(b, whoosh(1.0, False, 80, 700), s(E["section_cut"]), 0.22)
+    for n in range(9):
+        st = E["parts_out"] + 4 * n
+        add(b, whoosh(0.45, True, 600, 2400), s(st), 0.04, pan=0.3)
+        add(b, tick(1500 + 120 * n, 0.07, 0.3), s(st + 34), 0.08)
+        add(b, click(), s(E["parts_to_boq"] + 3 * n + 14), 0.12, pan=-0.4)
+    add(b, chime([1047, 1319, 1568], 1.2), s(E["parts_to_boq"] + 34), 0.12)
+    # ---- 6D: everyone through aisle 03; re-route; less energy
+    add(b, zip_(3.2, 300, 900, 22), s(E["routes_long"]) + 0.2, 0.06)
+    for k in range(4):
+        add(b, beep(392, 0.22), s(E["heat"]) + 0.5 * k, 0.07)
+    add(b, whoosh(0.6, False, 600, 3000), s(E["replan"]), 0.18)
+    add(b, zip_(2.4, 600, 1500, 26), s(E["routes_short"]), 0.07)
+    add(b, chime([1319, 1568, 2093], 1.4), s(E["routes_short"] + 60), 0.14)
+    # ---- 7D: flagged, ordered, swapped, closed
+    for k in range(2):
+        add(b, beep(1760, 0.08), s(E["predict"] + 12) + 0.14 * k, 0.08)
+    add(b, chime([880, 1175], 0.9), s(E["work_order"]), 0.12)
+    add(b, scrape(0.6), s(E["swap"]), 0.12, pan=-0.2)
+    add(b, clang(1.0, 1.25), s(E["swap"] + 40), 0.1)
+    add(b, chime([1047, 1319, 1568, 2093], 1.6), s(E["closed"]), 0.14)
+    # ---- 8D: the next hit, known in seconds
+    add(b, motor(0.75, 120, 210), s(T.SHOT["s5_safety"][1]), 0.16, pan=0.3)
+    add(b, clang(2.0, 1.05), s(E["impact"]), 0.7)
+    add(b, thud(0.6, 52), s(E["impact"]), 0.55)
+    for k in range(4):
+        add(b, beep(988 if k % 2 == 0 else 740, 0.14), s(E["impact"] + 4) + 0.18 * k, 0.16)
+    add(b, boom(1.0, 60), s(E["zone"]), 0.22)
+    add(b, shimmer(2.2), s(E["rag_all"]), 0.12)
+    add(b, whoosh(2.4, True, 200, 2500), s(E["rise"]), 0.14)
+    # ---- audit day: the pack ticks off, ready
+    a0, a1 = T.SEC["audit"][1], T.SEC["audit"][2]
+    add(b, room(a1 - a0 + 0.3, 120, 2400), a0, 0.05)
+    add(b, birds(a1 - a0, 4), a0 + 0.3, 0.04, pan=-0.6)
+    for k, t0 in enumerate(D["ticks"]):
+        add(b, tick(1900 + 140 * k, 0.07, 0.35), t0, 0.1)
+    add(b, chime([1047, 1319, 1568, 2093], 1.8), D["ready"], 0.16)
+    # ---- the title, the call to action
+    add(b, whoosh(1.0, True, 400, 3000), s(E["title"]) - 0.6, 0.12)
+    add(b, boom(2.2, 40), s(E["title"]), 0.25)
+    add(b, tick(1600, 0.1, 0.5), s(E["cta"]), 0.16)
+    wet = reverb(b[:, 0], 1.2, 0.16)[:N], reverb(b[:, 1], 1.2, 0.16, seed=4)[:N]
+    return np.stack(wet, axis=1)
+
+
+# ------------------------------------------------------------------ voice and mix
+
+_takes = {}
+
+
+def take(name):
+    if name not in _takes:
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", os.path.join(VO_DIR, name + ".mp3"), "-f", "f32le",
+                              "-ac", "1", "-ar", str(SR), "-"], check=True, capture_output=True).stdout
+        x = np.frombuffer(raw, dtype=np.float32).astype(np.float64)
+        _takes[name] = band(x, 70, None)
+    return _takes[name]
+
+
 def voiceover():
-    """The narration: each line cut from the take and laid at its film time (mono, centred)."""
-    import json
-    cfg = json.load(open(os.path.join(VO_DIR, "lines.json")))
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", os.path.join(VO_DIR, cfg["source"]), "-f", "f32le", "-ac", "1",
-                          "-ar", str(SR), "-"], check=True, capture_output=True).stdout
-    take = np.frombuffer(raw, dtype=np.float32).astype(np.float64)
-    take = band(take, 70, None)                           # rumble out
+    """Each line cut from its take and laid at its film time (mono, centred); a re-recorded line is
+    matched in level to take B."""
+    import pyloudnorm
+    meter = pyloudnorm.Meter(SR)
+    ref = meter.integrated_loudness(take(T.VO_TAKE))
     out = np.zeros(N)
     fade = int(0.012 * SR)
-    for ln in cfg["lines"]:
-        a, b = (int(v * SR) for v in ln["take"])
-        seg = take[a:b].copy()
+    for ln in T.VO:
+        src = T.vo_take(ln)
+        x = take(src)
+        g = 1.0 if src == T.VO_TAKE else 10 ** ((ref - meter.integrated_loudness(x)) / 20)
+        a, b_ = int(ln[1] * SR), int(ln[2] * SR)
+        seg = x[a:b_].copy() * g
         seg[:fade] *= np.linspace(0, 1, fade)
         seg[-fade:] *= np.linspace(1, 0, fade)
-        i = int(ln["at"] * SR)
+        i = int(ln[3] * SR)
         out[i:i + len(seg)] += seg[: max(0, N - i)]
     return np.stack([out, out], axis=1)
 
@@ -352,26 +394,20 @@ def follower(x, attack, release, lookahead=0.0):
     return env
 
 
-def mix(sfx, music, vo=None, sfx_lufs=-19.0):
-    """Music at -14.5 LUFS, the sound design 5 LU under it, ducking under the hits; with a
-    voiceover, the voice sits on top (-15 LUFS) and the music and effects make room for it."""
+def mix(vo, sfx=None):
+    """The voice at about -15 LUFS on top; the effects 10 LU under it, ducking 4 dB while it speaks;
+    the whole at -14 LUFS with a -1 dBTP ceiling."""
     import pyloudnorm
     from scipy.ndimage import maximum_filter1d, minimum_filter1d, uniform_filter1d
     meter = pyloudnorm.Meter(SR)
-    sfx = sfx * 10 ** ((sfx_lufs - (2.5 if vo is not None else 0) - meter.integrated_loudness(sfx)) / 20)
-    music = music * 10 ** ((-14.5 - meter.integrated_loudness(music)) / 20)
-    db = 20 * np.log10(follower(sfx, 0.004, 0.3) + 1e-9)
-    duck = 10 ** (-np.clip((db + 20) * 0.5, 0, 6) / 20)
-    if vo is not None:
-        speech = vo[:, 0] != 0
-        vo = vo * 10 ** ((-15.0 - meter.integrated_loudness(vo[speech.nonzero()[0].min():])) / 20)
+    speech = np.nonzero(vo[:, 0])[0]
+    vo = vo * 10 ** ((-15.0 - meter.integrated_loudness(vo[speech.min():speech.max()])) / 20)
+    out = vo.copy()
+    if sfx is not None:
+        sfx = sfx * 10 ** ((-25.0 - meter.integrated_loudness(sfx)) / 20)
         talk = np.clip(follower(vo, 0.02, 0.45, lookahead=0.12) / 0.05, 0, 1)
         talk = uniform_filter1d(talk, int(0.08 * SR))
-        duck = duck * 10 ** (-8.0 * talk / 20)
-        sfx = sfx * (10 ** (-3.0 * talk / 20))[:, None]
-    out = sfx + music * duck[:, None]
-    if vo is not None:
-        out = out + vo
+        out = out + sfx * (10 ** (-4.0 * talk / 20))[:, None]
     out *= 10 ** ((-14.0 - meter.integrated_loudness(out)) / 20)
     ceil = 10 ** (-1 / 20)
     g = np.minimum(1.0, ceil / np.maximum(maximum_filter1d(np.abs(out).max(1), 481), 1e-9))
@@ -381,10 +417,10 @@ def mix(sfx, music, vo=None, sfx_lufs=-19.0):
 
 def main():
     import soundfile as sf
-    with_vo = "--no-vo" not in sys.argv
-    out = mix(design(), music_edit(), voiceover() if with_vo else None)
+    with_sfx = "--no-sfx" not in sys.argv
+    out = mix(voiceover(), design() if with_sfx else None)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    path = OUT if with_vo else OUT.replace(".wav", "_novo.wav")
+    path = OUT if with_sfx else OUT.replace(".wav", "_vo_only.wav")
     sf.write(path, out.astype(np.float32), SR, subtype="PCM_24")
     print("wrote", path, f"{len(out) / SR:.1f} s")
 
