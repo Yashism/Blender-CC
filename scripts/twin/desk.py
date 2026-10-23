@@ -173,7 +173,7 @@ def mat_oak():
     vec = g.coords("Object")
     grain = g.coords("Object", False, (0.12, 1.0, 1.0))           # boards run along X
     warp = g.noise(g.coords("Object", False, (0.5, 3.0, 3.0)), 3.0, 4, 0.5)
-    rings = g.wave(g.add(grain, g.mul(warp, 0.03)), 55.0, 2.2, 3.0, "BANDS", "Y", "SAW")
+    rings = g.wave(g.add(grain, g.mul(warp, 0.015)), 60.0, 1.0, 3.0, "BANDS", "Y", "SAW")
     pores = g.noise(g.coords("Object", False, (0.05, 1.0, 1.0)), 900.0, 4, 0.7)
     col = g.mixc(g.mul(g.mr(rings, 0.2, 0.95), 0.6), lin("#c49a67"), lin("#94683d"))
     col = g.mixc(g.mul(g.mr(pores, 0.55, 0.8), 0.35), col, lin("#6e4a2a"))

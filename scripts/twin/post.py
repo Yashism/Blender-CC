@@ -384,7 +384,7 @@ def el_caption(c, lay, f):
         fnt = font("ui_m", 34 if not v else 36)
         lines = _caption_lines(ln[4], fnt, 1240 if not v else 940)
         lh = 46 if not v else 50
-        y_last = lay.H - 54 if not v else 1112
+        y_last = lay.H - 40 if not v else 1112
         for i, s_ in enumerate(lines):
             y = y_last - lh * (len(lines) - 1 - i)
             w = fnt.getlength(s_)
@@ -403,7 +403,7 @@ def el_dimension(c, lay, f):
     h = lay.mode == "h"
     csz = 150 if h else 190
     x = lay.m
-    base = lay.H - 128 if h else 330
+    base = lay.H - 150 if h else 330
     cur = s or SECS[-1]
     k = SECS.index(cur)
     f0 = max(T.f(cur[1]), TWIN0 + 8)
