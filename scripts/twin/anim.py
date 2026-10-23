@@ -170,7 +170,7 @@ def extras(G, M):
     X["trails"] = []
     for k, tr in enumerate(G["trucks"]):
         rt = L.LAPS[LAP_OF[k]]
-        ob = MD.obj(f"TRAIL_{k}", MD.route_mesh(f"m_trail_{k}", rt[0], 0.55, [M["trail"]], z=8.2 + 0.03 * k), cD,
+        ob = MD.obj(f"TRAIL_{k}", MD.route_mesh(f"m_trail_{k}", rt[0][::-1], 0.55, [M["trail"]], z=8.2 + 0.03 * k), cD,
                     "#7cd0ff", 0.0)
         ob["head"] = 0.0
         ob["trail"] = 0.22
@@ -184,6 +184,12 @@ def extras(G, M):
         a["head"] = b["head"] = 0.0
         X["long"].append(a)
         X["short"].append(b)
+    # 6D: aisle 03 running hot (a wide soft band down the aisle)
+    ya3 = L.aisle_y("A03")
+    hm = MD.strips_mesh("m_heat", MD.polyline_segs([(L.RUN_X0 - 2.2, ya3), (L.RUN_X1 + 2.6, ya3)], 2.6, 0.0, 1.0, 1.0),
+                        z=0.06, mats=[M["route"]])
+    X["heat"] = MD.obj("HEAT_A03", hm, cD, "#ff5a2a", 0.0)
+    X["heat"]["head"] = 1.01
     # blue safety spots ahead of every truck
     spot = MD.mesh_ring("m_spot", 0.0, 0.45, 32)
     spot.materials.append(M["glow"])
@@ -227,7 +233,7 @@ def extras(G, M):
     for ob in X["parts"].values():
         ob.hide_render = True
     # 7D new beam pair
-    X["newbeam"] = MD.obj("XB_new", bpy.data.meshes["m_beams"], cD, "#ffffff", 0.0)
+    X["newbeam"] = MD.obj("XB_new", next(iter(G["beams"].values())).data, cD, "#ffffff", 0.0)
     X["newbeam"].hide_render = True
     return X
 
@@ -343,7 +349,7 @@ def trucks_lapping(G, X, f_show, f_go, f_fast, f_end, v_slow=0.12, v_fast=1.25):
         drivers.append((d, s_of))
         tr = X["trails"][k]
         for fr in range(f_fast - 2, f_end + 1):
-            key(tr, '["head"]', fr, (s_of(fr) % tot) / tot)
+            key(tr, '["head"]', fr, 1.0 - (s_of(fr) % tot) / tot)      # trail meshes run backwards
         kalpha(tr, 1, 0.0)
         kalpha(tr, f_fast, 0.0)
         kalpha(tr, f_fast + 8, 1.0)
@@ -355,54 +361,65 @@ def trucks_lapping(G, X, f_show, f_go, f_fast, f_end, v_slow=0.12, v_fast=1.25):
 # ------------------------------------------------------------------ 4D
 
 def year(G, X):
-    f0, f1 = E["sensors"], E["year_end"]
+    """4D: the twin scrolls back from this morning to 02:14 last night. Trucks run backwards, the
+    light falls to night, older hits flash past, then last night's hit at R05 pulses red."""
+    f0, f1, fh = E["sensors"], E["year_end"], E["hit_found"]
     for k, ((rid, i), ob) in enumerate(sorted(G["sensors"].items())):
         kalpha(ob, 1, 0.0)
         kalpha(ob, f0 + k // 2, 0.0)
         kalpha(ob, f0 + k // 2 + 4, 2.5)
         kalpha(ob, f0 + k // 2 + 14, 1.0)
-    # the sun goes round once: the year as days
+    # day -> night as the clock runs back
     sun = bpy.data.objects["KEY_sun"]
-    rz = sun.rotation_euler.z
-    key(sun, "rotation_euler", 1, rz, index=2)
-    key(sun, "rotation_euler", f0 - 1, rz, index=2)
-    key(sun, "rotation_euler", f0, rz - math.radians(70), index=2, ip="LINEAR")
-    key(sun, "rotation_euler", f1, rz + math.radians(55), index=2)
-    key(sun, "rotation_euler", f1 + 1, rz, index=2)
-    # inventory churn
+    e0 = sun.data.energy
+    key(sun.data, "energy", f0, e0, ip="SINE", ease="EASE_IN_OUT")
+    key(sun.data, "energy", fh - 6, e0 * 0.12)
+    key(sun.data, "energy", E["section_cut"] - 1, e0 * 0.12)
+    key(sun.data, "energy", E["section_cut"], e0)
+    fill = bpy.data.objects["FILL_area"].data
+    f_e = fill.energy
+    key(fill, "energy", f0, f_e, ip="SINE", ease="EASE_IN_OUT")
+    key(fill, "energy", fh - 6, f_e * 0.25)
+    key(fill, "energy", E["section_cut"] - 1, f_e * 0.25)
+    key(fill, "energy", E["section_cut"], f_e)
+    # stock moves in and out as time runs
     rng = random.Random(11)
     story = {(L.HERO_ROW, L.HERO_BAY), (L.MAINT_ROW, L.MAINT_BAY), (L.IMPACT_ROW, L.IMPACT_BAY),
              (L.IMPACT_ROW, L.IMPACT_BAY + 1)}
     pool = [k for k in G["loads"] if (k[0], k[1]) not in story]
-    for k in rng.sample(pool, 120):
+    for k in rng.sample(pool, 90):
         ob = G["loads"][k]
-        to = rng.randint(f0 + 8, f1 - 24)
+        to = rng.randint(f0 + 6, fh - 16)
         key(ob, "scale", to, (1, 1, 1), ip="CUBIC", ease="EASE_IN")
         key(ob, "scale", to + 5, (0.02, 0.02, 0.02))
         khide(ob, to + 5, True)
-        back = to + rng.randint(25, 80)
-        if rng.random() < 0.72 and back < f1 - 8:
-            khide(ob, back, False)
-            key(ob, "scale", back, (0.02, 0.02, 0.02), ip="CUBIC", ease="EASE_OUT")
-            key(ob, "scale", back + 6, (1, 1, 1))
-        else:
-            khide(ob, E["section_cut"], False)
-            key(ob, "scale", E["section_cut"], (1, 1, 1))
-    # impacts logged across the year: a pulse at the sensor and a pin that stays
-    for rid, i, frac, sev in T.YEAR_IMPACTS:
-        fe = f0 + 10 + int(frac * (f1 - f0 - 20))
-        sn = G["sensors"][(rid, i)]
-        xy = (sn.location.x, face_y(rid) - side(rid) * 0.6)
-        ring(G, X, fe, xy, MD.COL[sev], r1=4.0, dur=20, z=8.25)
-        kcol(sn, fe, sev, 4.0)
-        kcol(sn, fe + 14, "data", 1.0)
-        pin = MD.obj(f"PIN_{rid}_{i}", X["pin_me"], MD.coll("Data"), MD.COL[sev], 1.4, loc=(xy[0], xy[1], 0))
+        back = to + rng.randint(20, 50)
+        khide(ob, min(back, f1 - 4), False)
+        key(ob, "scale", min(back, f1 - 4), (0.02, 0.02, 0.02), ip="CUBIC", ease="EASE_OUT")
+        key(ob, "scale", min(back, f1 - 4) + 6, (1, 1, 1))
+    # older hits flash past on the way back
+    def hit(rid, i, fe, sev, big=False):
+        yf = face_y(rid)
+        xy = (L.frame_x(i), yf + side(rid) * 0.45)
+        ring(G, X, fe, xy, MD.COL[sev], r1=5.5 if big else 3.5, dur=26 if big else 18, z=0.06, a0=3.0 if big else 2.0)
+        ring(G, X, fe, xy, MD.COL[sev], r1=4.0 if big else 2.5, dur=22, z=9.4, a0=2.0)
+        pin = MD.obj(f"PIN_{rid}_{i}", X["pin_me"], MD.coll("Data"), MD.COL[sev], 1.6 if big else 1.0,
+                     loc=(xy[0], xy[1], 0))
         khide(pin, 1, True)
         khide(pin, fe, False)
         key(pin, "scale", fe, (1, 1, 0.02), ip="BACK", ease="EASE_OUT")
-        key(pin, "scale", fe + 8, (1, 1, 1))
+        key(pin, "scale", fe + 8, (1.3, 1.3, 1.25) if big else (1, 1, 1))
         khide(pin, E["section_cut"], True)
         X["pins"].append(pin)
+    span = fh - f0 - 14
+    for (rid, i, frac, sev) in (("R02", 18, 0.25, "amber"), ("R08", 3, 0.5, "green"), ("R09", 15, 0.72, "amber")):
+        hit(rid, i, f0 + 6 + int(frac * span), sev)
+    rid, i = T.LAST_NIGHT
+    hit(rid, i, fh, "red", big=True)
+    fr = G["frames"][(rid, i)]
+    kcol(fr, fh - 1, MD.COL["frame"], 0.0)
+    kcol(fr, fh + 1, MD.COL["red"], 2.5)
+    kcol(fr, fh + 16, MD.COL["red"], 0.8)
     for ob in G["sensors"].values():
         kalpha(ob, E["section_cut"] - 1, 1.0)
         kalpha(ob, E["section_cut"], 0.0)
@@ -538,6 +555,14 @@ def routes(G, X):
     for ob in G["trucks"]:
         key(ob, "location", E["predict"] - 1)
         key(ob, "rotation_euler", E["predict"] - 1, index=2)
+    heat = X["heat"]
+    kalpha(heat, 1, 0.0)
+    kalpha(heat, E["heat"] - 4, 0.0)
+    kalpha(heat, E["heat"] + 8, 1.6)
+    for j, ff in enumerate(range(E["heat"] + 20, fr, 12)):
+        kalpha(heat, ff, 1.6 if j % 2 else 1.0)
+    kalpha(heat, fr, 1.2)
+    kalpha(heat, fs + 40, 0.0)
     for k, ob in enumerate(G["chargers"]):
         kcol(ob, 1, "#59626e", 0.0)
         kcol(ob, fs + 40 + 3 * k, "#59626e", 0.0)
@@ -674,7 +699,7 @@ def safety(G, X):
     for k in range(3):
         ring(G, X, fi + 1 + 7 * k, (xu, yf - 0.1), MD.COL["red"], r0=0.2, r1=3.6 + k, dur=22, a0=3.0)
     for b in (L.IMPACT_BAY, L.IMPACT_BAY + 1):
-        for lv in range(1, 5):
+        for lv in range(1, len(L.LEVELS) + 1):
             bm = G["beams"][(rid, b, lv)]
             kcol(bm, fz, MD.COL["beam"], 0.0)
             kcol(bm, fz + 6, MD.COL["red"], 0.45)
@@ -690,7 +715,7 @@ def safety(G, X):
         kalpha(z, f, 0.85 if j % 2 == 0 else 0.5)
     # RED means unload: the two bays empty, top level first
     n = 0
-    for lv in (4, 3, 2, 1, 0):
+    for lv in range(len(L.LEVELS), -1, -1):
         for b in (L.IMPACT_BAY, L.IMPACT_BAY + 1):
             ld = G["loads"].get((rid, b, lv))
             if ld is None:
@@ -830,12 +855,15 @@ def cameras():
     f0, f1 = S["s1_plan"][1], S["s1_plan"][2]
     ex = E["extrude"]
     cams["CAM_A"] = rig_camera("CAM_A", f0, f1, [
-        (1, dict(tgt=(-5.0, -2.5, 0.0), el=89.95, az=-90.0, dist=128.0, lens=40.0, upw=0.0, yaw=-7.0)),
-        (ex, dict(tgt=(-4.0, -2.5, 0.0), el=89.95, az=-90.0, dist=114.0, lens=40.0, upw=0.0, yaw=0.0)),
-        (ex + 30, dict(tgt=(-2.0, -1.5, 0.5), el=66.0, az=-82.0, dist=100.0, lens=46.0, upw=0.85, yaw=0.0)),
-        (ex + 92, dict(tgt=(-1.0, -1.0, 1.5), el=36.0, az=-62.0, dist=94.0, lens=40.0, upw=1.0, yaw=0.0)),
-        (E["sensors"] + 40, dict(tgt=(0.0, 0.0, 1.5), el=31.0, az=-50.0, dist=88.0, lens=40.0, upw=1.0, yaw=0.0)),
-        (f1, dict(tgt=(1.0, 0.5, 1.5), el=28.0, az=-36.0, dist=82.0, lens=40.0, upw=1.0, yaw=0.0)),
+        (f0, dict(tgt=(-4.0, -2.0, 0.0), el=89.95, az=-90.0, dist=124.0, lens=40.0, upw=0.0, yaw=0.0)),
+        (ex, dict(tgt=(-4.0, -2.0, 0.0), el=89.95, az=-90.0, dist=112.0, lens=40.0, upw=0.0, yaw=0.0)),
+        (ex + 30, dict(tgt=(-2.0, -1.5, 0.5), el=66.0, az=-82.0, dist=98.0, lens=46.0, upw=0.85, yaw=0.0)),
+        (ex + 92, dict(tgt=(-1.0, -1.0, 1.5), el=36.0, az=-62.0, dist=90.0, lens=40.0, upw=1.0, yaw=0.0)),
+        (E["sensors"] + 30, dict(tgt=(-2.0, 0.5, 1.5), el=33.0, az=-55.0, dist=80.0, lens=40.0, upw=1.0, yaw=0.0)),
+        (E["hit_found"], dict(tgt=(L.frame_x(T.LAST_NIGHT[1]) - 1.0, L.aisle_y("A03"), 2.0), el=33.0, az=-66.0,
+                              dist=46.0, lens=40.0, upw=1.0, yaw=0.0)),
+        (f1, dict(tgt=(L.frame_x(T.LAST_NIGHT[1]), L.aisle_y("A03") - 0.5, 2.0), el=30.0, az=-70.0, dist=34.0,
+                  lens=40.0, upw=1.0, yaw=0.0)),
     ], spherical=True)
     # B: across the sunk rows, face-on to the damaged bay; the parts float in the aisle
     rid, bay = L.HERO_ROW, L.HERO_BAY
@@ -870,34 +898,62 @@ def cameras():
     # E: low in aisle A02 for the hit, then up and out to the hero view for the outro
     xu = L.frame_x(L.IMPACT_BAY + 1)
     yf, ya = face_y(L.IMPACT_ROW), L.aisle_y("A02")
-    f0, f1 = S["s5_safety"][1], E["title"] + 141
+    f0, f1 = S["s5_safety"][1], T.END_CARD - 1
     hero = Vector((-6.5, -5.5, 5.0))      # aimed up and left of the site, so it sits low right under the title
 
     def sph(el, az, dist, tgt=hero):
         el, az = math.radians(el), math.radians(az)
         return tuple(Vector(tgt) + Vector((math.cos(el) * math.cos(az), math.cos(el) * math.sin(az),
                                            math.sin(el))) * dist)
-    cams["CAM_E"] = rig_camera("CAM_E", f0, min(f1, T.END), [
+    cams["CAM_E"] = rig_camera("CAM_E", f0, f1, [
         (f0, dict(pos=(xu - 5.4, ya - 0.9, 1.3), tgt=(xu + 1.2, yf - 0.4, 0.85), lens=26.0)),
         (E["zone"] + 16, dict(pos=(xu - 4.8, ya - 1.05, 1.7), tgt=(xu + 0.9, yf - 0.9, 0.6), lens=26.0)),
         (E["rise"] + 4, dict(pos=(xu - 5.2, ya - 1.0, 2.6), tgt=(xu + 0.6, yf - 1.0, 0.4), lens=26.0)),
         (E["rise"] + 40, dict(pos=(xu - 7.0, ya - 0.8, 12.5), tgt=(xu, yf - 1.2, 0.0), lens=28.0)),
         (E["rise"] + 95, dict(pos=(xu - 22.0, ya - 30.0, 30.0), tgt=(xu - 4.0, yf, 1.0), lens=34.0)),
         (E["title"], dict(pos=sph(32.0, -58.0, 92.0), tgt=tuple(hero), lens=38.0)),
-        (min(f1, T.END), dict(pos=sph(29.0, -47.0, 86.0), tgt=tuple(hero), lens=38.0)),
+        (f1, dict(pos=sph(29.0, -47.0, 86.0), tgt=tuple(hero), lens=38.0)),
     ])
     # cut list -> markers
     sc = bpy.context.scene
-    for sid, a, b, cam in T.SHOTS:
-        mk = sc.timeline_markers.new(sid, frame=a)
-        mk.camera = cams[cam]
+    for sid, a, b, src, cam in T.SHOTS:
+        if src == "twin":
+            mk = sc.timeline_markers.new(sid, frame=a)
+            mk.camera = cams.get(cam) or bpy.data.objects.get(cam)
+    return cams
+
+
+def night(G):
+    """02:14: a reach truck comes down aisle 03 toward the camera and swings in at R05."""
+    tr = G["night_truck"]
+    n0, n1 = T.SHOT["n1_night"][1], T.SHOT["n1_night"][2]
+    ya = L.aisle_y("A03")
+    khide(tr, 1, False)
+    khide(n1 + 1, True) if False else khide(tr, n1 + 1, True)
+    xh = L.frame_x(L.LAST_NIGHT_FRAME) if hasattr(L, "LAST_NIGHT_FRAME") else L.frame_x(T.LAST_NIGHT[1])
+    rt = L.route([(L.bay_x(17), ya + 0.2), (xh + 6.0, ya + 0.1), (xh + 2.9, ya - 0.55)])
+    tot = rt[1][-1]
+    d = Driver(tr)
+    d.along(rt, n0, n1, lambda f: tot * (1 - (1 - (f - n0) / (n1 - n0)) ** 1.6))
+    cam_pos0 = (xh - 2.2, ya + 0.75, 1.45)
+    cams = rig_camera("CAM_N1", n0, n1, [
+        (n0, dict(pos=cam_pos0, tgt=(L.bay_x(12), ya - 0.1, 1.9), lens=30.0)),
+        (n1, dict(pos=(xh - 1.7, ya + 0.65, 1.4), tgt=(xh + 4.0, ya - 0.3, 1.2), lens=30.0)),
+    ])
+    cams.data.dof.use_dof = True
+    cams.data.dof.aperture_fstop = 2.8
+    cams.data.dof.focus_distance = 8.0
+    cams.data.dof.keyframe_insert("focus_distance", frame=n0)
+    cams.data.dof.focus_distance = 4.5
+    cams.data.dof.keyframe_insert("focus_distance", frame=n1)
     return cams
 
 
 def animate(G, M):
     X = extras(G, M)
+    night(G)
     plan_and_extrude(G, X)
-    trucks_lapping(G, X, E["routes"] + 10, E["trucks_go"], E["sensors"], E["year_end"])
+    trucks_lapping(G, X, E["routes"] + 10, E["trucks_go"], E["sensors"], E["year_end"], v_fast=-1.25)
     year(G, X)
     boq(G, X)
     routes(G, X)

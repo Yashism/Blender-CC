@@ -21,20 +21,23 @@ COLUMN_XS = [X0 + i * 8.0 for i in range(9)]
 COLUMN_YS = [Y0 + i * 11.0 for i in range(5)]
 
 # ------------------------------------------------------------------ racking
-BAY_W = 2.7                              # clear beam length
+# Real proportions, the same as the W01 rack kit (scripts/w01/layout.py): 2.4 m bays, 9 m frames,
+# five beam levels plus the floor, 1.0 m deep frames, 200 mm flue, 3.2 m reach-truck aisles.
+PITCH = 2.40                             # upright centre to upright centre
 UP_W, UP_D = 0.09, 0.07                  # upright section (face along X, depth along Y)
-PITCH = BAY_W + UP_W
-DEPTH = 1.1                              # frame depth, front of front upright to back of back upright
-FLUE = 0.3
+BAY_W = PITCH - UP_W                     # clear beam length
+DEPTH = 1.0                              # frame depth, front of front upright to back of back upright
+FLUE = 0.2
 AISLE = 3.2
-UP_H = 7.2
-LEVELS = (1.5, 3.0, 4.5, 6.0)            # beam tops
+UP_H = 9.0
+LEVELS = (1.6, 3.2, 4.8, 6.4, 8.0)       # beam tops
 BEAM_H, BEAM_T = 0.11, 0.05
-N_BAYS = 18
-RUN_X0 = -27.5                           # west face of the first frame
+N_BAYS = 20
+RUN_X0 = -27.0                           # west face of the first frame
 RUN_X1 = RUN_X0 + N_BAYS * PITCH + UP_W
 PALLET = (1.0, 1.2, 0.144)               # along the beam, into the rack, height
-LOAD_H = 1.15
+LOAD_H = 1.20
+N_SLOT_LEVELS = len(LEVELS) + 1          # the floor plus every beam level
 
 # Rows from south to north: (id, y of the aisle face, which way the aisle is: -1 south, +1 north)
 _y = Y0 + 13.9                           # back of R01 (the dock zone is south of it)
@@ -88,7 +91,7 @@ _rng = random.Random(7)
 SLOTS = {}
 for rid, _, _ in ROWS:
     for b in range(N_BAYS):
-        for lv in range(5):
+        for lv in range(N_SLOT_LEVELS):
             r = _rng.random()
             SLOTS[(rid, b, lv)] = "LR" if r < 0.74 else ("L" if r < 0.83 else ("R" if r < 0.91 else ""))
 LOAD_VAR = {k: _rng.randrange(4) for k in SLOTS}
@@ -97,7 +100,7 @@ LOAD_VAR = {k: _rng.randrange(4) for k in SLOTS}
 DOORS = [(-24.5 + i * 7.0, Y0) for i in range(8)]          # dock door centres on the south wall
 DOOR_W = 3.0
 STAGING = [(x - 1.25, Y0 + 1.2, x + 1.25, Y0 + 9.4) for x, _ in DOORS]
-CHARGE = [(25.0, -6.0 + i * 2.4) for i in range(6)]        # charging stall centres (trucks park facing east)
+CHARGE = [(27.6, -6.0 + i * 2.4) for i in range(6)]        # charging stall centres (trucks park facing east)
 OFFICE = (24.5, 8.5, X1 - WALL_T, Y1 - WALL_T)
 
 # ------------------------------------------------------------------ the story's bays
@@ -156,11 +159,21 @@ def put_away_short(door, aid, x_bay):
     return [d, (d[0], RACK_Y0 - 1.6), (xe, RACK_Y0 - 1.6), (xe, ya), (x_bay, ya)]
 
 
-# 6D: the same eight put-aways, first as the fleet drives them (everything via the west end), then
-# as the twin routes them (nearest aisle end).
+def put_away_via_a03(door, aid, x_bay):
+    """How the fleet actually drives: everyone cuts through aisle 03, end to end, then doubles back."""
+    d = _dock(door)
+    ya, y3 = aisle_y(aid), aisle_y("A03")
+    if aid == "A03":
+        return [d, (d[0], RACK_Y0 - 1.6), (_cross_w(), RACK_Y0 - 1.6), (_cross_w(), y3), (x_bay, y3)]
+    return [d, (d[0], RACK_Y0 - 1.6), (_cross_w(), RACK_Y0 - 1.6), (_cross_w(), y3), (_cross_e(), y3),
+            (_cross_e(), ya), (x_bay, ya)]
+
+
+# 6D: the same eight put-aways, first as the fleet drives them (all through aisle 03), then as the
+# twin routes them (straight to the nearest aisle end).
 JOBS = [(1, "A02", bay_x(14)), (2, "A04", bay_x(16)), (5, "A01", bay_x(15)), (6, "A03", bay_x(13)),
         (3, "A05", bay_x(12)), (0, "A02", bay_x(3)), (7, "A04", bay_x(17)), (4, "A03", bay_x(10))]
-ROUTES_LONG = [route(put_away(d, a, x)) for d, a, x in JOBS]
+ROUTES_LONG = [route(put_away_via_a03(d, a, x)) for d, a, x in JOBS]
 ROUTES_SHORT = [route(put_away_short(d, a, x)) for d, a, x in JOBS]
 
 # 3D / 4D / outro: closed loops round a double run (east along one aisle, west along the next),

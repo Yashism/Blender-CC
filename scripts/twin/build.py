@@ -218,7 +218,7 @@ def build(M):
                 ob = MD.obj(f"B_{rid}_{b:02d}_{lv}", m_beams, cR, MD.COL["beam"], loc=(x, yc, z))
                 ob.rotation_euler.z = rz
                 G["beams"][(rid, b, lv)] = ob
-            for lv in range(5):
+            for lv in range(L.N_SLOT_LEVELS):
                 mask = L.SLOTS[(rid, b, lv)]
                 if not mask:
                     continue
@@ -233,12 +233,13 @@ def build(M):
                 ob.rotation_euler.z = rz
                 G["loads"][(rid, b, lv)] = ob
 
-    # MHE
+    # MHE (and the one on the night shift in the opening)
     m_truck = MD.mesh_truck(M)
     for i in range(8):
         x, y = L.CHARGE[i % len(L.CHARGE)]
         ob = MD.obj(f"MHE_{i}", m_truck, cM, MD.COL["mhe"], loc=(x + 2.0, y, 0))
         G["trucks"].append(ob)
+    G["night_truck"] = MD.obj("MHE_NIGHT", m_truck, cM, MD.COL["mhe"], loc=(L.bay_x(17), L.aisle_y("A03"), 0))
 
     # the plan drawing
     segs = MD.plan_segments()
@@ -296,6 +297,65 @@ def camera(name, loc, target, lens=50.0, coll=None):
     return ob, tgt
 
 
+def lookdev_real(G, out, res_tag=""):
+    """The realistic site: the real warehouse at night (aisle 03, the bay that gets hit) and the twin
+    cut-away in daylight with a few data layers on."""
+    from twin import real as RL
+    sc = bpy.context.scene
+    shots = []
+    RL.look_night(G, sc)
+    if os.environ.get("TWIN_LD_SKIP_NIGHT"):
+        shots = None
+    for i, ob in enumerate(G["trucks"]):
+        ob.location = (L.bay_x(2 + 2 * i), L.aisle_y(L.AISLES[i % 5][0]), 0)
+        ob.rotation_euler.z = 0.0 if i % 2 else math.pi
+    ya = L.aisle_y("A03")
+    cam, _ = camera("CAM_ld_night", (L.bay_x(10) + 0.6, ya - 0.4, 1.55), (L.bay_x(5), ya + 0.4, 2.4), lens=30)
+    cam.data.dof.use_dof = True
+    cam.data.dof.focus_distance = 9.0
+    cam.data.dof.aperture_fstop = 2.8
+    if shots is not None:
+        shots.append(("night_aisle", cam))
+    cam2, _ = camera("CAM_ld_night2", (L.bay_x(6) + 1.1, ya - 0.9, 0.5), (L.frame_x(6) + 0.05, L.ROW["R05"][1], 0.35),
+                     lens=50)
+    cam2.data.dof.use_dof = True
+    cam2.data.dof.focus_distance = 1.55
+    cam2.data.dof.aperture_fstop = 2.0
+    if shots is not None:
+        shots.append(("night_upright", cam2))
+    for name, cm in ([] if shots is None else shots):
+        sc.camera = cm
+        sc.render.filepath = os.path.join(out, f"real_{name}{res_tag}.png")
+        t = time.time()
+        bpy.ops.render.render(write_still=True)
+        print(f"LOOKDEV {name} {time.time() - t:.1f}s", flush=True)
+    RL.look_twin(G, sc)
+    compositor()
+    G["plan"].color[3] = 0.25
+    for key, col in (((L.IMPACT_ROW, L.IMPACT_BAY), "red"), ((L.HERO_ROW, L.HERO_BAY), "amber")):
+        for lv in range(1, len(L.LEVELS) + 1):
+            ob = G["beams"][(key[0], key[1], lv)]
+            r, g, b, _ = MD.lin(MD.COL[col])
+            ob.color = (r, g, b, 0.5)
+    for ob in G["sensors"].values():
+        ob.color[3] = 1.0
+    cam3, _ = camera("CAM_ld_twin", (50, -60, 44), (-1, 0, 0), lens=40)
+    sc.camera = cam3
+    sc.render.filepath = os.path.join(out, f"real_twin_wide{res_tag}.png")
+    t = time.time()
+    bpy.ops.render.render(write_still=True)
+    print(f"LOOKDEV twin_wide {time.time() - t:.1f}s", flush=True)
+    cam4, _ = camera("CAM_ld_twin2", (L.bay_x(9), ya - 14, 13), (L.bay_x(6), ya + 1, 2.5), lens=35)
+    sc.camera = cam4
+    sc.render.use_persistent_data = True
+    for k in range(2):
+        sc.frame_set(1 + k)
+        sc.render.filepath = os.path.join(out, f"real_twin_close{res_tag}_{k}.png")
+        t = time.time()
+        bpy.ops.render.render(write_still=True)
+        print(f"LOOKDEV twin_close {k} {time.time() - t:.1f}s", flush=True)
+
+
 def lookdev(G, out, engine):
     """Every layer on: trucks in the aisles, a few RAG states, the plan under the racks."""
     sc = bpy.context.scene
@@ -333,7 +393,8 @@ def lookdev(G, out, engine):
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     o = {"engine": "cycles", "res": "960x540", "samples": 12, "lookdev": False, "frames": None, "step": 1,
-         "out": os.path.join(ROOT, "renders", "twin", "frames"), "save": None, "track": False, "list": None}
+         "out": os.path.join(ROOT, "renders", "twin", "frames"), "save": None, "track": False, "list": None,
+         "look": "real"}
     i = 0
     while i < len(a):
         k = a[i].lstrip("-")
@@ -385,10 +446,10 @@ def track(G, X):
     sc = bpy.context.scene
     out = {}
     for sid, pts in track_points(G, X).items():
-        _, a, b, cam = T.SHOT[sid]
+        _, a, b, _, cam = T.SHOT[sid]
         cam = bpy.data.objects[cam]
         sh = {}
-        for fr in range(a, min(b, T.END_HIT - 1) + 1):
+        for fr in range(a, min(b, T.END_CARD - 1) + 1):
             sc.frame_set(fr)
             sh[fr] = {}
             for name, fn in pts.items():
@@ -401,16 +462,47 @@ def track(G, X):
     print("TRACK ->", path)
 
 
-def render(frames, out, step):
+def set_look(G, look):
+    """Switch between the real warehouse at night and the twin."""
+    from twin import real as RL
+    sc = bpy.context.scene
+    if look == "night":
+        RL.look_night(G, sc)
+    else:
+        RL.look_twin(G, sc)
+        RL.data_layers(G, True)
+        world()
+        compositor()
+        setup_view(sc)
+
+
+def setup_view(sc):
+    sc.view_settings.view_transform = "AgX"
+    try:
+        sc.view_settings.look = "AgX - Medium High Contrast"
+    except TypeError:
+        pass
+    sc.view_settings.exposure = 0.0
+
+
+def render(frames, out, step, G=None):
     sc = bpy.context.scene
     sc.render.use_persistent_data = True
     seq = frames if isinstance(frames, list) else range(frames[0], frames[1] + 1, step)
+    cur = None
     for fr in seq:
+        shot = T.shot_at(fr)
+        if shot[3] != "twin":
+            continue
         path = os.path.join(out, f"f_{fr:04d}.png")
         if os.path.exists(path):
             continue
+        want = "night" if shot[0].startswith("n") else "twin"
+        if G is not None and want != cur:
+            set_look(G, want)
+            cur = want
         sc.frame_set(fr)
-        sc.camera = bpy.data.objects[T.shot_at(fr)[3]]
+        sc.camera = bpy.data.objects[shot[4]]
         sc.render.filepath = path
         t = time.time()
         bpy.ops.render.render(write_still=True)
@@ -426,15 +518,22 @@ def main():
     M = MD.materials()
     t = time.time()
     G = build(M)
+    if o["look"] == "real":
+        from twin import real as RL
+        RL.apply(G, RL.materials())
+        RL.speed(bpy.context.scene)
     print(f"BUILD {time.time() - t:.1f}s, {len(bpy.data.objects)} objects")
     os.makedirs(o["out"], exist_ok=True)
     if o["lookdev"]:
-        lookdev(G, o["out"], o["engine"])
+        if o["look"] == "real":
+            lookdev_real(G, o["out"])
+        else:
+            lookdev(G, o["out"], o["engine"])
         return
     t = time.time()
     X = A.animate(G, M)
     sc = bpy.context.scene
-    sc.frame_start, sc.frame_end = 1, T.END_HIT - 1
+    sc.frame_start, sc.frame_end = 1, T.END_CARD - 1
     sc.camera = bpy.data.objects["CAM_A"]
     print(f"ANIMATE {time.time() - t:.1f}s")
     if o["save"]:
@@ -443,9 +542,9 @@ def main():
         track(G, X)
     if o["frames"]:
         a, b = (int(v) for v in o["frames"].split("-"))
-        render((a, b), o["out"], o["step"])
+        render((a, b), o["out"], o["step"], G)
     if o["list"]:
-        render([int(v) for v in o["list"].split(",")], o["out"], 1)
+        render([int(v) for v in o["list"].split(",")], o["out"], 1, G)
 
 
 if __name__ == "__main__":
