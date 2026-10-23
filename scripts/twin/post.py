@@ -874,7 +874,8 @@ def main():
     ap.add_argument("--frames", default=f"1-{T.END}")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--no-encode", action="store_true")
-    ap.add_argument("--audio", default=os.path.join(OUT, "twin_mix.wav"))
+    approved = os.path.join(OUT, "twin_mix_approved.wav")      # the signed-off soundtrack, if there is one
+    ap.add_argument("--audio", default=approved if os.path.exists(approved) else os.path.join(OUT, "twin_mix.wav"))
     ap.add_argument("--name", default="RAMS_digital_twin_2D_to_8D")
     a = ap.parse_args()
     for d in ("cut16", "cut9"):

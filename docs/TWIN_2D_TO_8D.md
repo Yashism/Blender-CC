@@ -47,7 +47,7 @@ panels (prices, km, kWh, counts) is made up for the film.
 blender -b --factory-startup -P scripts/twin/build.py -- --track
 blender -b --factory-startup -P scripts/twin/build.py -- --res 960x540 --samples 12 --frames 1-1511
 bash scripts/w01/fetch_music.sh && python3 scripts/twin/sfx.py
-python3 scripts/twin/post.py
+python3 scripts/twin/post.py      # uses renders/twin/twin_mix_approved.wav (the signed-off mix) when it exists
 
 # final 1080p on a GPU: render 1920x1080 frames, then point the post at them
 blender -b --factory-startup -P scripts/twin/build.py -- --res 1920x1080 --samples 48 --frames 1-1511 --out renders/twin/frames_1080
