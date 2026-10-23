@@ -3,6 +3,8 @@
 > **Also in this repo:** the RAMS rack-inspection video calendar (`content-plan/`) and its first
 > film, **W01 "One Weak Rack"**, a photoreal Cycles build (`scripts/w01/`, see
 > [docs/W01_ONE_WEAK_RACK.md](docs/W01_ONE_WEAK_RACK.md)).
+> The **RAMS Digital Twin launch film "2D → 8D"** is in `scripts/twin/` (see
+> [docs/TWIN_2D_TO_8D.md](docs/TWIN_2D_TO_8D.md)).
 
 A RAMS Digital warehouse-safety short, built as a fully scripted Blender 4.5 LTS project in a handmade felt-and-cardboard stop-motion look. Every model, rig and render comes from Python in `scripts/`, so the whole episode can be rebuilt from a fresh checkout.
 

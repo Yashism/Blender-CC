@@ -359,13 +359,18 @@ def track_points(G, X):
         p[axis] = m[axis]
         return p
 
+    def top_left(ob):
+        """The part's +X end, top edge: on screen (camera looking south) its top-left corner."""
+        cs = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+        return Vector((max(c.x for c in cs), sum(c.y for c in cs) / 8, max(c.z for c in cs)))
+
     P = X["parts"]
     up = G["frames"][(L.IMPACT_ROW, L.IMPACT_BAY + 1)]
     yf = L.ROW[L.IMPACT_ROW][1]
     xu = L.frame_x(L.IMPACT_BAY + 1)
     mb = X["newbeam"]
     return {
-        "s2_boq": {k: (lambda k=k: bbox_end(P[k], 0, 1)) for k in ("up", "b1", "b2", "br", "an0", "gd")},
+        "s2_boq": {k: (lambda k=k: top_left(P[k])) for k in ("up", "b1", "b2", "br", "an0", "gd")},
         "s4_maint": {"beam": lambda: Vector((L.bay_x(L.MAINT_BAY) + 0.6, L.ROW[L.MAINT_ROW][1] + 0.05, 3.0)),
                      "new": lambda: mb.matrix_world.translation + Vector((0.6, 0.6, 0))},
         "s5_safety": {"impact": lambda: Vector((xu, yf - 0.02, 0.45)),

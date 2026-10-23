@@ -417,8 +417,8 @@ def boq(G, X):
         z0 = ob.location.z
         key(ob, "location", fc, z0, index=2, ip="SINE", ease="EASE_IN_OUT")
         key(ob, "location", fc + 22, z0 - 9.0, index=2)
-        key(ob, "location", fo, z0 - 9.0, index=2, ip="CUBIC", ease="EASE_OUT")
-        key(ob, "location", fo + 20, z0, index=2)
+        key(ob, "location", fo, z0 - 9.0, index=2)
+        key(ob, "location", fo + 1, z0, index=2)            # back up on the cut to 6D
     for ob in G["trucks"]:
         khide(ob, fc, True)
     rid, bay = L.HERO_ROW, L.HERO_BAY
@@ -429,30 +429,35 @@ def boq(G, X):
     fr = G["frames"][(rid, bay)]
     kcol(fr, fc + 8, MD.COL["frame"], 0.0)
     kcol(fr, fc + 18, MD.COL["red"], 0.7)
-    kcol(fr, E["parts_to_boq"] + 10, MD.COL["red"], 0.7)
-    kcol(fr, fo + 10, MD.COL["green"], 0.5)
-    kcol(fr, fo + 30, MD.COL["frame"], 0.0)
+    kcol(fr, fo, MD.COL["red"], 0.7)
+    kcol(fr, fo + 1, MD.COL["frame"], 0.0)
     for lv in (1, 2):
         bm = G["beams"][(rid, bay, lv)]
         kcol(bm, fc + 10, MD.COL["beam"], 0.0)
         kcol(bm, fc + 20, MD.COL["amber"], 0.8)
-        kcol(bm, fo + 10, MD.COL["green"], 0.5)
-        kcol(bm, fo + 30, MD.COL["beam"], 0.0)
+        kcol(bm, fo, MD.COL["amber"], 0.8)
+        kcol(bm, fo + 1, MD.COL["beam"], 0.0)
     # the parts: (key, start loc, start rot, layout loc, layout rot, colour, glow)
     lay_y = yface + side(rid) * 6.0
     P = X["parts"]
     xl = L.frame_x(bay)
+    # a parts list in the air: left-aligned, true length, drawn 2.4x thicker so they read on screen
+    xl0 = bx + 3.9
     spec = [
-        ("up", (xl, yfu, L.UP_H / 2), (0, 0, 0), (bx + 0.3, lay_y, 6.0), (0, math.pi / 2, 0), "red", 0.9),
-        ("b1", (bx, yfb, L.LEVELS[0] - L.BEAM_H / 2), (0, 0, 0), (bx + 0.3, lay_y, 5.2), (0, 0, 0), "amber", 0.8),
-        ("b2", (bx, yfb, L.LEVELS[1] - L.BEAM_H / 2), (0, 0, 0), (bx + 0.3, lay_y, 4.75), (0, 0, 0), "amber", 0.8),
-        ("br", (xl, L.row_centre_y(rid), 2.0), (0, math.radians(-40), math.pi / 2), (bx + 0.3, lay_y, 4.25),
-         (0, 0, 0), "amber", 0.8),
-        ("gd", (xl, yface + side(rid) * 0.25, 0.0), (0, 0, 0), (bx + 1.6, lay_y, 2.95), (0, 0, math.pi), "mhe", 0.3),
+        ("up", (xl, yfu, L.UP_H / 2), (0, 0, 0), (xl0 - L.UP_H / 2, lay_y, 6.0), (0, math.pi / 2, 0), "red", 0.9,
+         (2.4, 2.4, 1.0)),
+        ("b1", (bx, yfb, L.LEVELS[0] - L.BEAM_H / 2), (0, 0, 0), (xl0 - L.BAY_W / 2, lay_y, 5.3), (0, 0, 0), "amber",
+         0.8, (1.0, 2.4, 2.4)),
+        ("b2", (bx, yfb, L.LEVELS[1] - L.BEAM_H / 2), (0, 0, 0), (xl0 - L.BAY_W / 2, lay_y, 4.7), (0, 0, 0), "amber",
+         0.8, (1.0, 2.4, 2.4)),
+        ("br", (xl, L.row_centre_y(rid), 2.0), (0, math.radians(-40), math.pi / 2), (xl0 - 0.65, lay_y, 4.1),
+         (0, 0, 0), "amber", 0.8, (1.0, 2.6, 2.6)),
+        ("gd", (xl, yface + side(rid) * 0.25, 0.0), (0, 0, 0), (xl0 - 0.25, lay_y, 2.55), (0, 0, math.pi), "mhe", 0.3,
+         (1.6, 1.6, 1.6)),
     ] + [(f"an{k}", (xl + (k % 2 - 0.5) * 0.08, yfu + (k // 2 - 0.5) * 0.06, 0.0), (0, 0, 0),
-          (bx - 0.6 + 0.42 * k, lay_y, 3.65), (0, 0, 0), "amber", 0.8) for k in range(4)]
+          (xl0 - 0.12 - 0.42 * k, lay_y, 3.45), (0, 0, 0), "amber", 0.8, (2.0, 2.0, 2.0)) for k in range(4)]
     f0, fh, fb = E["parts_out"], E["parts_hold"], E["parts_to_boq"]
-    for n, (k, l0, r0, l1, r1, col, glow) in enumerate(spec):
+    for n, (k, l0, r0, l1, r1, col, glow, thick) in enumerate(spec):
         ob = P[k]
         ob.rotation_mode = "XYZ"
         st = f0 + 4 * n
@@ -466,7 +471,7 @@ def boq(G, X):
         arrive = st + 34
         key(ob, "location", arrive, l1)
         key(ob, "rotation_euler", arrive, r1)
-        key(ob, "scale", arrive, (1, 1, 1))
+        key(ob, "scale", arrive, thick)
         kcol(ob, arrive, col, glow)
         # float while the BoQ builds
         go = fb + 3 * n
@@ -475,9 +480,9 @@ def boq(G, X):
             key(ob, "location", fr, (l1[0], l1[1], l1[2] + bob))
         # into the BoQ (screen right = world -X from this camera)
         key(ob, "location", go, (l1[0], l1[1], l1[2]), ip="CUBIC", ease="EASE_IN")
-        key(ob, "scale", go, (1, 1, 1), ip="CUBIC", ease="EASE_IN")
+        key(ob, "scale", go, thick, ip="CUBIC", ease="EASE_IN")
         key(ob, "location", go + 14, (bx - 7.5, lay_y + side(rid) * 1.5, 6.0 - 0.45 * n))
-        key(ob, "scale", go + 14, (0.08, 0.08, 0.08))
+        key(ob, "scale", go + 14, tuple(0.08 * v for v in thick))
         kcol(ob, go, col, glow)
         kcol(ob, go + 14, col, 3.0)
         khide(ob, go + 15, True)
@@ -837,22 +842,22 @@ def cameras():
     bx, yface = L.bay_x(bay), face_y(rid)
     f0, f1 = S["s2_boq"][1], S["s2_boq"][2]
     cams["CAM_B"] = rig_camera("CAM_B", f0, f1, [
-        (f0, dict(pos=(bx - 3.6, yface + 16.5, 7.4), tgt=(bx - 2.4, yface + 0.6, 4.2), lens=34.0)),
-        (f1, dict(pos=(bx - 2.9, yface + 13.4, 6.6), tgt=(bx - 2.3, yface + 0.8, 4.3), lens=34.0)),
+        (f0, dict(pos=(bx - 0.6, yface + 18.6, 7.2), tgt=(bx - 0.9, yface + 0.6, 4.2), lens=34.0)),
+        (f1, dict(pos=(bx - 0.3, yface + 16.8, 6.8), tgt=(bx - 0.8, yface + 0.8, 4.3), lens=34.0)),
     ])
     # shallow focus on the floating parts, the rack behind goes soft
     cb = cams["CAM_B"].data
     cb.dof.use_dof = True
-    cb.dof.aperture_fstop = 2.0
-    parts_c = Vector((bx + 0.3, yface + side(rid) * 6.0, 4.8))
-    for fr, pos in ((f0, (bx - 3.6, yface + 16.5, 7.4)), (f1, (bx - 2.9, yface + 13.4, 6.6))):
+    cb.dof.aperture_fstop = 0.25        # model scale: a wide aperture so the rack behind actually softens
+    parts_c = Vector((bx + 0.3, yface + side(rid) * 6.0, 4.6))
+    for fr, pos in ((f0, (bx - 0.6, yface + 18.6, 7.2)), (f1, (bx - 0.3, yface + 16.8, 6.8))):
         cb.dof.focus_distance = (Vector(pos) - parts_c).length
         cb.dof.keyframe_insert("focus_distance", frame=fr)
     # C: high over the docks and the rack block
     f0, f1 = S["s3_routes"][1], S["s3_routes"][2]
     cams["CAM_C"] = rig_camera("CAM_C", f0, f1, [
-        (f0, dict(tgt=(-2.0, -3.5, 0.0), el=77.0, az=-96.0, dist=104.0, lens=40.0)),
-        (f1, dict(tgt=(-2.0, -3.0, 0.0), el=81.0, az=-88.0, dist=96.0, lens=40.0)),
+        (f0, dict(tgt=(9.0, -3.0, 0.0), el=77.0, az=-95.0, dist=116.0, lens=40.0)),
+        (f1, dict(tgt=(8.5, -2.5, 0.0), el=81.0, az=-88.0, dist=108.0, lens=40.0)),
     ], spherical=True)
     # D: in aisle A04, looking west at the beam the twin flags
     rid, bay = L.MAINT_ROW, L.MAINT_BAY
@@ -878,8 +883,8 @@ def cameras():
         (E["rise"] + 4, dict(pos=(xu - 5.2, ya - 1.0, 2.6), tgt=(xu + 0.6, yf - 1.0, 0.4), lens=26.0)),
         (E["rise"] + 40, dict(pos=(xu - 7.0, ya - 0.8, 12.5), tgt=(xu, yf - 1.2, 0.0), lens=28.0)),
         (E["rise"] + 95, dict(pos=(xu - 22.0, ya - 30.0, 30.0), tgt=(xu - 4.0, yf, 1.0), lens=34.0)),
-        (E["title"], dict(pos=sph(32.0, -58.0, 88.0), tgt=tuple(hero), lens=38.0)),
-        (min(f1, T.END), dict(pos=sph(29.0, -47.0, 82.0), tgt=tuple(hero), lens=38.0)),
+        (E["title"], dict(pos=sph(32.0, -58.0, 80.0), tgt=tuple(hero), lens=38.0)),
+        (min(f1, T.END), dict(pos=sph(29.0, -47.0, 74.0), tgt=tuple(hero), lens=38.0)),
     ])
     # cut list -> markers
     sc = bpy.context.scene
