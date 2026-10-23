@@ -2,12 +2,17 @@
 light layer of synthesised sound design (system python3: numpy, scipy, soundfile, pyloudnorm).
 
     bash scripts/w01/fetch_music.sh          # the track: Mixkit "Tech House vibes" (130.mp3)
-    python3 scripts/twin/sfx.py              # -> renders/twin/twin_mix.wav
+    python3 scripts/twin/sfx.py              # -> renders/twin/twin_mix.wav (with the voiceover)
+    python3 scripts/twin/sfx.py --no-vo      # music and sound design only
 
 Music: "Tech House vibes" by Alejandro Magaña, Mixkit Stock Music Free License (free for commercial
 use in a video, no credit required, https://mixkit.co/license/#musicFree). The edit: the track
 from its bar 4 (so its kick lands on the racks rising) to its bar 32, then its last four bars and
 final hit, joined on a downbeat.
+
+Voiceover: ElevenLabs "Noah - Engaging American Ads & News Pro" (eleven_v4), one take of the whole
+script (assets/vo/twin/noah_take.mp3), cut into lines and placed by assets/vo/twin/lines.json.
+The music ducks about 8 dB under the voice, the sound design 3 dB.
 """
 import os
 import subprocess
@@ -27,6 +32,7 @@ N = int(SR * DUR)
 RNG = np.random.default_rng(23)
 MUSIC = os.path.join(ROOT, "assets", "music", "w01_simple", "130.mp3")
 OUT = os.path.join(ROOT, "renders", "twin", "twin_mix.wav")
+VO_DIR = os.path.join(ROOT, "assets", "vo", "twin")
 
 
 def sec(frame):
@@ -312,20 +318,60 @@ def music_edit():
     return out
 
 
-def mix(sfx, music, sfx_lufs=-19.0):
-    """Music at -14 LUFS, the sound design 5 LU under it, the music ducking (up to 6 dB) under the hits."""
+def voiceover():
+    """The narration: each line cut from the take and laid at its film time (mono, centred)."""
+    import json
+    cfg = json.load(open(os.path.join(VO_DIR, "lines.json")))
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", os.path.join(VO_DIR, cfg["source"]), "-f", "f32le", "-ac", "1",
+                          "-ar", str(SR), "-"], check=True, capture_output=True).stdout
+    take = np.frombuffer(raw, dtype=np.float32).astype(np.float64)
+    take = band(take, 70, None)                           # rumble out
+    out = np.zeros(N)
+    fade = int(0.012 * SR)
+    for ln in cfg["lines"]:
+        a, b = (int(v * SR) for v in ln["take"])
+        seg = take[a:b].copy()
+        seg[:fade] *= np.linspace(0, 1, fade)
+        seg[-fade:] *= np.linspace(1, 0, fade)
+        i = int(ln["at"] * SR)
+        out[i:i + len(seg)] += seg[: max(0, N - i)]
+    return np.stack([out, out], axis=1)
+
+
+def follower(x, attack, release, lookahead=0.0):
+    """Peak envelope with separate attack and release (seconds), optionally shifted early."""
+    from scipy.signal import lfilter
+    lvl = np.abs(x).max(1) if x.ndim > 1 else np.abs(x)
+    rel = np.exp(-1 / (release * SR))
+    env = lfilter([1 - rel], [1, -rel], lvl)
+    att = np.exp(-1 / (attack * SR))
+    env = np.maximum(env, lfilter([1 - att], [1, -att], lvl))
+    k = int(lookahead * SR)
+    if k:
+        env = np.concatenate([env[k:], np.full(k, env[-1])])
+    return env
+
+
+def mix(sfx, music, vo=None, sfx_lufs=-19.0):
+    """Music at -14.5 LUFS, the sound design 5 LU under it, ducking under the hits; with a
+    voiceover, the voice sits on top (-15 LUFS) and the music and effects make room for it."""
     import pyloudnorm
     from scipy.ndimage import maximum_filter1d, minimum_filter1d, uniform_filter1d
-    from scipy.signal import lfilter
     meter = pyloudnorm.Meter(SR)
-    sfx = sfx * 10 ** ((sfx_lufs - meter.integrated_loudness(sfx)) / 20)
+    sfx = sfx * 10 ** ((sfx_lufs - (2.5 if vo is not None else 0) - meter.integrated_loudness(sfx)) / 20)
     music = music * 10 ** ((-14.5 - meter.integrated_loudness(music)) / 20)
-    lvl = np.abs(sfx).max(1)
-    att, rel = np.exp(-1 / (0.004 * SR)), np.exp(-1 / (0.3 * SR))
-    env = np.maximum(lfilter([1 - rel], [1, -rel], lvl), lfilter([1 - att], [1, -att], lvl))
-    db = 20 * np.log10(env + 1e-9)
+    db = 20 * np.log10(follower(sfx, 0.004, 0.3) + 1e-9)
     duck = 10 ** (-np.clip((db + 20) * 0.5, 0, 6) / 20)
+    if vo is not None:
+        speech = vo[:, 0] != 0
+        vo = vo * 10 ** ((-15.0 - meter.integrated_loudness(vo[speech.nonzero()[0].min():])) / 20)
+        talk = np.clip(follower(vo, 0.02, 0.45, lookahead=0.12) / 0.05, 0, 1)
+        talk = uniform_filter1d(talk, int(0.08 * SR))
+        duck = duck * 10 ** (-8.0 * talk / 20)
+        sfx = sfx * (10 ** (-3.0 * talk / 20))[:, None]
     out = sfx + music * duck[:, None]
+    if vo is not None:
+        out = out + vo
     out *= 10 ** ((-14.0 - meter.integrated_loudness(out)) / 20)
     ceil = 10 ** (-1 / 20)
     g = np.minimum(1.0, ceil / np.maximum(maximum_filter1d(np.abs(out).max(1), 481), 1e-9))
@@ -335,10 +381,12 @@ def mix(sfx, music, sfx_lufs=-19.0):
 
 def main():
     import soundfile as sf
-    out = mix(design(), music_edit())
+    with_vo = "--no-vo" not in sys.argv
+    out = mix(design(), music_edit(), voiceover() if with_vo else None)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    sf.write(OUT, out.astype(np.float32), SR, subtype="PCM_24")
-    print("wrote", OUT, f"{len(out) / SR:.1f} s")
+    path = OUT if with_vo else OUT.replace(".wav", "_novo.wav")
+    sf.write(path, out.astype(np.float32), SR, subtype="PCM_24")
+    print("wrote", path, f"{len(out) / SR:.1f} s")
 
 
 if __name__ == "__main__":

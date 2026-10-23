@@ -64,6 +64,31 @@ video, including ads, no credit needed. The film starts on the track's bar 4, so
 as the racks rise; at film bar 28 it jumps to the track's last four bars, so the final hit lands
 on the end card.
 
+## Voiceover
+
+ElevenLabs, voice **Noah - Engaging American Ads & News Pro** (American English, middle-aged
+male), model eleven_v4: one take of the whole script, `assets/vo/twin/noah_take.mp3`. `sfx.py` cuts
+it into ten lines and lays each one on its section's downbeat (`assets/vo/twin/lines.json`); the
+music ducks about 8 dB under the voice. `python3 scripts/twin/sfx.py --no-vo` builds the mix
+without it.
+
+| Film time | Line |
+| --- | --- |
+| 0.4 | Every warehouse starts as a drawing. |
+| 4.1 | Rams maps every aisle, rack and dock. |
+| 8.4 | Then builds the whole site in 3D. Every frame, every beam, every route your trucks take. |
+| 16.0 | In 4D, it remembers. Sensors log every impact and every move, all year. |
+| 23.9 | 5D turns damage into a bill of quantities: the exact parts, and the cost. |
+| 31.8 | 6D plans shorter routes for your fleet. Less driving. Less energy. |
+| 39.6 | 7D spots a beam drifting toward its limit, and gets it replaced before it fails. |
+| 47.4 | And 8D is safety. When a rack gets hit, you know in seconds, and the bay is made safe. |
+| 55.2 | Rams Digital Twin. Your entire warehouse, from 2D to 8D. |
+| 60.2 | Book a demo at rams.digital. |
+
+The take was generated on a free-tier ElevenLabs account. Free-tier audio is not licensed for
+commercial use: regenerate it (same script, same voice) on a paid plan before the film is
+published, drop the new take in as `noah_take.mp3`, and re-check the cut points in `lines.json`.
+
 ## Launch plan (ideas)
 
 1. **Teasers, the week before:** three 8 s close-ups of the twin (a plan line drawing itself; a rack
