@@ -871,7 +871,7 @@ def cameras():
     xu = L.frame_x(L.IMPACT_BAY + 1)
     yf, ya = face_y(L.IMPACT_ROW), L.aisle_y("A02")
     f0, f1 = S["s5_safety"][1], E["title"] + 141
-    hero = Vector((0.0, -1.0, 1.5))
+    hero = Vector((-6.5, -5.5, 5.0))      # aimed up and left of the site, so it sits low right under the title
 
     def sph(el, az, dist, tgt=hero):
         el, az = math.radians(el), math.radians(az)
@@ -883,8 +883,8 @@ def cameras():
         (E["rise"] + 4, dict(pos=(xu - 5.2, ya - 1.0, 2.6), tgt=(xu + 0.6, yf - 1.0, 0.4), lens=26.0)),
         (E["rise"] + 40, dict(pos=(xu - 7.0, ya - 0.8, 12.5), tgt=(xu, yf - 1.2, 0.0), lens=28.0)),
         (E["rise"] + 95, dict(pos=(xu - 22.0, ya - 30.0, 30.0), tgt=(xu - 4.0, yf, 1.0), lens=34.0)),
-        (E["title"], dict(pos=sph(32.0, -58.0, 80.0), tgt=tuple(hero), lens=38.0)),
-        (min(f1, T.END), dict(pos=sph(29.0, -47.0, 74.0), tgt=tuple(hero), lens=38.0)),
+        (E["title"], dict(pos=sph(32.0, -58.0, 92.0), tgt=tuple(hero), lens=38.0)),
+        (min(f1, T.END), dict(pos=sph(29.0, -47.0, 86.0), tgt=tuple(hero), lens=38.0)),
     ])
     # cut list -> markers
     sc = bpy.context.scene

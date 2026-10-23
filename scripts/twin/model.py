@@ -429,7 +429,7 @@ def plan_labels():
     """(text, (x, y), size, t_appear, align)."""
     out = []
     for aid, y0, y1 in L.AISLES:
-        out.append((aid.replace("A0", "AISLE 0"), (L.RUN_X0 - 0.8, (y0 + y1) / 2), 1.6, 0.5, "RIGHT"))
+        out.append((aid.replace("A0", "AISLE 0"), (L.RUN_X0 + 0.7, (y0 + y1) / 2), 1.3, 0.5, "LEFT"))
     for i, (x, _) in enumerate(L.DOORS):
         out.append((f"DOCK {i + 1:02d}", (x, L.Y0 + 1.1), 1.15, 0.62, "CENTER"))
     out.append(("CHARGING", (L.CHARGE[0][0], L.CHARGE[-1][1] + 2.3), 1.3, 0.74, "CENTER"))

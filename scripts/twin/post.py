@@ -383,6 +383,9 @@ def el_rail(c, lay, f):
     step = 62 if lay.mode == "h" else 74
     x0 = lay.m if lay.mode == "h" else (lay.W - step * 6 - fnt.getlength("8D")) / 2
     y = 78 if lay.mode == "h" else 140
+    pad = 16 if lay.mode == "h" else 20
+    panel(c, (x0 - pad, y - 32, x0 + step * 6 + fnt.getlength("8D") + pad, y + 22), a * 0.85, radius=10,
+          fill=(10, 13, 18, 170), border=(255, 255, 255, 18))
     for i, sec in enumerate(SECS):
         col = ORANGE if i == k else WHITE
         al = 1.0 if i == k else (0.62 if i < k else 0.28)
@@ -429,7 +432,7 @@ def el_year(c, lay, f):
     u = clamp((f - f0 - 4) / (f1 - f0 - 10))
     v = lay.mode == "v"
     if not v:
-        x0, x1, y = 1000, lay.W - lay.m, lay.H - 112
+        x0, x1, y = 1100, lay.W - lay.m, lay.H - 112
         fm = font("ui_m", 16)
     else:
         x0, x1, y = lay.m + 30, lay.W - lay.m - 30, lay.panel_y + 96
@@ -712,6 +715,7 @@ def el_outro(c, lay, f):
     sa = ease_out(ramp(f, t0 + 12, 14))
     if not v:
         x = lay.m + 8
+        blit(c, title_wash(), 0, 0, la)
         lg = logo(330)
         blit(c, lg, x - 8, 112 - 16 * (1 - la), la)
         text(c, (x, 380 - 16 * (1 - ta)), "Digital Twin", font("title", 108), WHITE, ta, shadow=True)
@@ -785,6 +789,20 @@ def grad_h():
     return _grad["h"]
 
 
+def title_wash():
+    """A soft dark wash top-left, behind the outro title."""
+    if "t" not in _grad:
+        import numpy as np
+        W, H = 1920, 1080
+        y, x = np.mgrid[0:H, 0:W].astype(np.float32)
+        r = np.sqrt((x / 1250.0) ** 2 + (y / 640.0) ** 2)
+        v = np.clip(1 - r, 0, 1)
+        im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        im.putalpha(Image.fromarray((np.clip(0.78 * v * v * (3 - 2 * v), 0, 1) * 255).astype(np.uint8), "L"))
+        _grad["t"] = im
+    return _grad["t"]
+
+
 def bg_v():
     global _bgv
     if _bgv is None:
@@ -847,17 +865,38 @@ def compose(f, mode, src, track):
 _G = {}
 
 
-def _init(src):
+def _init(src, modes=None):
     _G["src"] = src
+    if modes:
+        _G["modes"] = modes
     p = os.path.join(OUT, "track.json")
     _G["track"] = json.load(open(p)) if os.path.exists(p) else {}
 
 
 def _job(f):
-    for mode, d in (("h", "cut16"), ("v", "cut9")):
+    for mode, d in _G.get("modes", (("h", "cut16"), ("v", "cut9"))):
         out = os.path.join(OUT, d, f"{mode}_{f:04d}.png")
         compose(f, mode, _G["src"], _G["track"]).save(out, compress_level=1)
     return f
+
+
+# review clips: one per dimension (hook and 2D together, outro with the end card)
+CLIPS = [("c1_hook_2D", 1, T.bar(4) - 1), ("c2_3D", T.bar(4), T.bar(8) - 1), ("c3_4D", T.bar(8), T.bar(12) - 1),
+         ("c4_5D", T.bar(12), T.bar(16) - 1), ("c5_6D", T.bar(16), T.bar(20) - 1), ("c6_7D", T.bar(20), T.bar(24) - 1),
+         ("c7_8D", T.bar(24), T.bar(28) - 1), ("c8_outro", T.bar(28), T.END)]
+
+
+def encode_clip(name, f0, f1, audio, out_dir, mode="h"):
+    """One review clip with its stretch of the soundtrack."""
+    d = "cut16" if mode == "h" else "cut9"
+    out = os.path.join(out_dir, f"{name}.mp4")
+    cmd = ["ffmpeg", "-v", "error", "-y", "-framerate", str(T.FPS), "-start_number", str(f0),
+           "-i", os.path.join(OUT, d, f"{mode}_%04d.png"), "-ss", f"{(f0 - 1) / T.FPS:.4f}",
+           "-t", f"{(f1 - f0 + 1) / T.FPS:.4f}", "-i", audio, "-frames:v", str(f1 - f0 + 1),
+           "-c:v", "libx264", "-preset", "medium", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+           "-shortest", "-movflags", "+faststart", out]
+    subprocess.run(cmd, check=True)
+    return out
 
 
 def encode(pattern, audio, out):
@@ -877,7 +916,17 @@ def main():
     approved = os.path.join(OUT, "twin_mix_approved.wav")      # the signed-off soundtrack, if there is one
     ap.add_argument("--audio", default=approved if os.path.exists(approved) else os.path.join(OUT, "twin_mix.wav"))
     ap.add_argument("--name", default="RAMS_digital_twin_2D_to_8D")
+    ap.add_argument("--clip", help="make one review clip (c1_hook_2D ... c8_outro), 16:9 only")
     a = ap.parse_args()
+    if a.clip:
+        name, f0, f1 = next(c for c in CLIPS if c[0] == a.clip)
+        os.makedirs(os.path.join(OUT, "cut16"), exist_ok=True)
+        with Pool(a.jobs, initializer=_init, initargs=(a.src, (("h", "cut16"),))) as pool:
+            list(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4))
+        out_dir = os.path.join(OUT, "clips")
+        os.makedirs(out_dir, exist_ok=True)
+        print("clip", encode_clip(name, f0, f1, a.audio, out_dir))
+        return
     for d in ("cut16", "cut9"):
         os.makedirs(os.path.join(OUT, d), exist_ok=True)
     f0, f1 = (int(v) for v in a.frames.split("-"))
