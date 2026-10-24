@@ -868,9 +868,10 @@ def cameras():
     rid, bay = L.HERO_ROW, L.HERO_BAY
     bx, yface = L.bay_x(bay), face_y(rid)
     f0, f1 = S["s2_boq"][1], S["s2_boq"][2]
+    tz = -1.3 if V else 0.0                 # 9:16: look lower so the bay sits above the panel
     cams["CAM_B"] = rig_camera("CAM_B", f0, f1, [
-        (f0, dict(pos=(bx - 0.6, yface + 18.6, 7.2), tgt=(bx - 0.9, yface + 0.6, 4.2), lens=34.0)),
-        (f1, dict(pos=(bx - 0.3, yface + 16.8, 6.8), tgt=(bx - 0.8, yface + 0.8, 4.3), lens=34.0)),
+        (f0, dict(pos=(bx - 0.6, yface + 18.6, 7.2), tgt=(bx - 0.9, yface + 0.6, 4.2 + tz), lens=34.0)),
+        (f1, dict(pos=(bx - 0.3, yface + 16.8, 6.8), tgt=(bx - 0.8, yface + 0.8, 4.3 + tz), lens=34.0)),
     ])
     # shallow focus on the floating parts, the rack behind goes soft
     cb = cams["CAM_B"].data
