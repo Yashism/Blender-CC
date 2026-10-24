@@ -900,7 +900,8 @@ def cameras():
     yf, ya = face_y(L.IMPACT_ROW), L.aisle_y("A02")
     f0, f1 = S["s5_safety"][1], T.END_CARD - 1
     hero = Vector((-6.5, -5.5, 5.0))      # aimed up and left of the site, so it sits low right under the title
-    hero_v = Vector((-1.0, -1.0, 9.0)) if V else hero      # 9:16: the site centred, low, under the title
+    hero_v = Vector((-1.0, -1.0, -8.0)) if V else hero     # 9:16: the site between the title and the button
+    wide_o = 1.8 if V else 1.0                              # 9:16: back far enough that the site fits across
 
     def sph(el, az, dist, tgt=hero):
         el, az = math.radians(el), math.radians(az)
@@ -912,8 +913,8 @@ def cameras():
         (E["rise"] + 4, dict(pos=(xu - 5.2, ya - 1.0, 2.6), tgt=(xu + 0.6, yf - 1.0, 0.4), lens=26.0)),
         (E["rise"] + 40, dict(pos=(xu - 7.0, ya - 0.8, 12.5), tgt=(xu, yf - 1.2, 0.0), lens=28.0)),
         (E["rise"] + 95, dict(pos=(xu - 22.0, ya - 30.0, 30.0), tgt=(xu - 4.0, yf, 1.0), lens=34.0)),
-        (E["title"], dict(pos=sph(32.0, -58.0, 92.0 * wide, tgt=hero_v), tgt=tuple(hero_v), lens=38.0)),
-        (f1, dict(pos=sph(29.0, -47.0, 86.0 * wide, tgt=hero_v), tgt=tuple(hero_v), lens=38.0)),
+        (E["title"], dict(pos=sph(32.0, -58.0, 92.0 * wide_o, tgt=hero_v), tgt=tuple(hero_v), lens=38.0)),
+        (f1, dict(pos=sph(29.0, -47.0, 86.0 * wide_o, tgt=hero_v), tgt=tuple(hero_v), lens=38.0)),
     ])
     # cut list -> markers
     return cams
