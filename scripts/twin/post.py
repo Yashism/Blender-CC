@@ -1069,11 +1069,13 @@ def shot_frame(f, mode="h"):
     shot = T.shot_at(f)
     kind = shot[3]
     size = (960, 540) if mode == "h" else (540, 960)
+    if _G.get("full"):                                    # 1080p renders: keep every pixel
+        size = (size[0] * 2, size[1] * 2)
     if kind.startswith("w01:"):
         d = W01[kind[4:]]
         n = len([x for x in os.listdir(d) if x.endswith(".png")]) if os.path.isdir(d) else 0
         k = min(max(1, f - shot[1] + 1), max(1, n))
-        return _frame(d, k, (None, 1, n)).resize((960, 540), Image.LANCZOS)
+        return _frame(d, k, (None, 1, n)).resize(size, Image.LANCZOS)
     v = "_v" if mode == "v" else ""
     d = _G["desk" + v] if kind == "desk" else _G["twin" + v]
     return _frame(d, f, shot).resize(size, Image.LANCZOS)
@@ -1161,8 +1163,9 @@ def compose(f, mode, track):
 _G = {}
 
 
-def _init(twin, desk, modes=None, twin_v=None, desk_v=None):
+def _init(twin, desk, modes=None, twin_v=None, desk_v=None, full=False):
     _G["twin"], _G["desk"] = twin, desk
+    _G["full"] = full
     _G["twin_v"], _G["desk_v"] = twin_v or twin + "_v", desk_v or desk + "_v"
     if modes:
         _G["modes"] = modes
@@ -1227,6 +1230,7 @@ def main():
     ap.add_argument("--clip", help="make review clips (c01_night ... c11_logo, comma separated), 16:9 only")
     ap.add_argument("--preview", action="store_true", help="encode a light preview: 960x540 / 540x960")
     ap.add_argument("--modes", default="h,v", help="h (16:9), v (9:16) or both")
+    ap.add_argument("--full", action="store_true", help="1080p renders: composite at full size (drafts work at half)")
     a = ap.parse_args()
     if a.clip:
         os.makedirs(os.path.join(OUT, "cut16"), exist_ok=True)
@@ -1234,7 +1238,8 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         for name in a.clip.split(","):
             name, f0, f1 = next(c for c in CLIPS if c[0] == name)
-            with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, (("h", "cut16"),), a.twin_v, a.desk_v)) as pool:
+            with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, (("h", "cut16"),), a.twin_v, a.desk_v,
+                                                           a.full)) as pool:
                 list(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4))
             print("clip", encode_clip(name, f0, f1, a.audio, out_dir, scale=960 if a.preview else None), flush=True)
         return
@@ -1242,7 +1247,7 @@ def main():
         os.makedirs(os.path.join(OUT, d), exist_ok=True)
     f0, f1 = (int(v) for v in a.frames.split("-"))
     modes = tuple(m for m in (("h", "cut16"), ("v", "cut9")) if m[0] in a.modes.split(","))
-    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, modes, a.twin_v, a.desk_v)) as pool:
+    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, modes, a.twin_v, a.desk_v, a.full)) as pool:
         for k, _ in enumerate(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4)):
             if k % 100 == 0:
                 print("post", k, flush=True)

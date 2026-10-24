@@ -82,8 +82,9 @@ python3 scripts/twin/post.py                                   # the full film, 
 # quick look: 320x180 / 180x320 at 4 samples (about 2 h for the twin on 4 CPU cores), then
 python3 scripts/twin/post.py --preview --modes h               # 960x540 *_preview_16x9.mp4 (--clip works too)
 
-# final 1080p on a GPU: the same commands with --res 1920x1080 (1080x1920 vertical) --samples 64
-# (twin) / 128 (desk), no --step, into fresh folders, then post.py --twin/--desk/--twin-v/--desk-v
+# final 1080p on GPUs (vast.ai or any NVIDIA box): scripts/twin/bundle_vastai.sh, then docs/TWIN_VASTAI.md.
+# By hand: the same commands with TWIN_GPU=OPTIX, --res 1920x1080 (1080x1920 vertical) --samples 64
+# (twin) / 128 (desk), no --step, into fresh folders, then post.py --full --twin/--desk/--twin-v/--desk-v
 ```
 
 The 9:16 cut is its own render, not a crop: `--vertical` (`timeline.vertical()`) turns the top-down

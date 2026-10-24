@@ -76,6 +76,21 @@ def setup_render(engine, res, samples):
         sc.render.engine = "CYCLES"
         cy = sc.cycles
         cy.device = "CPU"
+        gpu = os.environ.get("TWIN_GPU", "").upper()      # OPTIX / CUDA / HIP / ONEAPI / METAL: render on the card
+        if gpu:
+            prefs = bpy.context.preferences.addons["cycles"].preferences
+            for kind in [gpu] + (["CUDA"] if gpu == "OPTIX" else []):     # OptiX needs the driver's graphics libs
+                prefs.compute_device_type = kind
+                prefs.get_devices()
+                cards = [d for d in prefs.devices if d.type == kind]
+                for d in prefs.devices:
+                    d.use = d.type == kind
+                if cards:
+                    cy.device = "GPU"
+                    print(f"GPU ({kind}):", ", ".join(d.name for d in cards), flush=True)
+                    break
+            else:
+                print(f"GPU: no {gpu} device found, rendering on the CPU", flush=True)
         cy.samples = samples
         cy.use_adaptive_sampling = True
         cy.adaptive_threshold = 0.03
