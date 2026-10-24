@@ -706,12 +706,14 @@ def el_parts(c, lay, f, track):
     tr = track.get("s2_boq", {}).get(str(f))
     if not tr:
         return
+    # the stack of labels rides up as one when its lowest would sit on the 5D title (bottom left)
+    lift = max(0.0, max(lay.vp(tr[k][0], tr[k][1])[1] - 14 for k, *_ in PARTS) - 772)
     for k, n, lab, note in PARTS:
         a = window(f, arrive(n) + 2, E["parts_to_boq"] + 3 * n - 1, 8, 5)
         if a <= 0:
             continue
         x, y = lay.vp(tr[k][0], tr[k][1])
-        y -= 14
+        y -= 14 + lift
         f1, f2 = font("ui_s", 19), font("ui", 17)
         w1 = f1.getlength(lab) + 0.6 * len(lab)
         w = w1 + 18 + f2.getlength(note)
