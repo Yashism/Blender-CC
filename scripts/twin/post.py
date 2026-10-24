@@ -724,8 +724,8 @@ def el_boq(c, lay, f):
     a = window(f, E["parts_out"] + 14, E["section_close"], 12, 0)
     if a <= 0:
         return
-    P = Pn(c, lay, a, k_v=1.2, top=150)
-    w, rows_h = P.w, 58
+    P = Pn(c, lay, a, k_v=1.15, top=150)
+    w, rows_h = P.w, (58 if lay.mode == "h" else 52)     # 9:16: tighter rows so the card clears the bottom
     P.bg(116 + rows_h * len(BOQ) + 132)
     P.t(26, 42, "BILL OF QUANTITIES", "ui_s", 16, ORANGE, tracking=2.0)
     P.t(26, 74, "Bay R05-B07 · Aisle 03 · OEM-matched parts", "ui", 17, DIM)
