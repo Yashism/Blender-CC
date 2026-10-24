@@ -644,7 +644,7 @@ def el_rewind(c, lay, f):
         return
     v = lay.mode == "v"
     t, u = _clock(f)
-    P = Pn(c, lay, a, k_v=1.9, w=420)
+    P = Pn(c, lay, a, k_v=1.8, w=420)
     w = P.w
     P.bg(318)
     P.t(26, 42, "TWIN TIMELINE", "ui_s", 16, ORANGE, tracking=2.0)
@@ -760,7 +760,7 @@ def el_fleet(c, lay, f):
     a = window(f, f0 + 4, T.f(T.SEC["d6"][2]) - 1, 10, 0)
     if a <= 0:
         return
-    P = Pn(c, lay, a, k_v=1.9)
+    P = Pn(c, lay, a, k_v=1.6)
     w = P.w
     P.bg(354)
     ha = ease_out(ramp(f, E["heat"], 10)) * (1 - 0.6 * ease_out(ramp(f, fs + 40, 12)))
@@ -804,7 +804,7 @@ def el_maint(c, lay, f, track):
     a = window(f, fw, end, 10, 0)
     if a <= 0:
         return
-    P = Pn(c, lay, a, k_v=1.8)
+    P = Pn(c, lay, a, k_v=1.7)
     w = P.w
     P.bg(330)
     closed = f >= fc
