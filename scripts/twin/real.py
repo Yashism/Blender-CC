@@ -26,6 +26,7 @@ from twin import model as MD
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TWIN_TEX = os.path.join(ROOT, "assets", "textures", "twin")
 EAVE = 12.0                     # inside height of the walls
+CARRIAGE_UP = 0.16              # the night truck carries its pallet at travel height
 HIGHBAY_Z = 11.0
 
 
@@ -50,6 +51,36 @@ def add_glow(mat, k=6.0):
     nt.links.new(src, add.inputs[0])
     nt.links.new(em.outputs[0], add.inputs[1])
     nt.links.new(add.outputs[0], out.inputs["Surface"])
+    # x-ray: the object property "ghost" (0..1) fades the surface to glass with lit edges
+    gh = nt.nodes.new("ShaderNodeAttribute")
+    gh.attribute_type = "OBJECT"
+    gh.attribute_name = "ghost"
+    lw = nt.nodes.new("ShaderNodeLayerWeight")
+    lw.inputs["Blend"].default_value = 0.3
+    pw = nt.nodes.new("ShaderNodeMath")
+    pw.operation = "POWER"
+    pw.inputs[1].default_value = 1.8
+    nt.links.new(lw.outputs["Facing"], pw.inputs[0])
+    ge = nt.nodes.new("ShaderNodeEmission")
+    ge.inputs["Color"].default_value = (0.55, 0.8, 1.0, 1.0)
+    gs = nt.nodes.new("ShaderNodeMath")
+    gs.operation = "MULTIPLY"
+    gs.inputs[1].default_value = 0.06                  # faint: many layers of glass stack up
+    nt.links.new(pw.outputs[0], gs.inputs[0])
+    nt.links.new(gs.outputs[0], ge.inputs["Strength"])
+    gt = nt.nodes.new("ShaderNodeBsdfTransparent")
+    tint = nt.nodes.new("ShaderNodeMixShader")         # 92% clear, 8% of the real surface
+    tint.inputs[0].default_value = 0.08
+    nt.links.new(gt.outputs[0], tint.inputs[1])
+    nt.links.new(add.outputs[0], tint.inputs[2])
+    gmix = nt.nodes.new("ShaderNodeAddShader")
+    nt.links.new(tint.outputs[0], gmix.inputs[0])
+    nt.links.new(ge.outputs[0], gmix.inputs[1])
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(gh.outputs["Fac"], mix.inputs[0])
+    nt.links.new(add.outputs[0], mix.inputs[1])
+    nt.links.new(gmix.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs["Surface"])
     mat["_glow"] = True
     return mat
 
@@ -57,7 +88,7 @@ def add_glow(mat, k=6.0):
 def materials():
     R = RK.materials()
     Ld = LD.materials()
-    for key in ("upright", "beam", "brace", "galv"):
+    for key in ("upright", "beam", "brace", "galv", "upright_hero_base"):
         add_glow(R[key], 2.0)          # a tint on real steel, not neon
     for key, m in Ld.items():
         add_glow(m, 3.0)
@@ -101,15 +132,17 @@ def _T(x=0.0, y=0.0, z=0.0, rz=0.0):
     return Matrix.Translation((x, y, z)) @ Matrix.Rotation(rz, 4, "Z")
 
 
-def frame_mesh(M):
+def frame_mesh(M, split=None):
     """Front and back omega uprights (slotted face toward the aisle on the front one), base plates
     and zig-zag C-section bracing. Origin on the floor at the frame centre; front at local -Y.
-    Slots: 0 upright, 1 brace, 2 galvanised."""
+    Slots: 0 upright, 1 brace, 2 galvanised. With split, the front upright starts at that height
+    (the W01 hero base takes its place below)."""
     up = RK.upright_mesh("twin_upright", 0.0, L.UP_H, False)
     bp = RK.base_plate_mesh()
     parts = []
     yf, yb = -L.DEPTH / 2, L.DEPTH / 2
-    parts.append((up, _T(0, yf, 0, math.pi / 2), 0))
+    front = RK.upright_mesh("twin_upright_split", split, L.UP_H, False) if split else up
+    parts.append((front, _T(0, yf, 0, math.pi / 2), 0))
     parts.append((up, _T(0, yb, 0, -math.pi / 2), 0))
     parts.append((bp, _T(0, yf, 0, math.pi / 2), 2))
     parts.append((bp, _T(0, yb, 0, -math.pi / 2), 2))
@@ -130,7 +163,7 @@ def frame_mesh(M):
     for k, (za, zb) in enumerate(zip(nodes, nodes[1:])):
         a, b = (y_in_f, y_in_b) if k % 2 == 0 else (y_in_b, y_in_f)
         member((0, a, za), (0, b, zb))
-    return _merge(parts, "m_frame", [M["upright"], M["brace"], M["galv"]])
+    return _merge(parts, "m_frame_split" if split else "m_frame", [M["upright"], M["brace"], M["galv"]])
 
 
 def beams_mesh(M):
@@ -295,12 +328,14 @@ def trucks(G):
             q.parent = ob
             q.matrix_parent_inverse = Matrix.Identity(4)
             q.matrix_basis = turn @ p.matrix_world
+            if night and any(t in p.name for t in ("carriage", "backrest", "fork_")):
+                q.matrix_basis = Matrix.Translation((0, 0, CARRIAGE_UP)) @ q.matrix_basis   # travel height
         if night:
             me, _ = LD.static_load(4211, wrap=False, height=0.85)
             ld = bpy.data.objects.new("MHE_night_load", me)
             c.objects.link(ld)
             ld.parent = ob
-            ld.location = (1.72, 0.0, 0.105)
+            ld.location = (1.45, 0.0, 0.105 + CARRIAGE_UP)              # the tine tips stand 25 cm proud
             ld.color = (1.0, 1.0, 1.0, 0.0)                    # no story glow on this load
             for side in (-1, 1):                              # work lights on the front posts
                 sd = bpy.data.lights.new(f"MHE_night_work_{side}", "SPOT")
@@ -355,6 +390,8 @@ def apply(G, M):
     m_beams = beams_mesh(M)
     for ob in G["frames"].values():
         ob.data = m_frame
+    from twin import beats as BT
+    BT.hero_upright(G, M, frame_mesh(M, split=RK.HERO_SPLIT))
     for ob in G["beams"].values():
         ob.data = m_beams
     cache = {}

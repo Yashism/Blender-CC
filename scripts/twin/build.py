@@ -54,6 +54,8 @@ def setup_render(engine, res, samples):
         pass
     sc.view_settings.exposure = 0.0
     sc.render.film_transparent = False
+    sc.render.use_motion_blur = True             # half-frame shutter: trucks, camera moves, the hit
+    sc.render.motion_blur_shutter = 0.5
     if engine == "eevee":
         sc.render.engine = "BLENDER_EEVEE_NEXT"
         ee = sc.eevee
@@ -434,6 +436,9 @@ def track_points(G, X):
         "s2_boq": {k: (lambda k=k: top_left(P[k])) for k in ("up", "b1", "b2", "br", "an0", "gd")},
         "s4_maint": {"beam": lambda: Vector((L.bay_x(L.MAINT_BAY) + 0.6, L.ROW[L.MAINT_ROW][1] + 0.05, 3.0)),
                      "new": lambda: mb.matrix_world.translation + Vector((0.6, 0.6, 0))},
+        "s1_plan": {"c00": lambda: Vector((L.X0, L.Y0, 0.0)), "c10": lambda: Vector((L.X1, L.Y0, 0.0)),
+                    "c01": lambda: Vector((L.X0, L.Y1, 0.0)),
+                    "hit": lambda: Vector((L.frame_x(T.LAST_NIGHT[1]), L.ROW[T.LAST_NIGHT[0]][1], 0.0))},
         "s5_safety": {"impact": lambda: Vector((xu, yf - 0.02, 0.15)),
                       "top": lambda: Vector((xu, yf - 0.02, L.UP_H)),
                       "zone": lambda: Vector(((L.frame_x(12) + L.frame_x(14)) / 2, yf - 1.6, 0.05))},
@@ -485,6 +490,10 @@ def setup_view(sc):
     sc.view_settings.exposure = 0.0
 
 
+EXPOSURE = {"twin": 0.0, "night": -1.1}      # the looks' own exposure (real.look_night sets -1.1)
+SHOT_EV = {"s5_safety": 0.9, "n2_hit": 0.35, "n3_dent": 0.5, "n4_week": 0.25}   # per-shot lift
+
+
 def render(frames, out, step, G=None):
     sc = bpy.context.scene
     sc.render.use_persistent_data = True
@@ -501,12 +510,16 @@ def render(frames, out, step, G=None):
         if G is not None and want != cur:
             set_look(G, want)
             cur = want
+        sc.view_settings.exposure = EXPOSURE.get(want, 0.0) + SHOT_EV.get(shot[0], 0.0)
         sc.frame_set(fr)
         sc.camera = bpy.data.objects[shot[4]]
         sc.render.filepath = path
         t = time.time()
         bpy.ops.render.render(write_still=True)
         print(f"FRAME {fr} {time.time() - t:.1f}s", flush=True)
+
+
+LAST = {}          # the scene graph of the last build (for debugging scripts)
 
 
 def main():
@@ -518,6 +531,7 @@ def main():
     M = MD.materials()
     t = time.time()
     G = build(M)
+    LAST["G"] = G
     if o["look"] == "real":
         from twin import real as RL
         RMAT = RL.materials()

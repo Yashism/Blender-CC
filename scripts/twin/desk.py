@@ -394,6 +394,87 @@ def mug(c):
     return root
 
 
+def steam(c, mug_xy=(0.42, 0.24), top=0.095):
+    """Coffee steam: two crossed planes of drifting noise, faint and warm-white."""
+    m = bpy.data.materials.new("coffee_steam")
+    m.use_nodes = True
+    g = RM.G(m)
+    tc = g.n("ShaderNodeTexCoord").outputs["UV"]
+    mp = g.n("ShaderNodeMapping", tc)
+    mp.inputs["Scale"].default_value = (1.6, 1.0, 1.0)
+    # drift: the noise rises through the plane over the film
+    for fr, z in ((1, 0.0), (T.END, -T.END / T.FPS * 0.55)):
+        mp.inputs["Location"].default_value = (0.0, z, 0.0)
+        mp.inputs["Location"].keyframe_insert("default_value", frame=fr)
+    for fc in m.node_tree.animation_data.action.fcurves:
+        for kp in fc.keyframe_points:
+            kp.interpolation = "LINEAR"
+    wav = g.n("ShaderNodeTexWave", mp.outputs[0], props={"wave_type": "BANDS", "bands_direction": "Y"})
+    wav.inputs["Scale"].default_value = 3.0
+    wav.inputs["Distortion"].default_value = 9.0
+    wav.inputs["Detail"].default_value = 3.0
+    u, v, _ = g.sep(tc)
+    across = g.mr(g.math("ABSOLUTE", g.sub(u, 0.5)), 0.5, 0.05, 0.0, 1.0)      # fade to the sides
+    up = g.mul(g.mr(v, 0.0, 0.18), g.mr(v, 1.0, 0.45))                         # fade in and out
+    dens = g.mul(g.mul(g.mr(wav.outputs["Fac"], 0.55, 0.95), across), up)
+    em = g.n("ShaderNodeEmission", (1.0, 0.97, 0.92, 1.0), g.mul(dens, 0.35))
+    tr = g.n("ShaderNodeBsdfTransparent")
+    g.output(g.mixs(g.math("MINIMUM", g.mul(dens, 0.5), 1.0), tr.outputs[0], em.outputs[0]))
+    try:
+        m.surface_render_method = "BLENDED"
+    except AttributeError:
+        m.blend_method = "BLEND"
+    for k, rz in enumerate((0.0, math.pi / 2)):
+        me = sheet_mesh(f"m_steam_{k}", 0.09, 0.18, 0.0, nx=2, ny=2, mat=m)
+        ob = obj(f"steam_{k}", me, c, (mug_xy[0], mug_xy[1], top + 0.095), (math.pi / 2, 0, rz))
+        ob.visible_shadow = False
+
+
+def hivis_vest(c):
+    """A hi-vis vest on a hook on the back wall, out of focus behind the laptop."""
+    m = bpy.data.materials.new("vest")
+    m.use_nodes = True
+    g = RM.G(m)
+    img = bpy.data.images.load(os.path.join(PAPER, "vest.png"), check_existing=True)
+    tex = g.n("ShaderNodeTexImage", g.n("ShaderNodeUVMap").outputs[0], props={"image": img, "extension": "CLIP"})
+    p = g.principled(Base_Color=tex.outputs["Color"], Roughness=0.7, Sheen_Weight=0.4, Alpha=tex.outputs["Alpha"])
+    g.output(p)
+    me = sheet_mesh("m_vest", 0.42, 0.56, 0.0, nx=10, ny=12, mat=m)
+    for v in me.vertices:                                  # a little drape: it hangs from the shoulders
+        u = v.co.x / 0.42
+        v.co.z = 0.012 * math.cos(u * math.pi * 1.5) + 0.01 * max(0.0, -v.co.y / 0.28)
+    ob = obj("vest", me, c, (0.98, 0.548, 0.70), (math.radians(90), math.radians(-3), 0))
+    hook = obj("vest_hook", box_mesh("m_hook", (0.02, 0.03, 0.02), [mat_plain("hook", "#9a9ca0", 0.3, 1.0)]), c,
+               (0.98, 0.56, 0.99))
+    return ob
+
+
+def hard_hat(c, at=(0.73, 0.27, 0.322)):
+    """A white hard hat resting on the binders."""
+    import bmesh as _bm
+    mat = mat_plain("hard_hat", "#f3f2ee", 0.22, coat=0.6)
+    bm = _bm.new()
+    _bm.ops.create_uvsphere(bm, u_segments=32, v_segments=16, radius=1.0)
+    for v in list(bm.verts):
+        if v.co.z < -0.02:
+            bm.verts.remove(v)
+    _bm.ops.scale(bm, vec=(0.105, 0.128, 0.105), verts=bm.verts)
+    me = bpy.data.meshes.new("m_hat_dome")
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(mat)
+    for poly in me.polygons:
+        poly.use_smooth = True
+    dome = obj("hard_hat", me, c, at)
+    mod = dome.modifiers.new("solid", "SOLIDIFY")
+    mod.thickness = 0.004
+    ridge = obj("hard_hat_ridge", box_mesh("m_hat_ridge", (0.02, 0.24, 0.012), [mat]), c, (at[0], at[1], at[2] + 0.1))
+    bevel(ridge, 0.004)
+    brim = obj("hard_hat_brim", slab_mesh("m_hat_brim", 0.25, 0.30, 0.004, 0.11, [mat]), c, (at[0], at[1] - 0.012, at[2]))
+    bevel(brim, 0.0015)
+    return dome
+
+
 def pen(c, at, rot):
     body = mat_plain("pen_body", "#151517", 0.35)
     chrome = mat_plain("pen_chrome", "#d6d8da", 0.12, 1.0)
@@ -646,6 +727,9 @@ def build():
     lap = laptop(c, first_l)
     ph = phone(c, first_p)
     mug(c)
+    steam(c)
+    hivis_vest(c)
+    hard_hat(c)
     am = papers_morning(coll("Morning"))
     pm = papers_audit(coll("Audit"))
     lights()

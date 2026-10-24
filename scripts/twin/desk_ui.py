@@ -35,6 +35,7 @@ TWIN_STILL = [os.path.join(ROOT, "renders", "twin", "stills", "twin_dash.png"),
               os.path.join(ROOT, "renders", "twin", "story_proof2", "f_2113.png"),
               os.path.join(ROOT, "renders", "twin", "story_proof", "f_2113.png")]
 LOGO = os.path.join(ROOT, "assets", "logo", "rams_logo_white.png")
+DASHBOARD = os.path.join(ROOT, "assets", "textures", "twin", "desk", "rams_twin_dashboard.png")   # the real product
 
 D = T.DESK
 LW, LH = 1600, 1000           # laptop panel (16:10)
@@ -430,6 +431,34 @@ def audit_cover():
     im.save(os.path.join(PAPER_OUT, "audit_cover.jpg"), quality=88)
 
 
+def vest():
+    """A hi-vis vest seen flat (RGBA): fluorescent yellow-green, two reflective bands, a site badge."""
+    W, H = 600, 800
+    m = Image.new("L", (W, H), 0)
+    d = ImageDraw.Draw(m)
+    body = [(90, 150), (205, 60), (265, 60), (300, 260), (335, 60), (395, 60), (510, 150), (540, 300), (500, 330),
+            (515, 760), (85, 760), (100, 330), (60, 300)]
+    d.polygon(body, fill=255)
+    d.polygon([(300, 260), (262, 70), (338, 70)], fill=0)                     # the V of the neck
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    col = Image.new("RGBA", (W, H), (205, 232, 46, 255))
+    n = Image.effect_noise((W // 4, H // 4), 24).resize((W, H), Image.BICUBIC)
+    col = Image.composite(Image.new("RGBA", (W, H), (176, 204, 36, 255)), col, n.point(lambda v: max(0, v - 120) * 2))
+    im.paste(col, (0, 0), m)
+    dd = ImageDraw.Draw(im)
+    band = (196, 200, 204, 255)
+    for y0 in (430, 560):
+        dd.rectangle([0, y0, W, y0 + 44], fill=band)
+    for x0 in (205, 345):
+        dd.rectangle([x0, 60, x0 + 46, 430], fill=band)
+    im.putalpha(Image.composite(m, Image.new("L", (W, H), 0), m))
+    dd = ImageDraw.Draw(im)
+    dd.line([(300, 262), (300, 760)], fill=(150, 170, 40, 255), width=4)      # the front opening
+    rr(dd, (380, 300, 480, 360), 8, fill=(240, 240, 236, 255))
+    dd.text((430, 330), "SITE 2", font=font(26, "Bold"), fill=(30, 40, 60, 255), anchor="mm")
+    im.save(os.path.join(PAPER_OUT, "vest.png"))
+
+
 def all_paper():
     os.makedirs(PAPER_OUT, exist_ok=True)
     plan_a3()
@@ -440,12 +469,15 @@ def all_paper():
     sticky("sticky_insurer", ["call insurer", "re: records"], col=(255, 190, 120), seed=3)
     sticky("sticky_aisle", ["Aisle 3", "safe???"], col=(150, 220, 250), seed=2, ink=(160, 20, 30))
     audit_cover()
+    vest()
     print("paper ->", PAPER_OUT)
 
 
 # ================================================================== laptop screen
 
 UI_BG = (244, 245, 247)
+P_INK, P_GREY, P_BORDER = (17, 24, 39), (107, 114, 128), (229, 231, 235)     # the RAMS product's palette
+P_BLUE, P_GREEN = (37, 99, 235), (22, 163, 74)
 UI_INK = (28, 31, 36)
 UI_MUTED = (110, 116, 126)
 ACCENT = (40, 110, 230)
@@ -537,7 +569,8 @@ def notif(icon_col, glyph, app, title, body, when="now"):
     return im
 
 
-def sheet_window():
+def sheet_window(scroll=0.0):
+    """The inspection spreadsheet; scroll (rows, may be fractional) moves the grid under the header."""
     win, d = window(1040, 700, "Rack_Inspections_2024_FINAL_v7.xlsx")
     d.rectangle([0, 45, 1039, 92], fill=(236, 240, 236))
     for i, t in enumerate(["File", "Home", "Insert", "Data", "Review"]):
@@ -555,10 +588,15 @@ def sheet_window():
         d.text((x + 8, y0 + rh / 2), hd, font=font(14, "Bold"), fill=UI_INK, anchor="lm")
         x += w
     fills = {"RED": (255, 199, 206), "AMBER": (255, 235, 156), "GREEN": (198, 239, 206), "??": (255, 255, 255)}
-    for j in range(17):
-        y = y0 + rh * (j + 1)
+    j0, frac = int(scroll), scroll - int(scroll)
+    grid = Image.new("RGBA", (1040, rh * 19), (255, 255, 255, 255))
+    gd = ImageDraw.Draw(grid)
+    for jj in range(18):
+        j = j0 + jj
+        rng = random.Random(1000 + j)
+        y = rh * jj
         risk = rng.choices(["GREEN", "AMBER", "RED", "??"], [6, 2, 0.7, 1.3])[0]
-        row = [str(j + 12), f"R0{3 + j // 6}-B{j % 6 * 3 + 1:02d}", f"{rng.randint(1, 28):02d}/0{rng.randint(3, 9)}/24",
+        row = [str(j + 12), f"R0{3 + j // 6 % 7}-B{j % 6 * 3 + 1:02d}", f"{rng.randint(1, 28):02d}/0{rng.randint(3, 9)}/24",
                rng.choice(["JM", "SK", "AP", ""]), {"GREEN": "none", "AMBER": "bent beam", "RED": "upright dent",
                                                    "??": "see photo"}[risk], risk,
                {"GREEN": "", "AMBER": "monitor", "RED": "replace", "??": "TBC"}[risk],
@@ -566,13 +604,28 @@ def sheet_window():
         x = 0
         for k, (w, v) in enumerate(zip(cw, row)):
             fill = fills[risk] if k == 5 else ((232, 234, 236) if k == 0 else (255, 255, 255))
-            d.rectangle([x, y, x + w, y + rh], fill=fill, outline=(214, 216, 220))
-            d.text((x + 8, y + rh / 2), v, font=font(14), fill=(200, 40, 40) if v == "#REF!" else UI_INK, anchor="lm")
+            gd.rectangle([x, y, x + w, y + rh], fill=fill, outline=(214, 216, 220))
+            gd.text((x + 8, y + rh / 2), v, font=font(14), fill=(200, 40, 40) if v == "#REF!" else UI_INK, anchor="lm")
             x += w
+    win.paste(grid.crop((0, round(frac * rh), 1040, round(frac * rh) + 17 * rh)), (0, y0 + rh))
     d.rectangle([0, 668, 1039, 699], fill=(236, 238, 240))
     for i, t in enumerate(["Q3", "Q4 (draft)", "Site 2 OLD", "Sheet7", "Copy of Q3 (2)"]):
         d.text((20 + i * 150, 684), t, font=font(14, "SemiBold" if i == 1 else "Regular"), fill=UI_INK, anchor="lm")
     return win
+
+
+def cursor(im, xy, press=0.0):
+    """A mouse pointer (arrow) at xy; press darkens it for a click."""
+    x, y = xy
+    pts = [(0, 0), (0, 34), (9, 26), (15, 40), (21, 37), (15, 24), (26, 24)]
+    lay = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(lay)
+    ld.polygon([(x + px + 2, y + py + 3) for px, py in pts], fill=(0, 0, 0, 90))
+    lay = lay.filter(ImageFilter.GaussianBlur(2))
+    ld = ImageDraw.Draw(lay)
+    ld.polygon([(x + px, y + py) for px, py in pts], fill=(20, 20, 22, 255) if press > 0.5 else (255, 255, 255, 255),
+               outline=(0, 0, 0, 255))
+    im.alpha_composite(lay)
 
 
 def pdf_window():
@@ -628,7 +681,7 @@ class Laptop:
             (D["client"], notif((40, 170, 100), "…", "Messages", "Northline Retail · Dispatch",
                                 ["Our driver says a rack got hit in", "Aisle 3 overnight. Is it safe?"])),
         ]
-        self.wins = [(D["sheet"], sheet_window(), (250, 150)), (D["pdf"], pdf_window(), (700, 95)),
+        self.wins = [(D["sheet"], None, (250, 150)), (D["pdf"], pdf_window(), (700, 95)),
                      (D["pics"], photo_window(), (430, 380))]
         self.audit = self._audit_base()
 
@@ -647,88 +700,109 @@ class Laptop:
             u = (t - t0) / 0.22
             if u <= 0:
                 continue
+            if w is None:                                   # the spreadsheet, scrolling while it is read
+                w = sheet_window(max(0.0, (t - t0 - 0.4) * 2.6))
             paste_window(im, w, xy, a=ease(u * 1.4), scale=0.93 + 0.07 * ease_out(u))
         # the notifications stay on top
         for t0, n in self.notifs:
             if t - t0 > 0.32 and any(t > w0 for w0, _, _ in self.wins):
                 i = self.notifs.index((t0, n))
                 paste_window(im, n, (LW - 460, 50 + i * 128), shadow=False)
+        if t > D["wake"] + 0.6:
+            cursor(im, self.pointer(t), self.click(t))
         out = im.convert("RGB")
         k = ease((t - D["wake"]) / 0.4)
         if k < 1:
             out = Image.blend(Image.new("RGB", (LW, LH), (4, 5, 7)), out, k)
         return out
 
+    def pointer(self, t):
+        """The pointer's path: to the mail list, to each window as it opens, onto the photo."""
+        keys = [(D["wake"], (900, 620)), (D["cal"], (760, 300)), (D["ins"], (520, 210)), (D["sheet"] - 0.3, (700, 520)),
+                (D["sheet"] + 0.8, (760, 610)), (D["pdf"] - 0.2, (980, 420)), (D["pics"] - 0.2, (790, 520)),
+                (D["pics"] + 1.2, (860, 640)), (30.0, (860, 640))]
+        for (t0, a), (t1, b) in zip(keys, keys[1:]):
+            if t0 <= t < t1:
+                u = ease((t - t0) / (t1 - t0))
+                return (a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u)
+        return keys[0][1] if t < keys[0][0] else keys[-1][1]
+
+    def click(self, t):
+        return 1.0 if any(0 <= t - c < 0.12 for c in (D["sheet"] - 0.05, D["pdf"] - 0.05, D["pics"] - 0.05)) else 0.0
+
     def _audit_base(self):
-        im = Image.new("RGBA", (LW, LH), (16, 20, 28, 255))
+        """The real RAMS Digital Twin dashboard (screenshot from the product), as the base."""
+        if os.path.exists(DASHBOARD):
+            im = Image.open(DASHBOARD).convert("RGBA").resize((LW, LH), Image.LANCZOS)
+        else:
+            im = Image.new("RGBA", (LW, LH), (248, 250, 252, 255))
+        self.items = [("Rack inspections", "Inspection findings: 110 logged, all actioned"),
+                      ("Critical observations", "21 critical, 21 closed"),
+                      ("R05-B07 · Upright · Bend", "Replaced Mon 16:20 · signed off"),
+                      ("Maintenance", "Work orders: 0 overdue"),
+                      ("Audit report", "Generated · Site 2 · PDF")]
+        return im
+
+    def drawer(self, t):
+        """A compliance drawer in the product's own style: white card, Inter, blue and green."""
+        W_, H_ = 470, LH - 24
+        im = Image.new("RGBA", (W_, H_), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
-        d.rectangle([0, 0, LW, 64], fill=(10, 13, 19))
-        if os.path.exists(LOGO):
-            lg = Image.open(LOGO).convert("RGBA")
-            lg.thumbnail((130, 40))
-            im.alpha_composite(lg, (24, 12))
-        d.text((170, 32), "Digital Twin  ·  Site 2", font=font(20, "SemiBold"), fill=(230, 232, 236), anchor="lm")
-        for i, t in enumerate(["2D", "3D", "4D", "5D", "6D", "7D", "8D"]):
-            x = 560 + i * 62
-            if t == "4D":
-                rr(d, (x - 24, 16, x + 24, 48), 10, fill=(40, 110, 230))
-            d.text((x, 32), t, font=font(17, "Bold"), fill=(235, 236, 240), anchor="mm")
-        d.text((LW - 24, 32), "Tue 15 Oct   08:52", font=font(17, "Medium"), fill=(200, 204, 210), anchor="rm")
-        tw = twin_still()
-        vw, vh = 1040, 900
-        s = max(vw / tw.width, vh / tw.height) * 1.12
-        tw = tw.resize((round(tw.width * s), round(tw.height * s)), Image.LANCZOS)
-        ox, oy = (tw.width - vw) // 2, (tw.height - vh) // 2
-        im.paste(tw.crop((ox, oy, ox + vw, oy + vh)), (16, 80))
-        rr(d, (36, 100, 400, 168), 12, fill=(10, 13, 19, 220))
-        d.ellipse([54, 122, 76, 144], fill=(46, 190, 100))
-        d.text((92, 133), "R05-B07  ·  replaced, inspected", font=font(17, "SemiBold"), fill=(235, 238, 240),
-               anchor="lm")
-        x0 = 1076
-        d.rectangle([x0, 64, LW, LH], fill=(22, 27, 36))
-        d.text((x0 + 32, 110), "AUDIT PACK", font=font(16, "Bold"), fill=(140, 150, 166))
-        d.text((x0 + 32, 140), "Safety audit, Tue 09:00", font=font(28, "Bold"), fill=(240, 242, 246))
-        self.items = ["Rack inspections", "Impact log", "R05-B07 repair", "Load notices", "Insurer evidence"]
-        self.subs = ["1,200 locations, up to date", "4 this quarter, all closed", "Replaced Mon 16:20, signed off",
-                     "Posted at every bay", "Exported for Harbourline"]
+        rr(d, (0, 0, W_ - 1, H_ - 1), 14, fill=(255, 255, 255, 255), outline=P_BORDER, width=2)
+        d.text((28, 34), "Compliance", font=font(24, "SemiBold"), fill=P_INK, anchor="lm")
+        d.text((28, 64), "Safety audit  ·  Site 2  ·  Tue 09:00", font=font(16), fill=P_GREY, anchor="lm")
+        rr(d, (W_ - 132, 20, W_ - 24, 50), 15, fill=(239, 246, 255))
+        d.text((W_ - 78, 35), "Tue 08:52", font=font(14, "Medium"), fill=P_BLUE, anchor="mm")
+        d.line([(0, 92), (W_, 92)], fill=P_BORDER, width=2)
+        done = 0
+        for i, (name, sub) in enumerate(self.items):
+            y = 116 + i * 118
+            rr(d, (20, y, W_ - 20, y + 102), 12, fill=(255, 255, 255), outline=P_BORDER, width=2)
+            u = (t - D["ticks"][i]) / 0.25
+            c = (58, y + 51)
+            if u > 0:
+                done += 1
+                r = 15 * (0.6 + 0.4 * ease_out(u))
+                d.ellipse([c[0] - r, c[1] - r, c[0] + r, c[1] + r], fill=P_GREEN)
+                if u > 0.5:
+                    d.line([(c[0] - 7, c[1]), (c[0] - 2, c[1] + 6), (c[0] + 8, c[1] - 6)], fill=(255, 255, 255), width=4)
+            else:
+                d.ellipse([c[0] - 15, c[1] - 15, c[0] + 15, c[1] + 15], outline=(203, 213, 225), width=3)
+            d.text((88, y + 36), name, font=font(17, "SemiBold"), fill=P_INK, anchor="lm")
+            d.text((88, y + 66), sub, font=font(14), fill=P_GREY, anchor="lm")
+            if i == 2:                                     # the hit, now closed
+                chip = "Closed" if u > 0 else "Red"
+                bg, fg = ((220, 252, 231), (21, 128, 61)) if u > 0 else ((254, 226, 226), (220, 38, 38))
+                w = font(13, "SemiBold").getlength(chip) + 22
+                rr(d, (W_ - 40 - w, y + 24, W_ - 40, y + 48), 6, fill=bg)
+                d.text((W_ - 40 - w / 2, y + 36), chip, font=font(13, "SemiBold"), fill=fg, anchor="mm")
+        frac = done / len(self.items)
+        y = 116 + 5 * 118 + 6
+        rr(d, (20, y, W_ - 20, y + 10), 5, fill=(241, 245, 249))
+        if frac > 0:
+            rr(d, (20, y, 20 + (W_ - 40) * frac, y + 10), 5, fill=P_GREEN)
+        u = (t - D["ready"]) / 0.3
+        by = y + 40
+        if u > 0:
+            s_ = 0.92 + 0.08 * ease_out(u)
+            w, h = (W_ - 40) * s_, 64 * s_
+            cx = W_ / 2
+            rr(d, (cx - w / 2, by, cx + w / 2, by + h), 12, fill=P_GREEN)
+            d.text((cx, by + h / 2), "Ready for audit  ✓", font=font(round(24 * s_), "SemiBold"), fill=(255, 255, 255),
+                   anchor="mm")
+        else:
+            rr(d, (20, by, W_ - 20, by + 64), 12, fill=P_BLUE)
+            d.text((W_ / 2, by + 32), f"Checking  {done} / {len(self.items)}", font=font(20, "SemiBold"),
+                   fill=(255, 255, 255), anchor="mm")
         return im
 
     def frame_audit(self, t):
         im = self.audit.copy()
-        d = ImageDraw.Draw(im)
-        x0 = 1076
-        done = 0
-        for i, (name, sub) in enumerate(zip(self.items, self.subs)):
-            y = 220 + i * 112
-            rr(d, (x0 + 24, y, LW - 24, y + 96), 14, fill=(30, 36, 48))
-            u = (t - D["ticks"][i]) / 0.25
-            if u > 0:
-                done += 1
-                r = 18 * (0.6 + 0.4 * ease_out(u))
-                c = (x0 + 66, y + 48)
-                d.ellipse([c[0] - r, c[1] - r, c[0] + r, c[1] + r], fill=(46, 190, 100))
-                if u > 0.5:
-                    d.line([(c[0] - 8, c[1]), (c[0] - 2, c[1] + 7), (c[0] + 9, c[1] - 7)], fill=(255, 255, 255),
-                           width=4)
-            else:
-                d.ellipse([x0 + 48, y + 30, x0 + 84, y + 66], outline=(90, 100, 116), width=3)
-            d.text((x0 + 104, y + 32), name, font=font(20, "Bold"), fill=(236, 238, 242), anchor="lm")
-            d.text((x0 + 104, y + 64), sub, font=font(16), fill=(150, 160, 174), anchor="lm")
-        # progress
-        frac = done / len(self.items)
-        rr(d, (x0 + 24, 806, LW - 24, 818), 6, fill=(44, 52, 66))
-        if frac > 0:
-            rr(d, (x0 + 24, 806, x0 + 24 + (LW - 48 - x0) * frac, 818), 6, fill=(46, 190, 100))
-        u = (t - D["ready"]) / 0.3
-        if u > 0:
-            s = 0.9 + 0.1 * ease_out(u)
-            w, h = 452 * s, 104 * s
-            cx, cy = (x0 + LW) / 2, 896
-            rr(d, (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), 20, fill=(46, 190, 100))
-            d.text((cx, cy), "Ready for audit  ✓", font=font(round(34 * s), "Bold"), fill=(255, 255, 255), anchor="mm")
-        else:
-            d.text(((x0 + LW) / 2, 856), f"{done} of {len(self.items)} ready", font=font(18, "SemiBold"),
-                   fill=(150, 160, 174), anchor="mm")
+        a0 = T.SEC["audit"][1]
+        u = ease_out((t - a0 - 0.15) / 0.45)
+        dr = self.drawer(t)
+        x = LW - dr.width - 12 + (1 - u) * (dr.width + 30)
+        paste_window(im, dr, (x, 12), a=min(1.0, u * 1.5))
         return im.convert("RGB")
 
     def frame(self, t):
@@ -829,6 +903,8 @@ class Phone:
             if not hasattr(self, "_chat"):
                 self._chat = self.chat()
             im = self._chat
+            if t >= D["pics"] + 0.8:                       # the client is typing again
+                im = self.typing(im, t)
             k = ease((t - D["pics"]) / 0.25)
             if k < 1:
                 im = Image.blend(self._lock_with(t).convert("RGB"), im, k)
@@ -837,6 +913,21 @@ class Phone:
         k = ease((t - D["client"]) / 0.25) * (1 - ease((t - D["phone_off"]) / 0.5))
         if k < 1:
             im = Image.blend(Image.new("RGB", (PW, PH), (3, 3, 4)), im, k)
+        return im
+
+    def typing(self, base, t):
+        """A 'typing' bubble with three pulsing dots under the last message."""
+        im = base.copy()
+        d = ImageDraw.Draw(im)
+        y = 1290
+        rr(d, (30, y, 170, y + 70), 30, fill=(255, 255, 255))
+        for k in range(3):
+            ph = (t * 3.2 - k * 0.33) % 1.0
+            v = 0.45 + 0.55 * max(0.0, math.sin(ph * math.pi))
+            c = tuple(int(150 + (90 - 150) * v) for _ in range(3))
+            r = 9 + 2 * v
+            cx = 66 + k * 34
+            d.ellipse([cx - r, y + 35 - r - 4 * v, cx + r, y + 35 + r - 4 * v], fill=c)
         return im
 
     def _lock_with(self, t):

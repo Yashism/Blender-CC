@@ -14,7 +14,8 @@ starts at; the scenes and events below are placed around those.
  63.2  7D       the next weak beam, replaced before it fails.
  70.8  8D       the next hit, known in seconds.
  79.2  AUDIT    the same desk, audit day: ready.
- 85.6  LOGO     RAMS Digital Twin. Book a demo.  (end card 93.6 - 96.0)
+ 85.6  WEEK     02:14 again, one week later: a new upright, a green tag; the forklift passes.
+ 89.6  LOGO     RAMS Digital Twin. Book a demo.  (end card 97.6 - 100.0)
 """
 FPS = 24
 
@@ -51,8 +52,8 @@ VO = [
     ("v17", 59.83, 63.71, 72.00, "And the next time a rack is hit, you know in seconds, not weeks."),
     ("v18", 64.53, 67.62, 80.00, "So on audit day, you're not searching for answers."),
     ("v19", 67.97, 68.78, 83.60, "You're ready."),
-    ("v20", 69.61, 74.50, 86.20, "Rams Digital Twin. Your entire warehouse, from 2D to 8D."),
-    ("v21", 75.03, 77.19, 91.40, "Book a demo at rams.digital."),
+    ("v20", 69.61, 74.50, 90.20, "Rams Digital Twin. Your entire warehouse, from 2D to 8D."),
+    ("v21", 75.03, 77.19, 95.40, "Book a demo at rams.digital."),
 ]
 
 
@@ -61,8 +62,8 @@ def vo_take(line):
     return line[5] if len(line) > 5 else VO_TAKE
 
 
-END_CARD = f(93.6)
-END = f(96.0) - 1
+END_CARD = f(97.6)
+END = f(100.0) - 1
 
 # Scenes: (id, start s, end s, dimension label, RAMS title, line)
 SECTIONS = [
@@ -76,7 +77,8 @@ SECTIONS = [
     ("d7", 63.2, 70.8, "7D", "Maintenance", "Fix issues before they become critical."),
     ("d8", 70.8, 79.2, "8D", "Safety", "Real-time impact detection. Act in seconds."),
     ("audit", 79.2, 85.6, None, None, None),
-    ("logo", 85.6, 96.0, None, None, None),
+    ("week", 85.6, 89.6, None, None, None),
+    ("logo", 89.6, 100.0, None, None, None),
 ]
 SEC = {s[0]: s for s in SECTIONS}
 
@@ -84,8 +86,8 @@ SEC = {s[0]: s for s in SECTIONS}
 #   source "twin"  = the twin scene (build.py), "w01:<shot>" = a rendered W01 shot, "desk" = desk.py
 SHOTS = [
     ("n1_night", f(0.0), f(3.575) - 1, "twin", "CAM_N1"),
-    ("n2_hit", f(3.575), f(7.575) - 1, "w01:s01_impact", None),
-    ("n3_dent", f(7.575), f(10.6) - 1, "w01:s02_dent", None),
+    ("n2_hit", f(3.575), f(7.575) - 1, "twin", "CAM_N2"),       # the fork tip strikes the upright
+    ("n3_dent", f(7.575), f(10.6) - 1, "twin", "CAM_N3"),      # the dent; the forklift backs away
     ("m1_desk", f(10.6), f(28.6) - 1, "desk", "CAM_DESK"),
     ("s1_plan", f(28.6), f(46.4) - 1, "twin", "CAM_A"),       # the plan, 3D, and the scrub back (4D)
     ("s2_boq", f(46.4), f(53.8) - 1, "twin", "CAM_B"),
@@ -93,7 +95,8 @@ SHOTS = [
     ("s4_maint", f(63.2), f(70.8) - 1, "twin", "CAM_D"),
     ("s5_safety", f(70.8), f(79.2) - 1, "twin", "CAM_E"),
     ("m2_audit", f(79.2), f(85.6) - 1, "desk", "CAM_DESK"),
-    ("s6_logo", f(85.6), END_CARD - 1, "twin", "CAM_E"),
+    ("n4_week", f(85.6), f(89.6) - 1, "twin", "CAM_N4"),      # 02:14, one week later: a new upright
+    ("s6_logo", f(89.6), END_CARD - 1, "twin", "CAM_E"),
     ("end", END_CARD, END, "card", None),
 ]
 SHOT = {s[0]: s for s in SHOTS}
@@ -136,8 +139,14 @@ E = dict(
     unload=f(74.0),
     rag_all=f(75.4),
     rise=f(75.4),
-    title=f(86.2),
-    cta=f(91.2),
+    title=f(90.2),
+    cta=f(95.2),
+    strike=f(5.16),              # the fork tip hits R05's upright (n2)
+    reverse=f(5.65),             # the forklift backs off
+    ghost=f(42.35),              # 4D: a hologram of the forklift replays the strike...
+    ghost_hit=f(43.25),          # ...on "Aisle three"
+    lift=f(28.75),               # the paper's ink lifts into the twin's plan
+    week=f(85.6),
 )
 
 # 4D: the hit we scroll back to (row, frame index, bay)

@@ -53,3 +53,5 @@ blender/potato*.blend
 renders/twin/
 blender/twin*.blend
 blender/twin*.blend1
+# fetched by scripts/twin/fetch_sfx.sh (licence: use in a video, not redistribution)
+assets/sfx/

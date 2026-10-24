@@ -260,8 +260,8 @@ def ring(G, X, frame, xy, col, r0=0.3, r1=3.2, dur=18, z=0.05, a0=2.2):
 def plan_and_extrude(G, X):
     pl = G["plan"]
     key(pl, '["draw"]', 1, 0.0)
-    key(pl, '["draw"]', E["plan_start"], 0.0, ip="SINE", ease="EASE_IN_OUT")
-    key(pl, '["draw"]', E["plan_done"], 1.0)
+    key(pl, '["draw"]', E["lift"], 0.0, ip="SINE", ease="EASE_IN_OUT")
+    key(pl, '["draw"]', E["lift"] + 16, 1.0)
     kalpha(pl, 1, 1.0)
     kalpha(pl, E["extrude"] + 10, 1.0)
     kalpha(pl, E["extrude"] + 60, 0.32)
@@ -448,14 +448,14 @@ def boq(G, X):
     yface = face_y(rid)
     fr = G["frames"][(rid, bay)]
     kcol(fr, fc + 8, MD.COL["frame"], 0.0)
-    kcol(fr, fc + 18, MD.COL["red"], 0.12)
-    kcol(fr, fo, MD.COL["red"], 0.12)
+    kcol(fr, fc + 18, MD.COL["red"], 0.0)
+    kcol(fr, fo, MD.COL["red"], 0.0)
     kcol(fr, fo + 1, MD.COL["frame"], 0.0)
     for lv in (1, 2):
         bm = G["beams"][(rid, bay, lv)]
         kcol(bm, fc + 10, MD.COL["beam"], 0.0)
-        kcol(bm, fc + 20, MD.COL["amber"], 0.12)
-        kcol(bm, fo, MD.COL["amber"], 0.12)
+        kcol(bm, fc + 20, MD.COL["amber"], 0.0)
+        kcol(bm, fo, MD.COL["amber"], 0.0)
         kcol(bm, fo + 1, MD.COL["beam"], 0.0)
     # the parts: (key, start loc, start rot, layout loc, layout rot, colour, glow)
     lay_y = yface + side(rid) * 6.0
@@ -465,17 +465,17 @@ def boq(G, X):
     xl0 = bx + 3.9
     spec = [
         ("up", (xl, yfu, L.UP_H / 2), (0, 0, 0), (xl0 - L.UP_H / 2, lay_y, 6.0), (0, math.pi / 2, 0), "red", 0.9,
-         (2.4, 2.4, 1.0)),
+         (1.5, 1.5, 1.0)),
         ("b1", (bx, yfb, L.LEVELS[0] - L.BEAM_H / 2), (0, 0, 0), (xl0 - L.BAY_W / 2, lay_y, 5.3), (0, 0, 0), "amber",
-         0.8, (1.0, 2.4, 2.4)),
+         0.8, (1.0, 1.5, 1.5)),
         ("b2", (bx, yfb, L.LEVELS[1] - L.BEAM_H / 2), (0, 0, 0), (xl0 - L.BAY_W / 2, lay_y, 4.7), (0, 0, 0), "amber",
-         0.8, (1.0, 2.4, 2.4)),
+         0.8, (1.0, 1.5, 1.5)),
         ("br", (xl, L.row_centre_y(rid), 2.0), (0, math.radians(-40), math.pi / 2), (xl0 - 0.65, lay_y, 4.1),
-         (0, 0, 0), "amber", 0.8, (1.0, 2.6, 2.6)),
+         (0, 0, 0), "amber", 0.8, (1.0, 1.6, 1.6)),
         ("gd", (xl, yface + side(rid) * 0.25, 0.0), (0, 0, 0), (xl0 - 0.25, lay_y, 2.55), (0, 0, math.pi), "mhe", 0.3,
-         (1.6, 1.6, 1.6)),
+         (1.3, 1.3, 1.3)),
     ] + [(f"an{k}", (xl + (k % 2 - 0.5) * 0.08, yfu + (k // 2 - 0.5) * 0.06, 0.0), (0, 0, 0),
-          (xl0 - 0.12 - 0.42 * k, lay_y, 3.45), (0, 0, 0), "amber", 0.8, (2.0, 2.0, 2.0)) for k in range(4)]
+          (xl0 - 0.12 - 0.42 * k, lay_y, 3.45), (0, 0, 0), "amber", 0.8, (1.6, 1.6, 1.6)) for k in range(4)]
     f0, fh, fb = E["parts_out"], E["parts_hold"], E["parts_to_boq"]
     for n, (k, l0, r0, l1, r1, col, glow, thick) in enumerate(spec):
         ob = P[k]
@@ -487,12 +487,12 @@ def boq(G, X):
         key(ob, "rotation_euler", st, r0, ip="SINE", ease="EASE_IN_OUT")
         sc0 = 0.02 if k == "gd" else 1.0
         key(ob, "scale", st, (sc0,) * 3, ip="SINE", ease="EASE_IN_OUT")
-        kcol(ob, st, col, glow * 0.3)
+        kcol(ob, st, col, 0.0)
         arrive = st + 34
         key(ob, "location", arrive, l1)
         key(ob, "rotation_euler", arrive, r1)
         key(ob, "scale", arrive, thick)
-        kcol(ob, arrive, col, glow * 0.06)
+        kcol(ob, arrive, col, 0.0)
         # float while the BoQ builds
         go = fb + 3 * n
         for j, fr in enumerate(range(arrive + 6, go - 3, 8)):
@@ -503,7 +503,7 @@ def boq(G, X):
         key(ob, "scale", go, thick, ip="CUBIC", ease="EASE_IN")
         key(ob, "location", go + 14, (bx - 7.5, lay_y + side(rid) * 1.5, 6.0 - 0.45 * n))
         key(ob, "scale", go + 14, tuple(0.08 * v for v in thick))
-        kcol(ob, go, col, glow * 0.06)
+        kcol(ob, go, col, 0.0)
         kcol(ob, go + 14, col, 1.2)
         khide(ob, go + 15, True)
 
@@ -854,10 +854,11 @@ def cameras():
         (ex + 30, dict(tgt=(-2.0, -1.5, 0.5), el=66.0, az=-82.0, dist=98.0, lens=46.0, upw=0.85, yaw=0.0)),
         (ex + 92, dict(tgt=(-1.0, -1.0, 1.5), el=36.0, az=-62.0, dist=90.0, lens=40.0, upw=1.0, yaw=0.0)),
         (E["sensors"] + 30, dict(tgt=(-2.0, 0.5, 1.5), el=33.0, az=-55.0, dist=80.0, lens=40.0, upw=1.0, yaw=0.0)),
-        (E["hit_found"], dict(tgt=(L.frame_x(T.LAST_NIGHT[1]) - 1.0, L.aisle_y("A03"), 2.0), el=33.0, az=-66.0,
-                              dist=46.0, lens=40.0, upw=1.0, yaw=0.0)),
-        (f1, dict(tgt=(L.frame_x(T.LAST_NIGHT[1]), L.aisle_y("A03") - 0.5, 2.0), el=30.0, az=-70.0, dist=34.0,
-                  lens=40.0, upw=1.0, yaw=0.0)),
+        # down aisle 03 from the east and high, so the replay on the aisle floor is in view
+        (E["hit_found"], dict(tgt=(L.frame_x(T.LAST_NIGHT[1]) - 2.5, L.aisle_y("A03"), 0.8), el=52.0, az=-14.0,
+                              dist=38.0, lens=40.0, upw=1.0, yaw=0.0)),
+        (f1, dict(tgt=(L.frame_x(T.LAST_NIGHT[1]) - 1.0, L.aisle_y("A03") - 0.6, 0.8), el=47.0, az=-10.0,
+                  dist=28.0, lens=40.0, upw=1.0, yaw=0.0)),
     ], spherical=True)
     # B: across the sunk rows, face-on to the damaged bay; the parts float in the aisle
     rid, bay = L.HERO_ROW, L.HERO_BAY
@@ -909,43 +910,23 @@ def cameras():
         (f1, dict(pos=sph(29.0, -47.0, 86.0), tgt=tuple(hero), lens=38.0)),
     ])
     # cut list -> markers
+    return cams
+
+
+def bind_markers():
+    """One marker per twin shot, bound to its camera (after every camera exists: a marker without
+    a camera makes Blender fall back to the next one's)."""
     sc = bpy.context.scene
+    sc.timeline_markers.clear()
     for sid, a, b, src, cam in T.SHOTS:
         if src == "twin":
             mk = sc.timeline_markers.new(sid, frame=a)
-            mk.camera = cams.get(cam) or bpy.data.objects.get(cam)
-    return cams
-
-
-def night(G):
-    """02:14: a forklift comes down aisle 03 toward the camera and swings in at R05."""
-    tr = G["night_truck"]
-    n0, n1 = T.SHOT["n1_night"][1], T.SHOT["n1_night"][2]
-    ya = L.aisle_y("A03")
-    khide(tr, 1, False)
-    khide(n1 + 1, True) if False else khide(tr, n1 + 1, True)
-    xh = L.frame_x(L.LAST_NIGHT_FRAME) if hasattr(L, "LAST_NIGHT_FRAME") else L.frame_x(T.LAST_NIGHT[1])
-    rt = L.route([(L.bay_x(17), ya + 0.2), (xh + 6.0, ya + 0.1), (xh + 2.9, ya - 0.55)])
-    tot = rt[1][-1]
-    d = Driver(tr)
-    d.along(rt, n0, n1, lambda f: tot * (1 - (1 - (f - n0) / (n1 - n0)) ** 1.6))
-    cam_pos0 = (xh - 2.2, ya + 0.75, 1.45)
-    cams = rig_camera("CAM_N1", n0, n1, [
-        (n0, dict(pos=cam_pos0, tgt=(L.bay_x(12), ya - 0.1, 1.9), lens=30.0)),
-        (n1, dict(pos=(xh - 1.7, ya + 0.65, 1.4), tgt=(xh + 4.0, ya - 0.3, 1.2), lens=30.0)),
-    ])
-    cams.data.dof.use_dof = True
-    cams.data.dof.aperture_fstop = 2.8
-    cams.data.dof.focus_distance = 8.0
-    cams.data.dof.keyframe_insert("focus_distance", frame=n0)
-    cams.data.dof.focus_distance = 4.5
-    cams.data.dof.keyframe_insert("focus_distance", frame=n1)
-    return cams
+            mk.camera = bpy.data.objects[cam]
 
 
 def animate(G, M):
+    from twin import beats as BT
     X = extras(G, M)
-    night(G)
     plan_and_extrude(G, X)
     trucks_lapping(G, X, E["routes"] + 10, E["trucks_go"], E["sensors"], E["year_end"], v_fast=-1.25)
     year(G, X)
@@ -954,16 +935,23 @@ def animate(G, M):
     maintenance(G, X)
     X["rag"] = safety(G, X)
     X["cams"] = cameras()
-    sync_children_hide(G["trucks"] + [G["night_truck"]])
+    BT.animate(G, X)
+    bind_markers()
+    sync_children_hide(G["trucks"] + [G["night_truck"]], prefix="MHE")
+    if G.get("hero_base"):
+        sync_children_hide([G["frames"][T.LAST_NIGHT]], prefix="HERO_")
     return X
 
 
-def sync_children_hide(obs):
-    """hide_render does not pass to children: copy each holder's visibility keys onto its parts."""
+def sync_children_hide(obs, prefix=""):
+    """hide_render does not pass to children: copy each holder's visibility keys onto its parts
+    (children whose names start with prefix; others keep their own)."""
     for ob in obs:
         ad = ob.animation_data
         fc = ad.action.fcurves.find("hide_render") if ad and ad.action else None
         for q in ob.children_recursive:
+            if not q.name.startswith(prefix):
+                continue
             if fc is None:
                 q.hide_render = ob.hide_render
                 continue
