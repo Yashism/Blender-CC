@@ -79,12 +79,60 @@ SHIFT_CHECKS = [
 ]
 
 
+def otf_to_ttf(src, dst):
+    """CFF outlines -> TrueType (fontTools' otf2ttf): Chromium embeds CFF fonts as Type 3, which some
+    print shops reject; TrueType goes in as a normal embedded font."""
+    from fontTools.pens.cu2quPen import Cu2QuPen
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+    from fontTools.ttLib import TTFont, newTable
+    f = TTFont(src)
+    order = f.getGlyphOrder()
+    gs = f.getGlyphSet()
+    glyphs = {}
+    for name in order:
+        pen = TTGlyphPen(gs)
+        gs[name].draw(Cu2QuPen(pen, 1.0, reverse_direction=True))
+        glyphs[name] = pen.glyph()
+    f["loca"] = newTable("loca")
+    f["glyf"] = glyf = newTable("glyf")
+    glyf.glyphOrder, glyf.glyphs = order, glyphs
+    del f["CFF "]
+    for t in ("VORG",):
+        if t in f:
+            del f[t]
+    glyf.compile(f)
+    hmtx = f["hmtx"]
+    for name, g in glyf.glyphs.items():
+        if hasattr(g, "xMin"):
+            hmtx[name] = (hmtx[name][0], g.xMin)
+    f["maxp"] = maxp = newTable("maxp")
+    maxp.tableVersion = 0x00010000
+    for k in ("maxZones", "maxTwilightPoints", "maxStorage", "maxFunctionDefs", "maxInstructionDefs",
+              "maxStackElements", "maxSizeOfInstructions", "maxComponentElements"):
+        setattr(maxp, k, 1 if k == "maxZones" else 0)
+    maxp.compile(f)
+    post = f["post"]
+    post.formatType, post.extraNames, post.mapping, post.glyphOrder = 2.0, [], {}, order
+    f.sfntVersion = "\000\001\000\000"
+    f.save(dst)
+
+
 def font_faces():
     faces = [("Outfit", 700, "Outfit-Bold.ttf"), ("Outfit", 800, "Outfit-ExtraBold.ttf"),
              ("Inter", 400, "Inter-Regular.otf"), ("Inter", 500, "Inter-Medium.otf"),
              ("Inter", 600, "Inter-SemiBold.otf"), ("Inter", 700, "Inter-Bold.otf")]
-    return "\n".join(f"@font-face {{ font-family: '{fam}'; font-weight: {w}; "
-                     f"src: url('file://{os.path.join(FONTS, f)}'); }}" for fam, w, f in faces)
+    cache = os.path.join(OUT, "fonts")
+    os.makedirs(cache, exist_ok=True)
+    css = []
+    for fam, w, f in faces:
+        path = os.path.join(FONTS, f)
+        if f.endswith(".otf"):
+            ttf = os.path.join(cache, f[:-4] + ".ttf")
+            if not os.path.exists(ttf):
+                otf_to_ttf(path, ttf)
+            path = ttf
+        css.append(f"@font-face {{ font-family: '{fam}'; font-weight: {w}; src: url('file://{path}'); }}")
+    return "\n".join(css)
 
 
 def still(frame, name, crop=None, size=None):
@@ -321,7 +369,7 @@ def print_pdf(html, name, w, h):
 def main():
     os.makedirs(OUT, exist_ok=True)
     hero = still(60, "hero_night_aisle")
-    dent = still(220, "dent_closeup", crop=(0.18, 0.0, 0.82, 1.0))
+    dent = still(220, "dent_closeup", crop=(0.24, 0.144, 0.80, 0.856))
     print(print_pdf(poster_html(hero, dent), "RAMS_peak_season_poster_A3", "297mm", "420mm"))
     print(print_pdf(shift_html(), "RAMS_peak_season_shift_check_A4", "210mm", "297mm"))
 
