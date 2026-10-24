@@ -1185,24 +1185,29 @@ CLIPS = [("c01_night", 1, T.f(_S["night"][2]) - 1), ("c02_morning", T.f(_S["morn
          ("c11_logo", T.f(_S["logo"][1]), T.END)]
 
 
-def encode_clip(name, f0, f1, audio, out_dir, mode="h"):
-    """One review clip with its stretch of the soundtrack."""
+def encode_clip(name, f0, f1, audio, out_dir, mode="h", scale=None):
+    """One review clip with its stretch of the soundtrack (scale: output width, for a light preview)."""
     d = "cut16" if mode == "h" else "cut9"
     out = os.path.join(out_dir, f"{name}.mp4")
     cmd = ["ffmpeg", "-v", "error", "-y", "-framerate", str(T.FPS), "-start_number", str(f0),
            "-i", os.path.join(OUT, d, f"{mode}_%04d.png"), "-ss", f"{(f0 - 1) / T.FPS:.4f}",
-           "-t", f"{(f1 - f0 + 1) / T.FPS:.4f}", "-i", audio, "-frames:v", str(f1 - f0 + 1),
-           "-c:v", "libx264", "-preset", "medium", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+           "-t", f"{(f1 - f0 + 1) / T.FPS:.4f}", "-i", audio, "-frames:v", str(f1 - f0 + 1)]
+    if scale:
+        cmd += ["-vf", f"scale={scale}:-2:flags=lanczos"]
+    cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
            "-shortest", "-movflags", "+faststart", out]
     subprocess.run(cmd, check=True)
     return out
 
 
-def encode(pattern, audio, out):
+def encode(pattern, audio, out, scale=None):
     cmd = ["ffmpeg", "-v", "error", "-y", "-framerate", str(T.FPS), "-i", pattern]
     if audio and os.path.exists(audio):
         cmd += ["-i", audio, "-c:a", "aac", "-b:a", "192k", "-shortest"]
-    cmd += ["-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out]
+    if scale:
+        cmd += ["-vf", f"scale={scale}:-2:flags=lanczos"]
+    cmd += ["-c:v", "libx264", "-preset", "slow", "-crf", "18" if not scale else "21", "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart", out]
     subprocess.run(cmd, check=True)
 
 
@@ -1218,6 +1223,8 @@ def main():
     ap.add_argument("--audio", default=os.path.join(OUT, "story_mix.wav"))
     ap.add_argument("--name", default="RAMS_digital_twin_2am_hit")
     ap.add_argument("--clip", help="make review clips (c01_night ... c11_logo, comma separated), 16:9 only")
+    ap.add_argument("--preview", action="store_true", help="encode a light preview: 960x540 / 540x960")
+    ap.add_argument("--modes", default="h,v", help="h (16:9), v (9:16) or both")
     a = ap.parse_args()
     if a.clip:
         os.makedirs(os.path.join(OUT, "cut16"), exist_ok=True)
@@ -1227,20 +1234,24 @@ def main():
             name, f0, f1 = next(c for c in CLIPS if c[0] == name)
             with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, (("h", "cut16"),), a.twin_v, a.desk_v)) as pool:
                 list(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4))
-            print("clip", encode_clip(name, f0, f1, a.audio, out_dir), flush=True)
+            print("clip", encode_clip(name, f0, f1, a.audio, out_dir, scale=960 if a.preview else None), flush=True)
         return
     for d in ("cut16", "cut9"):
         os.makedirs(os.path.join(OUT, d), exist_ok=True)
     f0, f1 = (int(v) for v in a.frames.split("-"))
-    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, None, a.twin_v, a.desk_v)) as pool:
+    modes = tuple(m for m in (("h", "cut16"), ("v", "cut9")) if m[0] in a.modes.split(","))
+    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, modes, a.twin_v, a.desk_v)) as pool:
         for k, _ in enumerate(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4)):
             if k % 100 == 0:
                 print("post", k, flush=True)
     if a.no_encode:
         return
-    encode(os.path.join(OUT, "cut16", "h_%04d.png"), a.audio, os.path.join(OUT, f"{a.name}_16x9.mp4"))
-    encode(os.path.join(OUT, "cut9", "v_%04d.png"), a.audio, os.path.join(OUT, f"{a.name}_9x16.mp4"))
-    print("encoded", os.path.join(OUT, f"{a.name}_16x9.mp4"), os.path.join(OUT, f"{a.name}_9x16.mp4"))
+    tag = "_preview" if a.preview else ""
+    for mode, d, ar, w in (("h", "cut16", "16x9", 960), ("v", "cut9", "9x16", 540)):
+        if mode in a.modes.split(","):
+            out = os.path.join(OUT, f"{a.name}{tag}_{ar}.mp4")
+            encode(os.path.join(OUT, d, f"{mode}_%04d.png"), a.audio, out, scale=w if a.preview else None)
+            print("encoded", out, flush=True)
 
 
 if __name__ == "__main__":
