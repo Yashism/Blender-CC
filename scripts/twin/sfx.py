@@ -1,5 +1,6 @@
 """RAMS Digital Twin launch film "The 2 a.m. hit": the sound. No music: the voiceover carries the
-film, over a light layer of synthesised sound (system python3: numpy, scipy, soundfile, pyloudnorm).
+film, over a light layer of recorded sound (Mixkit, fetched by fetch_sfx.sh) with a little synthesis
+(the phone's buzz, shimmers, ticks). System python3: numpy, scipy, soundfile, pyloudnorm.
 
     python3 scripts/twin/sfx.py              # -> renders/twin/story_mix.wav
     python3 scripts/twin/sfx.py --no-sfx     # the voice alone
@@ -242,106 +243,144 @@ def reverse_beeper(n=3, period=0.9):
     return out
 
 
+_rec = {}
+SFX_DIR = os.path.join(ROOT, "assets", "sfx", "twin")
+
+
+def rec(name, start=0.0, dur=None, rev=False, lo=None, hi=None, speed=1.0):
+    """A recorded effect (assets/sfx/twin, fetched by fetch_sfx.sh), mono, peak 1.0, a cut of it."""
+    import glob
+    if name not in _rec:
+        p = (glob.glob(os.path.join(SFX_DIR, name + ".*")) or [None])[0]
+        if p is None:
+            raise SystemExit(f"missing sound {name}: run bash scripts/twin/fetch_sfx.sh")
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", p, "-f", "f32le", "-ac", "1", "-ar", str(SR), "-"],
+                             check=True, capture_output=True).stdout
+        _rec[name] = np.frombuffer(raw, dtype=np.float32).astype(np.float64)
+    x = _rec[name]
+    if speed != 1.0:                                    # resample: faster is higher
+        idx = np.arange(0, len(x) - 1, speed)
+        x = np.interp(idx, np.arange(len(x)), x)
+    i0 = int(start * SR)
+    x = x[i0: i0 + int(dur * SR)] if dur else x[i0:]
+    if rev:
+        x = x[::-1]
+    if lo or hi:
+        x = band(x, lo, hi)
+    f = min(len(x) // 4, int(0.02 * SR))
+    x = x.copy()
+    if f > 0:
+        x[:f] *= np.linspace(0, 1, f)
+        x[-f:] *= np.linspace(1, 0, f)
+    return norm(x)
+
+
+def env_line(x, pts):
+    """Gain envelope through (seconds, gain) points over a signal."""
+    t = np.arange(len(x)) / SR
+    return x * np.interp(t, [p[0] for p in pts], [p[1] for p in pts])
+
+
 def design():
     b = buf()
     s = T.sec
-    # ---- 02:14, the aisle: night air and the high-bays' hum, the forklift coming, the hit
+    # ---- 02:14, aisle 03: the warehouse at night, FL-02 coming, the strike, it backs away
     night_end = T.SEC["night"][2]
-    add(b, room(night_end, 50, 700, 100), 0.0, 0.18)
-    add(b, motor(3.4, 95, 150), 0.1, 0.22, pan=0.1)
-    add(b, band(noise(3.4), 400, 2200) * np.linspace(0.2, 1, int(3.4 * SR)), 0.1, 0.03)      # tyres on concrete
-    hit = T.SHOT["n2_hit"][1] / T.FPS + 38 / T.FPS                     # W01 s01_impact: contact on its frame 39
-    add(b, scrape(0.35), hit - 0.25, 0.25, pan=-0.2)
-    add(b, clang(2.4, 0.92), hit, 0.95)
-    add(b, thud(0.6, 50), hit, 0.75)
-    add(b, reverse_beeper(4, 0.85), 6.2, 0.08, pan=0.4)
-    add(b, motor(2.8, 140, 90), 6.0, 0.08, pan=0.4)
-    # ---- the morning desk
+    add(b, rec("room_tone_dark", 2.0, night_end + 0.5, lo=40), 0.0, 0.16)
+    hit = s(E["strike"])
+    app = rec("small_tractor_arrival", 12.0, hit + 0.15, lo=60, hi=6000)
+    add(b, env_line(app, [(0, 0.35), (hit - 1.0, 0.8), (hit, 1.0)]), 0.0, 0.42, pan=-0.15)
+    add(b, rec("warehouse_metal_hit", 0.18), hit - 0.10, 0.95)
+    add(b, rec("factory_metal_hard_hit", 0.16, lo=150), hit - 0.10, 0.55, pan=0.1)
+    add(b, thud(0.5, 52), hit, 0.45)
+    idle = rec("truck_driving_steady", 2.0, 5.0, lo=60, hi=2500)
+    add(b, env_line(idle, [(0, 0.8), (1.5, 0.5), (5.0, 0.0)]), s(E["reverse"]), 0.22, pan=-0.2)
+    for k in range(3):                                   # the reversing beeper, fading as it goes
+        add(b, rec("reversing_beeps", lo=300), s(E["reverse"]) + 0.3 + 1.9 * k, 0.16 * 0.72 ** k, pan=-0.3)
+    # ---- the morning desk: the city through the window, the laptop, the phone
     m0, m1 = T.SEC["morning"][1], T.SEC["morning"][2]
-    add(b, room(m1 - m0 + 0.4, 120, 2400), m0, 0.06)
-    add(b, birds(m1 - m0, 9), m0 + 0.4, 0.05, pan=-0.6)
-    add(b, chime([523, 784, 1047], 1.0, 0.09), D["wake"], 0.12)
-    add(b, notify(1568), D["cal"], 0.16, pan=0.3)
-    add(b, notify(1319), D["ins"], 0.16, pan=0.3)
-    add(b, notify(1175), D["client"], 0.12, pan=0.3)
+    add(b, rec("park_and_traffic", 30.0, m1 - m0 + 0.5, hi=6000), m0, 0.07, pan=-0.5)
+    add(b, rec("room_tone", 5.0, m1 - m0 + 0.5, hi=4000), m0, 0.06)
+    add(b, rec("morning_birds", 46.0, m1 - m0, lo=1500), m0 + 0.3, 0.05, pan=-0.7)
+    add(b, rec("interface_start"), D["wake"], 0.16)
+    add(b, rec("positive_notification"), D["cal"], 0.18, pan=0.3)
+    add(b, rec("bubble_pop_notification"), D["ins"], 0.2, pan=0.3)
+    add(b, rec("message_pop"), D["client"], 0.16, pan=0.3)
     for t0, dur in ((D["client"], 0.55), (D["photo"], 0.4)):
-        add(b, buzz(dur), t0, 0.32, pan=0.35)
+        add(b, buzz(dur), t0, 0.3, pan=0.35)
     for t0 in (D["sheet"], D["pdf"], D["pics"]):
-        add(b, click(0.02), t0, 0.35, pan=0.2)
-        add(b, whoosh(0.18, True, 1800, 4000), t0 - 0.05, 0.05, pan=0.2)
-    add(b, rustle(1.1), 23.6, 0.08, pan=-0.3)
-    add(b, rustle(0.8), 25.2, 0.06, pan=-0.4)
-    # paper -> twin
-    add(b, whoosh(1.2, True, 300, 3500), s(T.SHOT["s1_plan"][1]) - 0.7, 0.2)
-    add(b, shimmer(1.6), s(T.SHOT["s1_plan"][1]) - 0.2, 0.12)
-    # ---- 2D / 3D
-    add(b, shimmer(s(E["plan_done"]) - s(E["plan_start"])), s(E["plan_start"]), 0.12)
-    for k in range(10):
-        add(b, tick(2600 + 90 * k, 0.05, 0.2), s(E["plan_start"]) + 0.6 + 0.28 * k, 0.08, pan=-0.5 + 0.1 * k)
+        add(b, rec("mouse_click_close"), t0 - 0.05, 0.22, pan=0.2)
+    add(b, rec("papers_moved", 0.0, 2.2), 23.5, 0.14, pan=-0.3)
+    add(b, rec("paper_slide"), 25.6, 0.1, pan=-0.4)
+    # paper -> twin: the ink lifts
+    lift = s(E["lift"])
+    add(b, rec("tunnel_woosh", 0.0, 2.6), lift - 1.1, 0.22)
+    add(b, shimmer(1.6), lift - 0.2, 0.1)
+    # ---- 2D / 3D: the plan lights on its words; the racks rise and lock
+    for t0 in (32.21, 33.09, 33.97):
+        add(b, rec("interface_hint"), t0 - 0.03, 0.1)
     for sec_ in T.SECTIONS:
         if sec_[3] and sec_[0] != "d2":
-            add(b, tick(1800, 0.09, 0.5), sec_[1], 0.18)
-    add(b, boom(1.8, 44), s(E["extrude"]), 0.55)
-    add(b, whoosh(1.4, True, 120, 900), s(E["extrude"]) - 1.2, 0.22)
-    for i in range(120):
+            add(b, rec("dry_pop"), sec_[1], 0.12)
+    add(b, rec("mech_movements"), s(E["extrude"]) - 0.1, 0.35)
+    add(b, boom(1.8, 44), s(E["extrude"]), 0.4)
+    for i in range(26):
         u = RNG.uniform(0, 1)
-        add(b, click(0.012), s(E["extrude"]) + 0.05 + 1.9 * u + RNG.uniform(0, 0.35), RNG.uniform(0.03, 0.1),
+        add(b, rec("gear_lock_tap"), s(E["extrude"]) + 0.1 + 1.9 * u + RNG.uniform(0, 0.3), RNG.uniform(0.03, 0.08),
             pan=-0.8 + 1.6 * u)
-    add(b, zip_(1.2, 500, 2400, 30), s(E["routes"]), 0.08)
-    # ---- 4D: rewind to last night, there it is
+    # ---- 4D: rewind to 02:14; the hologram strikes again
     f0, fh = s(E["sensors"]), s(E["hit_found"])
-    add(b, whoosh(0.8, False, 400, 4000), f0 - 0.3, 0.16)
+    add(b, rec("swirling_whoosh", rev=True), f0 - 0.4, 0.22)
+    add(b, rec("data_scanner"), f0 + 0.3, 0.1)
     t = f0
     while t < fh - 0.1:
         u = (t - f0) / (fh - f0)
-        add(b, tick(3400, 0.025, 0.1), t, 0.05 * np.sin(np.pi * u) + 0.015)
+        add(b, tick(3400, 0.025, 0.1), t, 0.04 * np.sin(np.pi * u) + 0.012)
         t += 0.09 - 0.05 * np.sin(np.pi * u)
-    add(b, zip_(fh - f0 - 0.2, 2600, 500, 44), f0 + 0.1, 0.06)
-    add(b, thud(0.5, 55), fh, 0.5)
-    add(b, ping(880, 1.0), fh, 0.2)
-    # ---- 5D: the parts come out, the BoQ fills
-    add(b, whoosh(1.0, False, 80, 700), s(E["section_cut"]), 0.22)
+    add(b, rec("interface_hint"), fh, 0.2)
+    gh = s(E["ghost_hit"])
+    ghost = reverb(rec("warehouse_metal_hit", 0.18, hi=3500), 1.8, 0.45)
+    add(b, ghost, gh - 0.1, 0.35)
+    # ---- 5D
+    add(b, rec("whoosh_fast"), s(E["section_cut"]) - 0.2, 0.2)
     for n in range(9):
-        st = E["parts_out"] + 4 * n
-        add(b, whoosh(0.45, True, 600, 2400), s(st), 0.04, pan=0.3)
-        add(b, tick(1500 + 120 * n, 0.07, 0.3), s(st + 34), 0.08)
-        add(b, click(), s(E["parts_to_boq"] + 3 * n + 14), 0.12, pan=-0.4)
-    add(b, chime([1047, 1319, 1568], 1.2), s(E["parts_to_boq"] + 34), 0.12)
-    # ---- 6D: everyone through aisle 03; re-route; less energy
-    add(b, zip_(3.2, 300, 900, 22), s(E["routes_long"]) + 0.2, 0.06)
-    for k in range(4):
-        add(b, beep(392, 0.22), s(E["heat"]) + 0.5 * k, 0.07)
-    add(b, whoosh(0.6, False, 600, 3000), s(E["replan"]), 0.18)
-    add(b, zip_(2.4, 600, 1500, 26), s(E["routes_short"]), 0.07)
-    add(b, chime([1319, 1568, 2093], 1.4), s(E["routes_short"] + 60), 0.14)
-    # ---- 7D: flagged, ordered, swapped, closed
-    for k in range(2):
-        add(b, beep(1760, 0.08), s(E["predict"] + 12) + 0.14 * k, 0.08)
-    add(b, chime([880, 1175], 0.9), s(E["work_order"]), 0.12)
-    add(b, scrape(0.6), s(E["swap"]), 0.12, pan=-0.2)
-    add(b, clang(1.0, 1.25), s(E["swap"] + 40), 0.1)
-    add(b, chime([1047, 1319, 1568, 2093], 1.6), s(E["closed"]), 0.14)
-    # ---- 8D: the next hit, known in seconds
-    add(b, motor(0.75, 120, 210), s(T.SHOT["s5_safety"][1]), 0.16, pan=0.3)
-    add(b, clang(2.0, 1.05), s(E["impact"]), 0.7)
-    add(b, thud(0.6, 52), s(E["impact"]), 0.55)
-    for k in range(4):
-        add(b, beep(988 if k % 2 == 0 else 740, 0.14), s(E["impact"] + 4) + 0.18 * k, 0.16)
-    add(b, boom(1.0, 60), s(E["zone"]), 0.22)
-    add(b, shimmer(2.2), s(E["rag_all"]), 0.12)
-    add(b, whoosh(2.4, True, 200, 2500), s(E["rise"]), 0.14)
-    # ---- audit day: the pack ticks off, ready
+        add(b, rec("air_woosh", 0.3, 0.8), s(E["parts_out"] + 4 * n), 0.05, pan=0.3)
+        add(b, rec("dry_pop"), s(E["parts_to_boq"] + 3 * n + 14), 0.1, pan=-0.4)
+    add(b, rec("confirmation_tone"), s(E["parts_to_boq"] + 34), 0.16)
+    # ---- 6D
+    add(b, rec("data_scanner"), s(E["routes_long"]) + 0.3, 0.08)
+    add(b, rec("facility_alarm", 0.0, 1.4, hi=3000), s(E["heat"]), 0.07)
+    add(b, rec("whoosh_fast"), s(E["replan"]), 0.16)
+    add(b, rec("correct_answer_tone"), s(E["routes_short"] + 60), 0.16)
+    # ---- 7D
+    add(b, rec("interface_hint"), s(E["predict"] + 12), 0.12)
+    add(b, rec("positive_notification"), s(E["work_order"]), 0.12)
+    add(b, rec("metal_bar_hits"), s(E["swap"]), 0.14, pan=-0.2)
+    add(b, rec("gear_lock"), s(E["swap"] + 40), 0.16)
+    add(b, rec("confirmation_tone"), s(E["closed"]), 0.14)
+    # ---- 8D: the next hit, seen by the AI camera, known in seconds
+    add(b, rec("truck_driving_steady", 4.0, 1.4, lo=60, hi=3000), s(T.SHOT["s5_safety"][1]), 0.28, pan=0.3)
+    add(b, rec("warehouse_metal_hit", 0.18), s(E["impact"]) - 0.1, 0.75)
+    add(b, thud(0.5, 52), s(E["impact"]), 0.35)
+    add(b, rec("data_scanner"), s(E["impact"]) + 0.15, 0.14)
+    add(b, rec("critical_alarm", 0.0, 1.6, hi=4000), s(E["impact"] + 6), 0.09)
+    add(b, rec("electric_whoosh"), s(E["rise"]) - 0.3, 0.16)
+    # ---- audit day
     a0, a1 = T.SEC["audit"][1], T.SEC["audit"][2]
-    add(b, room(a1 - a0 + 0.3, 120, 2400), a0, 0.05)
-    add(b, birds(a1 - a0, 4), a0 + 0.3, 0.04, pan=-0.6)
+    add(b, rec("park_and_traffic", 60.0, a1 - a0 + 0.4, hi=6000), a0, 0.06, pan=-0.5)
+    add(b, rec("room_tone", 20.0, a1 - a0 + 0.4, hi=4000), a0, 0.05)
     for k, t0 in enumerate(D["ticks"]):
-        add(b, tick(1900 + 140 * k, 0.07, 0.35), t0, 0.1)
-    add(b, chime([1047, 1319, 1568, 2093], 1.8), D["ready"], 0.16)
+        add(b, rec("dry_pop"), t0, 0.1)
+    add(b, rec("correct_answer_tone"), D["ready"], 0.16)
+    # ---- one week later: the same aisle, the forklift passes, nothing happens
+    w0, w1 = T.SEC["week"][1], T.SEC["week"][2]
+    add(b, rec("room_tone_dark", 30.0, w1 - w0 + 0.3, lo=40), w0, 0.16)
+    pas = rec("tractor_passing", 13.4, w1 - w0, lo=60, hi=6000)
+    add(b, env_line(pas, [(0, 0.3), (2.6, 1.0), (w1 - w0, 0.6)]), w0, 0.4, pan=0.2)
     # ---- the title, the call to action
-    add(b, whoosh(1.0, True, 400, 3000), s(E["title"]) - 0.6, 0.12)
-    add(b, boom(2.2, 40), s(E["title"]), 0.25)
-    add(b, tick(1600, 0.1, 0.5), s(E["cta"]), 0.16)
-    wet = reverb(b[:, 0], 1.2, 0.16)[:N], reverb(b[:, 1], 1.2, 0.16, seed=4)[:N]
+    add(b, rec("whoosh_impact"), s(E["title"]) - 0.9, 0.22)
+    add(b, rec("interface_start"), s(E["cta"]), 0.12)
+    wet = reverb(b[:, 0], 1.0, 0.12)[:N], reverb(b[:, 1], 1.0, 0.12, seed=4)[:N]
     return np.stack(wet, axis=1)
 
 

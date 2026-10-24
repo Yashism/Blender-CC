@@ -845,15 +845,19 @@ def rig_camera(name, f0, f1, keys, spherical=False):
 def cameras():
     S = T.SHOT
     cams = {}
+    V = T.vertical()
+    yaw_td = 90.0 if V else 0.0             # 9:16: top-down views run the 64 m building up the frame
+    wide = 1.45 if V else 1.0               # 9:16: wide views pull back to keep the site in frame
     # A: top-down plan -> swing down to the 3/4 hero -> slow orbit through the year
     f0, f1 = S["s1_plan"][1], S["s1_plan"][2]
     ex = E["extrude"]
     cams["CAM_A"] = rig_camera("CAM_A", f0, f1, [
-        (f0, dict(tgt=(-4.0, -2.0, 0.0), el=89.95, az=-90.0, dist=124.0, lens=40.0, upw=0.0, yaw=0.0)),
-        (ex, dict(tgt=(-4.0, -2.0, 0.0), el=89.95, az=-90.0, dist=112.0, lens=40.0, upw=0.0, yaw=0.0)),
-        (ex + 30, dict(tgt=(-2.0, -1.5, 0.5), el=66.0, az=-82.0, dist=98.0, lens=46.0, upw=0.85, yaw=0.0)),
-        (ex + 92, dict(tgt=(-1.0, -1.0, 1.5), el=36.0, az=-62.0, dist=90.0, lens=40.0, upw=1.0, yaw=0.0)),
-        (E["sensors"] + 30, dict(tgt=(-2.0, 0.5, 1.5), el=33.0, az=-55.0, dist=80.0, lens=40.0, upw=1.0, yaw=0.0)),
+        (f0, dict(tgt=(-4.0, -2.0, 0.0), el=89.95, az=-90.0, dist=124.0, lens=40.0, upw=0.0, yaw=yaw_td)),
+        (ex, dict(tgt=(-4.0, -2.0, 0.0), el=89.95, az=-90.0, dist=112.0, lens=40.0, upw=0.0, yaw=yaw_td)),
+        (ex + 30, dict(tgt=(-2.0, -1.5, 0.5), el=66.0, az=-82.0, dist=98.0 * wide, lens=46.0, upw=0.85, yaw=yaw_td)),
+        (ex + 92, dict(tgt=(-1.0, -1.0, 1.5), el=36.0, az=-62.0, dist=90.0 * wide, lens=40.0, upw=1.0, yaw=0.0)),
+        (E["sensors"] + 30, dict(tgt=(-2.0, 0.5, 1.5), el=33.0, az=-55.0, dist=80.0 * wide, lens=40.0, upw=1.0,
+                                 yaw=0.0)),
         # down aisle 03 from the east and high, so the replay on the aisle floor is in view
         (E["hit_found"], dict(tgt=(L.frame_x(T.LAST_NIGHT[1]) - 2.5, L.aisle_y("A03"), 0.8), el=52.0, az=-14.0,
                               dist=38.0, lens=40.0, upw=1.0, yaw=0.0)),
@@ -879,8 +883,8 @@ def cameras():
     # C: high over the docks and the rack block
     f0, f1 = S["s3_routes"][1], S["s3_routes"][2]
     cams["CAM_C"] = rig_camera("CAM_C", f0, f1, [
-        (f0, dict(tgt=(9.0, -3.0, 0.0), el=77.0, az=-95.0, dist=116.0, lens=40.0)),
-        (f1, dict(tgt=(8.5, -2.5, 0.0), el=81.0, az=-88.0, dist=108.0, lens=40.0)),
+        (f0, dict(tgt=(9.0, -3.0, 0.0), el=77.0, az=-95.0, dist=116.0, lens=40.0, roll=90.0 if V else 0.0)),
+        (f1, dict(tgt=(8.5, -2.5, 0.0), el=81.0, az=-88.0, dist=108.0, lens=40.0, roll=90.0 if V else 0.0)),
     ], spherical=True)
     # D: in aisle A04, looking west at the beam the twin flags
     rid, bay = L.MAINT_ROW, L.MAINT_BAY
@@ -895,6 +899,7 @@ def cameras():
     yf, ya = face_y(L.IMPACT_ROW), L.aisle_y("A02")
     f0, f1 = S["s5_safety"][1], T.END_CARD - 1
     hero = Vector((-6.5, -5.5, 5.0))      # aimed up and left of the site, so it sits low right under the title
+    hero_v = Vector((-1.0, -1.0, 9.0)) if V else hero      # 9:16: the site centred, low, under the title
 
     def sph(el, az, dist, tgt=hero):
         el, az = math.radians(el), math.radians(az)
@@ -906,8 +911,8 @@ def cameras():
         (E["rise"] + 4, dict(pos=(xu - 5.2, ya - 1.0, 2.6), tgt=(xu + 0.6, yf - 1.0, 0.4), lens=26.0)),
         (E["rise"] + 40, dict(pos=(xu - 7.0, ya - 0.8, 12.5), tgt=(xu, yf - 1.2, 0.0), lens=28.0)),
         (E["rise"] + 95, dict(pos=(xu - 22.0, ya - 30.0, 30.0), tgt=(xu - 4.0, yf, 1.0), lens=34.0)),
-        (E["title"], dict(pos=sph(32.0, -58.0, 92.0), tgt=tuple(hero), lens=38.0)),
-        (f1, dict(pos=sph(29.0, -47.0, 86.0), tgt=tuple(hero), lens=38.0)),
+        (E["title"], dict(pos=sph(32.0, -58.0, 92.0 * wide, tgt=hero_v), tgt=tuple(hero_v), lens=38.0)),
+        (f1, dict(pos=sph(29.0, -47.0, 86.0 * wide, tgt=hero_v), tgt=tuple(hero_v), lens=38.0)),
     ])
     # cut list -> markers
     return cams

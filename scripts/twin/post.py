@@ -42,6 +42,12 @@ YELLOW = (255, 210, 58)
 RED = (255, 59, 47)
 BLUE = (79, 180, 255)
 BG = (11, 14, 19)
+# the RAMS product's own palette (test.rams.digital): white cards, slate text, blue accents
+CARD, CARD_BORDER = (255, 255, 255, 246), (229, 231, 235, 255)
+P_INK, P_GREY, P_FAINT, P_LINE, P_BLUE = (17, 24, 39), (107, 114, 128), (156, 163, 175), (229, 231, 235), (37, 99, 235)
+ON_CARD = {WHITE: P_INK, DIM: P_GREY, FAINT: P_FAINT, (214, 222, 232): P_GREY, (196, 206, 218): P_GREY,
+           ORANGE: P_BLUE, (255, 150, 140): (220, 38, 38), (255, 170, 160): (220, 38, 38), AMBER: (217, 119, 6),
+           YELLOW: (202, 138, 4), GREEN: (22, 163, 74), RED: (220, 38, 38)}
 
 F = {
     "counter": "Outfit-ExtraBold.ttf", "title": "Outfit-Bold.ttf", "head": "Outfit-Bold.ttf",
@@ -174,6 +180,19 @@ def panel(canvas, box, alpha=1.0, radius=14, fill=PANEL, border=BORDER):
     blit(canvas, im, x0, y0, alpha)
 
 
+def card_shadow(canvas, box, alpha):
+    x0, y0, x1, y1 = (int(v) for v in box)
+    key = ("shadow", x1 - x0, y1 - y0)
+    im = _cache.get(key)
+    if im is None:
+        pad = 30
+        im = Image.new("RGBA", (x1 - x0 + 2 * pad, y1 - y0 + 2 * pad), (0, 0, 0, 0))
+        ImageDraw.Draw(im).rounded_rectangle((pad, pad + 8, x1 - x0 + pad, y1 - y0 + pad + 8), 14, fill=(0, 0, 0, 110))
+        im = im.filter(ImageFilter.GaussianBlur(14))
+        _cache[key] = im
+    blit(canvas, im, x0 - 30, y0 - 30, alpha)
+
+
 def shape(canvas, alpha, draw_fn, box):
     """Draw vector bits into a box-sized layer, then composite with alpha."""
     x0, y0, x1, y1 = (int(v) for v in box)
@@ -264,9 +283,9 @@ class Lay:
             self.m = 96
         else:
             self.W, self.H = 1080, 1920
-            self.video = (0, 540, 1080, 608)
-            self.m = 72
-            self.panel_y = 1196
+            self.video = (0, 0, 1080, 1920)          # full bleed: the 9:16 pass is rendered portrait
+            self.m = 64
+            self.panel_y = 1290
 
     def vp(self, nx, ny):
         """Normalised render coordinates -> canvas pixels."""
@@ -284,8 +303,8 @@ class Pn:
     """A data panel in its own units: 16:9 draws it 440 wide at the top right; 9:16 draws it across the
     slot under the picture, scaled by k."""
 
-    def __init__(self, c, lay, a, k_v=1.9, top=140, w=440):
-        self.c, self.a = c, a
+    def __init__(self, c, lay, a, k_v=1.9, top=140, w=440, light=True):
+        self.c, self.a, self.light = c, a, light
         if lay.mode == "h":
             self.k, self.w = 1.0, w
             self.x, self.y = lay.W - lay.m - w, top
@@ -300,18 +319,29 @@ class Pn:
     def Y(self, v):
         return self.y + v * self.k
 
-    def bg(self, h, radius=14):
-        panel(self.c, (self.x, self.y, self.X(self.w), self.Y(h)), self.a, int(radius * self.k))
+    def bg(self, h, radius=12):
+        box = (self.x, self.y, self.X(self.w), self.Y(h))
+        if self.light:
+            card_shadow(self.c, box, self.a)
+            panel(self.c, box, self.a, int(radius * self.k), fill=CARD, border=CARD_BORDER)
+        else:
+            panel(self.c, box, self.a, int(radius * self.k))
 
     def t(self, u, v, s, kind, px, fill=WHITE, alpha=1.0, anchor="ls", tracking=0.0):
+        if self.light:
+            fill = ON_CARD.get(fill, fill)
         return text(self.c, (self.X(u), self.Y(v)), s, font(kind, px * self.k), fill, self.a * alpha, anchor,
                     tracking * self.k) / self.k
 
     def ln(self, u0, v0, u1, v1, col, width=1, alpha=1.0):
+        if self.light and col == (255, 255, 255):
+            col, alpha = P_LINE, alpha * 4.0
         line(self.c, (self.X(u0), self.Y(v0)), (self.X(u1), self.Y(v1)), col, max(1, int(round(width * self.k))),
-             self.a * alpha)
+             min(1.0, self.a * alpha))
 
     def dot(self, u, v, r, col, alpha=1.0, glow=False):
+        if self.light:
+            col = ON_CARD.get(col, col)
         dot(self.c, (self.X(u), self.Y(v)), r * self.k, col, self.a * alpha, glow)
 
 
@@ -336,20 +366,23 @@ def el_stamp(c, lay, f):
     for t0, t1, big, small, extra in (
             (0.4, 10.3, "02:14", "PEAK SEASON  ·  AISLE 03", (8.3, "Incident log: no entry")),
             (11.2, 15.0, "07:52", "MONDAY", None),
-            (79.5, 83.4, "08:52", "TUESDAY  ·  AUDIT DAY", None)):
+            (79.5, 83.4, "08:52", "TUESDAY  ·  AUDIT DAY", None),
+            (85.9, 89.3, "02:14", "ONE WEEK LATER  ·  AISLE 03", (86.9, "R05-B07: new upright, inspected"))):
         a = window(f, T.f(t0), T.f(t1), 14, 12)
         if a <= 0:
             continue
         x = lay.m
-        y = lay.H - 150 if not v else 1268
+        y = lay.H - 150 if not v else 1470
         text(c, (x, y), big, font("counter", 76 if not v else 96), WHITE, a, shadow=True)
         text(c, (x + 4, y + 44 if not v else y + 56), small, font("ui_s", 20 if not v else 26), (214, 222, 232), a,
              tracking=2.0, shadow=True)
         if extra and f >= T.f(extra[0]):
             ea = a * ease_out(ramp(f, T.f(extra[0]), 10))
             yy = y + (84 if not v else 108)
-            dot(c, (x + 10, yy - 8), 6, RED, ea)
-            text(c, (x + 26, yy), extra[1], font("ui_m", 22 if not v else 28), (255, 150, 140), ea, shadow=True)
+            ok = "inspected" in extra[1]
+            dot(c, (x + 10, yy - 8), 6, GREEN if ok else RED, ea)
+            text(c, (x + 26, yy), extra[1], font("ui_m", 22 if not v else 28), (150, 235, 180) if ok else (255, 150, 140),
+                 ea, shadow=True)
 
 
 def _caption_lines(s_, fnt, maxw):
@@ -384,7 +417,7 @@ def el_caption(c, lay, f):
         fnt = font("ui_m", 34 if not v else 36)
         lines = _caption_lines(ln[4], fnt, 1240 if not v else 940)
         lh = 46 if not v else 50
-        y_last = lay.H - 40 if not v else 1112
+        y_last = lay.H - 40 if not v else 1222
         for i, s_ in enumerate(lines):
             y = y_last - lh * (len(lines) - 1 - i)
             w = fnt.getlength(s_)
@@ -495,6 +528,104 @@ def el_footnote(c, lay, f):
              WHITE, a, "rs")
 
 
+# 2D: the lift ---------------------------------------------------------------------------------
+
+def plan_map(lay, f, track):
+    """World (x, y) on the slab -> canvas pixels, from the tracked slab corners (CAM_A is top-down
+    here, so three corners make an exact affine map). The desk's last frames share CAM_A's first."""
+    s1 = T.SHOT["s1_plan"][1]
+    tr = track.get("s1_plan", {})
+    k = tr.get(str(max(f, s1))) or tr.get(str(s1))
+    if not k:
+        return None
+    o, ex, ey = (lay.vp(*k[n][:2]) for n in ("c00", "c10", "c01"))
+
+    def m(x, y):
+        u, v = (x - L.X0) / (L.X1 - L.X0), (y - L.Y0) / (L.Y1 - L.Y0)
+        return (o[0] + u * (ex[0] - o[0]) + v * (ey[0] - o[0]), o[1] + u * (ex[1] - o[1]) + v * (ey[1] - o[1]))
+    return m
+
+
+def _plan_polys(groups):
+    """Closed polylines in world metres for the drawing's layers."""
+    out = {"outline": [[(L.X0, L.Y0), (L.X1, L.Y0), (L.X1, L.Y1), (L.X0, L.Y1)]], "rows": [], "aisles": [],
+           "docks": []}
+    for rid, _, _ in L.ROWS:
+        a, b = L.row_span(rid)
+        out["rows"].append([(L.RUN_X0, a), (L.RUN_X1, a), (L.RUN_X1, b), (L.RUN_X0, b)])
+    for _, a0, a1 in L.AISLES:
+        out["aisles"].append([(L.RUN_X0, a0), (L.RUN_X1, a0), (L.RUN_X1, a1), (L.RUN_X0, a1)])
+    for x, _ in L.DOORS:
+        out["docks"].append([(x - L.DOOR_W / 2, L.Y0), (x + L.DOOR_W / 2, L.Y0), (x + L.DOOR_W / 2, L.Y0 + 0.6),
+                             (x - L.DOOR_W / 2, L.Y0 + 0.6)])
+    for x0, y0, x1, y1 in L.STAGING:
+        out["docks"].append([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+    return {g: out[g] for g in groups}
+
+
+def _glow_layer(c, polys, m, col, width, alpha, fill_alpha=0.0, scale=1.0, dy=0.0):
+    """Draw world polylines through map m into a glowing layer on the canvas."""
+    if alpha <= 0.003:
+        return
+    W, H = c.size
+    cx, cy = W / 2, H / 2
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    for poly in polys:
+        pts = []
+        for x, y in poly:
+            px, py = m(x, y)
+            pts.append((cx + (px - cx) * scale, cy + (py - cy) * scale + dy))
+        if fill_alpha > 0:
+            d.polygon(pts, fill=col + (int(255 * fill_alpha),))
+        d.line(pts + [pts[0]], fill=col + (255,), width=max(1, int(width)), joint="curve")
+    glow = lay.filter(ImageFilter.GaussianBlur(width * 3))
+    blit(c, glow, 0, 0, alpha)
+    blit(c, lay, 0, 0, alpha)
+
+
+def el_lift(c, lay, f, track):
+    """The paper's ink turns to light and lifts into the twin's plan; the red pen loop round
+    R05-B07 tightens into the twin's pin; then aisles, racks and docks light on their words."""
+    f0, fl, ext = T.f(28.25), E["lift"], E["extrude"]
+    if not (f0 <= f < ext + 12):
+        return
+    m = plan_map(lay, f, track)
+    if m is None:
+        return
+    k = lay.W / 1920
+    up = ease_io(ramp(f, fl - 2, 16))
+    ink = ease_out(ramp(f, f0, 10)) * (1 - ease_io(ramp(f, fl + 12, 14)))
+    polys = _plan_polys(("outline", "rows", "docks"))
+    _glow_layer(c, polys["outline"] + polys["rows"] + polys["docks"], m, (170, 230, 255), 2.4 * k, ink * 0.9,
+                scale=1 + 0.035 * up, dy=-8 * k * up)
+    # the pen loop -> the pin
+    hx, hy = L.frame_x(T.LAST_NIGHT[1]), L.ROW[T.LAST_NIGHT[0]][1]
+    cxy = m(hx, hy)
+    pr = 1 - ease_io(ramp(f, fl, 16))
+    rx = abs(m(hx + 2.67 * pr + 0.45, hy)[0] - cxy[0]) + abs(m(hx + 2.67 * pr + 0.45, hy)[1] - cxy[1])
+    ry = abs(m(hx, hy + 1.87 * pr + 0.45)[0] - cxy[0]) + abs(m(hx, hy + 1.87 * pr + 0.45)[1] - cxy[1])
+    la = ease_out(ramp(f, f0, 8)) * (1 - ramp(f, ext - 4, 12))
+    if la > 0:
+        def ell(d, ox, oy):
+            d.ellipse((cxy[0] - rx + ox, cxy[1] - ry + oy, cxy[0] + rx + ox, cxy[1] + ry + oy), outline=RED + (255,),
+                      width=max(2, int(4 * k)))
+        shape(c, la, ell, (cxy[0] - rx - 6, cxy[1] - ry - 6, cxy[0] + rx + 6, cxy[1] + ry + 6))
+        if f >= fl + 10:
+            dot(c, cxy, 6 * k, RED, la, glow=True)
+            ph = ((f - fl - 10) % 22) / 22
+            rr_ = (8 + 26 * ph) * k
+            shape(c, la * (1 - ph), lambda d, ox, oy: d.ellipse((cxy[0] - rr_ + ox, cxy[1] - rr_ + oy, cxy[0] + rr_ + ox,
+                                                                 cxy[1] + rr_ + oy), outline=RED + (255,), width=2),
+                  (cxy[0] - rr_ - 4, cxy[1] - rr_ - 4, cxy[0] + rr_ + 4, cxy[1] + rr_ + 4))
+    # "every aisle, every rack, every dock"
+    for t0, group, col in ((32.21, "aisles", (90, 200, 255)), (33.09, "rows", (255, 255, 255)),
+                           (33.97, "docks", (255, 196, 90))):
+        ha = window(f, T.f(t0 - 0.05), T.f(t0 + 1.0), 4, 10)
+        if ha > 0:
+            _glow_layer(c, _plan_polys((group,))[group], m, col, 2.2 * k, ha * 0.9, fill_alpha=0.16)
+
+
 # 4D -------------------------------------------------------------------------------------------
 
 def _clock(f):
@@ -584,9 +715,9 @@ def el_parts(c, lay, f, track):
         f1, f2 = font("ui_s", 19), font("ui", 17)
         w1 = f1.getlength(lab) + 0.6 * len(lab)
         w = w1 + 18 + f2.getlength(note)
-        panel(c, (x - 10, y - 30, x + w + 14, y + 6), a * 0.9, radius=8, fill=(10, 13, 18, 190))
-        text(c, (x, y - 6), lab, f1, WHITE, a, tracking=0.6)
-        text(c, (x + w1 + 18, y - 6), note, f2, (196, 206, 218), a)
+        panel(c, (x - 10, y - 30, x + w + 14, y + 6), a * 0.95, radius=8, fill=CARD, border=CARD_BORDER)
+        text(c, (x, y - 6), lab, f1, P_INK, a, tracking=0.6)
+        text(c, (x + w1 + 18, y - 6), note, f2, P_GREY, a)
 
 
 def el_boq(c, lay, f):
@@ -664,10 +795,10 @@ def el_maint(c, lay, f, track):
     fa = window(f, fp + 12, fw + 6, 8, 8)
     if fa > 0 and tr and not v:
         x, y = lay.vp(*tr["beam"][:2])
-        panel(c, (x + 18, y - 64, x + 330, y - 16), fa, radius=10)
+        panel(c, (x + 18, y - 64, x + 330, y - 16), fa, radius=10, fill=CARD, border=CARD_BORDER)
         shape(c, fa, lambda d, ox, oy: d.rectangle((x + 18 + ox, y - 64 + oy, x + 23 + ox, y - 17 + oy), fill=YELLOW),
               (x + 18, y - 64, x + 24, y - 16))
-        text(c, (x + 38, y - 33), "Deflection trending up", font("ui_s", 19), WHITE, fa)
+        text(c, (x + 38, y - 33), "Deflection trending up", font("ui_s", 19), P_INK, fa)
         dot(c, (x, y), 6, YELLOW, fa, glow=True)
         line(c, (x + 5, y - 5), (x + 18, y - 22), YELLOW, 2, fa)
     a = window(f, fw, end, 10, 0)
@@ -745,8 +876,8 @@ def el_safety(c, lay, f, track):
         P = Pn(c, lay, a, k_v=1.9)
         w = P.w
         pulse = 0.55 + 0.45 * abs(math.sin((f - fi) * 0.35))
-        P.bg(250)
-        r = int(14 * P.k)
+        P.bg(256)
+        r = int(12 * P.k)
         x0, y0, x1 = P.x, P.y, P.X(w)
         shape(c, a, lambda d, ox, oy: d.rounded_rectangle((x0 + ox, y0 + oy, x1 - 1 + ox, P.Y(58) + oy), r,
                                                           fill=RED + (235,)), (x0, y0, x1, P.Y(60)))
@@ -757,9 +888,11 @@ def el_safety(c, lay, f, track):
         P.t(w - 22, 38, "14:32:07", "ui_m", 16, WHITE, 1.0, "rs")
         P.t(26, 98, "R04-B13 · Upright · Aisle 02", "ui_s", 21)
         P.t(26, 128, "Fork strike · 0.8 g at 0.1 m · RED", "ui", 17, DIM)
+        P.dot(32, 158, 6, P_BLUE)
+        P.t(46, 164, "Seen by FL-02's RAMS AI camera · 0.4 s", "ui_m", 16, P_BLUE)
         for i, (lab, ft) in enumerate((("Exclusion zone set", fz), ("Unload bays B12-B13", fu))):
             ra = ease_out(ramp(f, ft, 8))
-            y = 172 + 36 * i
+            y = 200 + 32 * i
             P.t(26, y, "✓", "ui_b", 18, GREEN, ra)
             P.t(52, y, lab, "ui_m", 18, WHITE, ra)
         tr = track.get("s5_safety", {}).get(str(f))
@@ -884,6 +1017,21 @@ def title_wash():
     return _grad["t"]
 
 
+def grad_v():
+    """9:16: dark washes top (rail, titles) and bottom (cards, captions) over the full-bleed picture."""
+    if "v" not in _grad:
+        import numpy as np
+        W, H = 1080, 1920
+        y = np.arange(H, dtype=np.float32)[:, None]
+        top = np.clip(1 - y / 620.0, 0, 1) ** 1.6 * 0.72
+        bot = np.clip((y - 1050) / 870.0, 0, 1) ** 1.3 * 0.8
+        a = np.repeat(np.clip(top + bot, 0, 1), W, axis=1)
+        im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        im.putalpha(Image.fromarray((a * 255).astype(np.uint8), "L"))
+        _grad["v"] = im
+    return _grad["v"]
+
+
 def bg_v():
     global _bgv
     if _bgv is None:
@@ -914,26 +1062,59 @@ W01 = {"s01_impact": os.path.join(ROOT, "renders", "w01", "s01_impact", "frames"
        "s02_dent": os.path.join(ROOT, "renders", "w01", "s02_dent", "preview")}
 
 
-def shot_frame(f):
-    """The picture for film frame f, before any transition."""
+def shot_frame(f, mode="h"):
+    """The picture for film frame f, before any transition (16:9 or the portrait pass)."""
     shot = T.shot_at(f)
     kind = shot[3]
+    size = (960, 540) if mode == "h" else (540, 960)
     if kind.startswith("w01:"):
         d = W01[kind[4:]]
         n = len([x for x in os.listdir(d) if x.endswith(".png")]) if os.path.isdir(d) else 0
         k = min(max(1, f - shot[1] + 1), max(1, n))
         return _frame(d, k, (None, 1, n)).resize((960, 540), Image.LANCZOS)
-    d = _G["desk"] if kind == "desk" else _G["twin"]
-    return _frame(d, f, shot).resize((960, 540), Image.LANCZOS)
+    v = "_v" if mode == "v" else ""
+    d = _G["desk" + v] if kind == "desk" else _G["twin" + v]
+    return _frame(d, f, shot).resize(size, Image.LANCZOS)
+
+
+def grade(img):
+    """One look for night, desk and twin: a gentle S-curve, teal shadows, warm highlights, a soft
+    vignette. On the picture only, never on type."""
+    import numpy as np
+    a = np.asarray(img).astype(np.float32) / 255.0
+    a = np.clip(0.5 + (a - 0.5) * 1.06, 0, 1)
+    lum = a @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+    sh = np.clip(1 - lum / 0.4, 0, 1)[..., None]
+    hi = np.clip((lum - 0.6) / 0.4, 0, 1)[..., None]
+    a = a + sh * np.array([-0.012, 0.004, 0.016], np.float32) + hi * np.array([0.014, 0.006, -0.012], np.float32)
+    g = lum[..., None]
+    a = g + (a - g) * 1.05
+    h, w = lum.shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    r2 = ((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2
+    a *= (1 - 0.14 * np.clip(r2 - 0.25, 0, None))[..., None]
+    return Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8))
+
+
+def grain(c, f, strength=3.2):
+    """Fine film grain on the composited picture (before the type goes on)."""
+    import numpy as np
+    rng = np.random.default_rng(f)
+    a = np.asarray(c).astype(np.int16)
+    n = rng.normal(0, strength, a.shape[:2]).astype(np.int16)[..., None]
+    out = np.clip(a[..., :3] + n, 0, 255).astype(np.uint8)
+    im = Image.fromarray(out, "RGB").convert("RGBA")
+    return im
 
 
 # (first frame of the incoming shot, frames, kind): dissolves hold the outgoing shot's last frame
 TRANS = [(T.SHOT["m1_desk"][1], 12, "dip"), (T.SHOT["s1_plan"][1], 16, "dissolve"),
-         (T.SHOT["m2_audit"][1], 8, "dissolve"), (T.SHOT["s6_logo"][1], 10, "dissolve")]
+         (T.SHOT["m2_audit"][1], 8, "dissolve"), (T.SHOT["n4_week"][1], 10, "dip"),
+         (T.SHOT["s6_logo"][1], 12, "dissolve")]
 
 
-def source(f):
-    img = shot_frame(f)
+def source(f, mode="h"):
+    img = shot_frame(f, mode)
     for f0, n, kind in TRANS:
         if kind == "dip":
             if f0 - n <= f < f0:
@@ -941,30 +1122,24 @@ def source(f):
             elif f0 <= f < f0 + n:
                 img = Image.blend(Image.new("RGB", img.size, (0, 0, 0)), img, ease_io((f - f0) / n))
         elif f0 <= f < f0 + n:
-            img = Image.blend(shot_frame(f0 - 1), img, ease_io((f - f0 + 1) / (n + 1)))
-    return img
+            img = Image.blend(shot_frame(f0 - 1, mode), img, ease_io((f - f0 + 1) / (n + 1)))
+    return grade(img)
 
 
 def compose(f, mode, track):
     lay = Lay(mode)
     if f >= T.END_CARD:
         return end_card(lay, f)
-    img = source(f)
+    img = source(f, mode)
     twin = TWIN0 <= f < TWIN1
+    c = grain(img.resize((lay.W, lay.H), Image.LANCZOS), f)
+    tw = ease_io(ramp(f, TWIN0, 12)) * (1 - ramp(f, TWIN1 - 10, 10)) if twin else 0.0
     if mode == "h":
-        c = img.resize((lay.W, lay.H), Image.LANCZOS).convert("RGBA")
         if twin:
-            blit(c, grad_h(), 0, 0, ease_io(ramp(f, TWIN0, 12)) * (1 - ramp(f, TWIN1 - 10, 10)))
+            blit(c, grad_h(), 0, 0, tw)
     else:
-        c = bg_v().copy()
-        x0, y0, w, h = lay.video
-        c.alpha_composite(img.resize((w, h), Image.LANCZOS).convert("RGBA"), (x0, y0))
-        edge = Image.new("RGBA", (w, 70), (0, 0, 0, 0))
-        ed = ImageDraw.Draw(edge)
-        for i in range(70):
-            ed.line((0, i, w, i), fill=BG + (int(255 * (1 - i / 70) ** 2),))
-        c.alpha_composite(edge, (x0, y0))
-        c.alpha_composite(edge.transpose(Image.FLIP_TOP_BOTTOM), (x0, y0 + h - 70))
+        blit(c, grad_v(), 0, 0, 0.45 + 0.55 * tw)
+    el_lift(c, lay, f, track)
     el_stamp(c, lay, f)
     el_rail(c, lay, f)
     el_logo_bug(c, lay, f)
@@ -984,18 +1159,20 @@ def compose(f, mode, track):
 _G = {}
 
 
-def _init(twin, desk, modes=None):
+def _init(twin, desk, modes=None, twin_v=None, desk_v=None):
     _G["twin"], _G["desk"] = twin, desk
+    _G["twin_v"], _G["desk_v"] = twin_v or twin + "_v", desk_v or desk + "_v"
     if modes:
         _G["modes"] = modes
-    p = os.path.join(OUT, "track.json")
-    _G["track"] = json.load(open(p)) if os.path.exists(p) else {}
+    for key, name in (("track", "track.json"), ("track_v", "track_v.json")):
+        p = os.path.join(OUT, name)
+        _G[key] = json.load(open(p)) if os.path.exists(p) else {}
 
 
 def _job(f):
     for mode, d in _G.get("modes", (("h", "cut16"), ("v", "cut9"))):
         out = os.path.join(OUT, d, f"{mode}_{f:04d}.png")
-        compose(f, mode, _G["track"]).save(out, compress_level=1)
+        compose(f, mode, _G["track" if mode == "h" else "track_v"]).save(out, compress_level=1)
     return f
 
 
@@ -1004,7 +1181,8 @@ _S = T.SEC
 CLIPS = [("c01_night", 1, T.f(_S["night"][2]) - 1), ("c02_morning", T.f(_S["morning"][1]), T.f(_S["morning"][2]) - 1),
          ("c03_2D_3D", T.f(_S["d2"][1]), T.f(_S["d3"][2]) - 1)] + \
         [(f"c{4 + k:02d}_{d[1:]}D", T.f(_S[d][1]), T.f(_S[d][2]) - 1) for k, d in enumerate(("d4", "d5", "d6", "d7", "d8"))] + \
-        [("c09_audit", T.f(_S["audit"][1]), T.f(_S["audit"][2]) - 1), ("c10_logo", T.f(_S["logo"][1]), T.END)]
+        [("c09_audit", T.f(_S["audit"][1]), T.f(_S["audit"][2]) - 1), ("c10_week", T.f(_S["week"][1]), T.f(_S["week"][2]) - 1),
+         ("c11_logo", T.f(_S["logo"][1]), T.END)]
 
 
 def encode_clip(name, f0, f1, audio, out_dir, mode="h"):
@@ -1030,14 +1208,16 @@ def encode(pattern, audio, out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--twin", default=os.path.join(OUT, "story"))
-    ap.add_argument("--desk", default=os.path.join(OUT, "desk"))
+    ap.add_argument("--twin", default=os.path.join(OUT, "story_v2"))
+    ap.add_argument("--desk", default=os.path.join(OUT, "desk_v2"))
+    ap.add_argument("--twin-v", default=os.path.join(OUT, "story_v2_v"), help="the portrait (9:16) twin pass")
+    ap.add_argument("--desk-v", default=os.path.join(OUT, "desk_v2_v"), help="the portrait (9:16) desk pass")
     ap.add_argument("--frames", default=f"1-{T.END}")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--no-encode", action="store_true")
     ap.add_argument("--audio", default=os.path.join(OUT, "story_mix.wav"))
     ap.add_argument("--name", default="RAMS_digital_twin_2am_hit")
-    ap.add_argument("--clip", help="make review clips (c01_night ... c10_logo, comma separated), 16:9 only")
+    ap.add_argument("--clip", help="make review clips (c01_night ... c11_logo, comma separated), 16:9 only")
     a = ap.parse_args()
     if a.clip:
         os.makedirs(os.path.join(OUT, "cut16"), exist_ok=True)
@@ -1045,14 +1225,14 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         for name in a.clip.split(","):
             name, f0, f1 = next(c for c in CLIPS if c[0] == name)
-            with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, (("h", "cut16"),))) as pool:
+            with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, (("h", "cut16"),), a.twin_v, a.desk_v)) as pool:
                 list(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4))
             print("clip", encode_clip(name, f0, f1, a.audio, out_dir), flush=True)
         return
     for d in ("cut16", "cut9"):
         os.makedirs(os.path.join(OUT, d), exist_ok=True)
     f0, f1 = (int(v) for v in a.frames.split("-"))
-    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk)) as pool:
+    with Pool(a.jobs, initializer=_init, initargs=(a.twin, a.desk, None, a.twin_v, a.desk_v)) as pool:
         for k, _ in enumerate(pool.imap_unordered(_job, range(f0, f1 + 1), chunksize=4)):
             if k % 100 == 0:
                 print("post", k, flush=True)

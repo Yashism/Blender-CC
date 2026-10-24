@@ -17,7 +17,15 @@ starts at; the scenes and events below are placed around those.
  85.6  WEEK     02:14 again, one week later: a new upright, a green tag; the forklift passes.
  89.6  LOGO     RAMS Digital Twin. Book a demo.  (end card 97.6 - 100.0)
 """
+import os
+
 FPS = 24
+
+
+def vertical():
+    """True while building the 9:16 pass (build.py / desk.py --vertical set TWIN_VERTICAL=1): cameras
+    turn top-down views to run tall and pull wide views back."""
+    return os.environ.get("TWIN_VERTICAL") == "1"
 
 
 def f(s):

@@ -638,11 +638,11 @@ def cameras():
     pc = plan_point(0.0, -2.0)
     out["CAM_D4"] = desk_camera("CAM_D4", f0, f1, [
         (f0, dict(pos=(-0.05, -0.66, 0.26), tgt=(pc.x + 0.06, pc.y + 0.03, 0.0), lens=35.0, focus=tuple(pc),
-                  upw=1.0, yaw=math.degrees(PLAN_ROT))),
+                  upw=1.0, yaw=math.degrees(PLAN_ROT) + (90.0 if T.vertical() else 0.0))),
         (mid, dict(pos=(m_tgt.x + 0.06, m_tgt.y - 0.30, 0.52), tgt=(m_tgt.x, m_tgt.y + 0.02, 0.0), lens=38.0,
-                   focus=tuple(m_tgt), upw=0.45, yaw=math.degrees(PLAN_ROT))),
+                   focus=tuple(m_tgt), upw=0.45, yaw=math.degrees(PLAN_ROT) + (90.0 if T.vertical() else 0.0))),
         (lock, dict(pos=tuple(m_pos), tgt=tuple(m_tgt), lens=40.0, focus=tuple(m_tgt), upw=0.0,
-                    yaw=math.degrees(PLAN_ROT))),
+                    yaw=math.degrees(PLAN_ROT) + (90.0 if T.vertical() else 0.0))),
     ], 5.6, f_end=f1)
     f0, f1 = S["CAM_D5"], ends["CAM_D5"]
     out["CAM_D5"] = desk_camera("CAM_D5", f0, f1, [
@@ -701,7 +701,12 @@ def sets(morning, audit):
 def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     o = dict(res=(480, 270), samples=16, frames=None, list=None, step=1, out=os.path.join(ROOT, "renders", "twin", "desk"),
-             save=None)
+             save=None, vertical=False)
+    if "--vertical" in a:                            # the 9:16 pass (see timeline.vertical)
+        a.remove("--vertical")
+        o["vertical"] = True
+        os.environ["TWIN_VERTICAL"] = "1"
+        o["res"] = (270, 480)
     i = 0
     while i < len(a):
         k = a[i]

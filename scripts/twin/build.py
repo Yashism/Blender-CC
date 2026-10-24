@@ -396,11 +396,11 @@ def args():
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     o = {"engine": "cycles", "res": "960x540", "samples": 12, "lookdev": False, "frames": None, "step": 1,
          "out": os.path.join(ROOT, "renders", "twin", "frames"), "save": None, "track": False, "list": None,
-         "look": "real"}
+         "look": "real", "vertical": False}
     i = 0
     while i < len(a):
         k = a[i].lstrip("-")
-        if k in ("lookdev", "track"):
+        if k in ("lookdev", "track", "vertical"):
             o[k] = True
             i += 1
             continue
@@ -461,7 +461,7 @@ def track(G, X):
                 v = world_to_camera_view(sc, cam, fn())
                 sh[fr][name] = [round(v.x, 5), round(1 - v.y, 5), round(v.z, 3)]
         out[sid] = sh
-    path = os.path.join(ROOT, "renders", "twin", "track.json")
+    path = os.path.join(ROOT, "renders", "twin", "track_v.json" if T.vertical() else "track.json")
     with open(path, "w") as fh:
         json.dump(out, fh)
     print("TRACK ->", path)
@@ -524,6 +524,8 @@ LAST = {}          # the scene graph of the last build (for debugging scripts)
 
 def main():
     o = args()
+    if o["vertical"]:                    # the 9:16 pass: cameras reframe (timeline.vertical)
+        os.environ["TWIN_VERTICAL"] = "1"
     reset()
     setup_render(o["engine"], o["res"], o["samples"])
     world()
