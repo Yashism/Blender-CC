@@ -1,40 +1,47 @@
 # RAMS Digital Twin launch film: "The 2 a.m. hit"
 
-A 96-second launch film for the RAMS Digital Twin, told as a story. At 2:14 a.m. in peak season a
+A 100-second launch film for the RAMS Digital Twin, told as a story. At 2:14 a.m. in peak season a
 forklift clips an upright and nobody reports it. By morning the operations head has an audit on
 Tuesday, an insurance renewal and a client asking if Aisle 3 is safe, and the answers are on paper.
 The paper layout becomes the twin, and each dimension, 2D to 8D, answers part of the problem. On
-audit day the same desk is tidy and the twin's audit pack is ready.
+audit day the same desk is tidy and the twin's audit pack is ready. One week later, at 02:14, the
+same aisle has a new upright with a green inspection tag, and a forklift passes it.
 
 For ops heads, EHS leads and finance buyers. A photoreal warehouse (the W01 rack kit) and FL-02,
 the counterbalance forklift from the RAMS AI camera films, in real materials. No characters: the
 driver and the ops head are never seen. No music: the voiceover carries the film, over light sound
-design.
+design made from recorded effects (`sfx.py --no-sfx` takes them out).
 
 Deliverables (`renders/twin/`, not committed):
 
 - `RAMS_digital_twin_2am_hit_16x9.mp4`: 1920x1080 master (LinkedIn, YouTube, website hero)
 - `RAMS_digital_twin_2am_hit_9x16.mp4`: 1080x1920 vertical (Reels, Shorts, WhatsApp status)
-- `story_clips/c01_night.mp4` ... `c10_logo.mp4`: one review clip per scene
+- `story_clips/c01_night.mp4` ... `c11_logo.mp4`: one review clip per scene (16:9)
 
 ## The cut (24 fps)
 
 | Time | Scene | What you see | On screen |
 | --- | --- | --- | --- |
-| 0.0 | Night | Aisle 03 at night under the high-bays. FL-02, carrying a pallet, comes down the aisle toward the camera | *02:14 · Peak season · Aisle 03* |
-| 3.6 | The hit | Close on the upright: the fork tine strikes it (W01 `s01_impact`) | |
-| 7.6 | The dent | The dent in the upright (W01 `s02_dent`). The forklift backs away, beeper fading | *Incident log: no entry* |
-| 10.6 | Morning | The ops head's desk, morning sun through the blinds. The laptop wakes: the audit (calendar), the insurer (mail). The phone buzzes: the client, *"Is Aisle 3 safe?"*, with a photo of the dent. The spreadsheet, the inspection PDF and the photo pile up on the laptop. The camera rises over the printed A3 layout, the hit circled in red pen | *07:52 · Monday* |
-| 28.6 | **2D** | The paper dissolves into the twin's plan: same framing, same scale. The plan draws itself | Digital Layout |
+| 0.0 | Night | Aisle 03 at night under the high-bays, work lights on. FL-02, carrying a pallet, comes down the aisle and swings toward the bay | *02:14 · Peak season · Aisle 03* |
+| 3.6 | The hit | Low at the upright, in the same aisle: FL-02's fork tip strikes the frame, the camera jolts | |
+| 7.6 | The dent | Close on the dent and the scraped paint under a raking light. The forklift reverses away, beeper fading | *Incident log: no entry* |
+| 10.6 | Morning | The ops head's desk, morning sun, the coffee steaming, a hi-vis vest on the chair and a hard hat on the binders. The laptop wakes: the audit (calendar), the insurer (mail); the cursor scrolls the inspection spreadsheet. The phone buzzes: the client, *"Is Aisle 3 safe?"*, a photo of the dent, then *typing…*. The camera rises over the printed A3 layout, the hit circled in red pen | *07:52 · Monday* |
+| 28.6 | **2D** | The plan's ink glows and lifts off the paper into the twin, same framing, same scale; the red pen circle shrinks into a pulsing pin at R05-B07. Aisles, rows and docks light as the VO names them | Digital Layout |
 | 34.3 | **3D** | The racks rise west to east; the camera swings down; routes draw; trucks set off | Digital Twin Visualization |
-| 39.0 | **4D** | The twin scrolls back from this morning to 02:14 last night: trucks run backwards, the light falls to night, then last night's hit at R05-B07 pulses red | Twin timeline: the clock runs back to 02:14:37, *Not reported* |
-| 46.4 | **5D** | The rows in front sink; the damaged bay's upright, beams, brace and anchors lift out as a parts list and fly into the BoQ | Bill of quantities with prices |
+| 39.0 | **4D** | Looking down aisle 03, the twin scrolls back from this morning to 02:14: trucks run backwards, the light falls to night, and a ghost of FL-02 replays the strike at R05-B07, which pulses red | Twin timeline: the clock runs back to 02:14:37, *Not reported* |
+| 46.4 | **5D** | The rows in front turn to x-ray glass; the damaged bay's upright, beams, brace and anchors lift out in their real colours and fly into the BoQ | Bill of quantities with prices |
 | 53.8 | **6D** | From above: every put-away cuts through aisle 03, which runs hot; re-routed by the twin, the trucks take the nearest aisle end | Fleet distance and energy; *Aisle 03 carries 61% of all trips* |
 | 63.2 | **7D** | In aisle 04 the next weak beam flags; a work order; the pair is swapped; closed | Work order with the deflection trend |
-| 70.8 | **8D** | Low in aisle 02 a forklift's fork tip clips an upright: it is detected at once, an exclusion zone, the bay unloads, the site turns RAG | Impact alert, then site status |
-| 79.2 | Audit day | The same desk, tidy. The laptop shows the twin's audit pack, ticking off. The phone has the reply to the client, with the twin's report | *08:52 · Tuesday · Audit day*, *Ready for audit ✓* |
-| 85.6 | Logo | The hero view; RAMS logo, **Digital Twin**, *"Your entire warehouse, from 2D to 8D."*, **Book a demo · rams.digital** | |
-| 93.6 | End card | Logo, Digital Twin, rams.digital | |
+| 70.8 | **8D** | Low in aisle 02 a forklift's fork tip clips an upright; its RAMS AI camera's view cone flashes red: detected at once, an exclusion zone, the bay unloads, the site turns RAG | Impact alert, *Seen by FL-02's RAMS AI camera · 0.4 s*, then site status |
+| 79.2 | Audit day | The same desk, tidy. The laptop shows the twin's dashboard (the real product screen) with the Compliance drawer ticking off. The phone has the reply to the client, with the twin's report | *08:52 · Tuesday · Audit day*, *Ready for audit ✓* |
+| 85.6 | One week later | 02:14 in aisle 03 again: a new upright with a green inspection tag; a forklift passes it | *02:14 · One week later · Aisle 03*, *R05-B07: new upright, inspected* |
+| 89.6 | Logo | The hero view; RAMS logo, **Digital Twin**, *"Your entire warehouse, from 2D to 8D."*, **Book a demo · rams.digital** | |
+| 97.6 | End card | Logo, Digital Twin, rams.digital | |
+
+The panels follow the product's look (test.rams.digital): white cards with a light grey border, near-black
+text, grey labels, blue #2563eb for links and selection, green #16a34a for OK and red chips for
+alerts. Every frame gets a light grade (S-curve, warm highlights and cool shadows, vignette), film
+grain and motion blur.
 
 Every voiceover line is burned in as a caption (for muted autoplay). "Sample warehouse.
 Illustrative data." sits in the corner from 4D to 8D: every number in the panels is made up for the
@@ -50,30 +57,39 @@ makes the image wider on the right).
 | `scripts/twin/model.py` | The clay-era geometry and the data-layer materials (lines that draw themselves, glows) |
 | `scripts/twin/real.py` | The realistic skin: W01 racks and loads, the building at night, FL-02, the 5D parts, the night and twin looks |
 | `scripts/builders/forklift_real.py` | FL-02 (`fl02.py` geometry) in painted steel, rubber and vinyl |
-| `scripts/twin/anim.py` | All twin animation, one function per scene, and the camera rigs |
+| `scripts/twin/anim.py` | All twin animation, one function per scene, and the camera rigs (with their 9:16 framings) |
+| `scripts/twin/beats.py` | The story beats: the strike in the twin aisle (route, hero upright with its dent shape key, night cameras), the 4D ghost replay, the 5D x-ray, the 8D AI camera's view cone, the one-week bookend |
 | `scripts/twin/build.py` | Build, look-dev, the 2D tracking pass for pinned labels, the resumable frame render (night look for the night shot, twin look for the rest) |
 | `scripts/twin/desk_ui.py` | The paper (A3 layout at 1:200, spreadsheet, report, letter, sticky notes, audit cover) and the laptop and phone screen sequences |
 | `scripts/twin/desk.py` | The desk scene: room, window and blinds, laptop, phone, mug, papers, sun; six cameras; the last one lands top-down on the plan exactly as the twin's first frame frames the slab |
 | `scripts/twin/textures.py` | The site floor maps (tyre tracks, stains, dust, painted lines) |
-| `scripts/twin/post.py` | Shots, transitions, stamps, titles, panels, captions, 16:9 and 9:16, review clips, encode |
-| `scripts/twin/sfx.py` | The voiceover cut and placed, light synthesised effects, mixed to -14 LUFS |
+| `scripts/twin/post.py` | Shots, transitions, the ink lift, stamps, titles, product-style panels, captions, grade and grain, 16:9 and full-bleed 9:16, review clips, encode |
+| `scripts/twin/sfx.py` | The voiceover cut and placed, the recorded effects placed and filtered, mixed to -14 LUFS |
+| `scripts/twin/fetch_sfx.sh` | Downloads the recorded effects into `assets/sfx/twin` (not committed) |
 
 ```bash
+scripts/twin/fetch_sfx.sh                       # the recorded effects -> assets/sfx/twin
 python3 scripts/twin/desk_ui.py                 # paper + screen sequences
 python3 scripts/twin/sfx.py                     # renders/twin/story_mix.wav (--no-sfx: voice only)
 # draft (what the cloud container renders): 480x270, every 2nd frame
-blender -b --factory-startup -P scripts/twin/build.py -- --res 480x270 --samples 8 --out renders/twin/story --frames 1-86 --step 2
-blender -b --factory-startup -P scripts/twin/build.py -- --res 480x270 --samples 8 --out renders/twin/story --frames 687-2246 --step 2 --track
-blender -b --factory-startup -P scripts/twin/desk.py -- --res 480x270 --samples 16 --step 2
+blender -b --factory-startup -P scripts/twin/desk.py -- --res 480x270 --samples 16 --out renders/twin/desk_v2 --step 2
+blender -b --factory-startup -P scripts/twin/build.py -- --res 480x270 --samples 8 --out renders/twin/story_v2 --frames 1-2342 --step 2 --track
+# the 9:16 pass: the same scenes with the cameras reframed for a tall frame
+blender -b --factory-startup -P scripts/twin/desk.py -- --vertical --samples 16 --out renders/twin/desk_v2_v --step 2
+blender -b --factory-startup -P scripts/twin/build.py -- --vertical --res 270x480 --samples 8 --out renders/twin/story_v2_v --frames 1-2342 --step 2 --track
 python3 scripts/twin/post.py --clip c01_night,c02_morning      # review clips -> renders/twin/story_clips
 python3 scripts/twin/post.py                                   # the full film, 16:9 + 9:16
 
-# final 1080p on a GPU: the same commands with --res 1920x1080 --samples 64 (twin) / 128 (desk),
-# no --step, into fresh folders, then post.py --twin <dir> --desk <dir>
+# final 1080p on a GPU: the same commands with --res 1920x1080 (1080x1920 vertical) --samples 64
+# (twin) / 128 (desk), no --step, into fresh folders, then post.py --twin/--desk/--twin-v/--desk-v
 ```
 
-The W01 shots come from `renders/w01/s01_impact/frames` and `renders/w01/s02_dent/preview`
-(re-render the dent at full size for the final).
+The 9:16 cut is its own render, not a crop: `--vertical` (`timeline.vertical()`) turns the top-down
+views 90° so the building runs tall, pulls the wide shots back, rolls the 6D camera and frames the
+outro on the hero bay; on the desk the top-down plan camera turns with the twin. `post.py` lays it
+out full bleed with the panels in the lower third. The 2D tracking pass writes `track.json`
+(`track_v.json` for the vertical pass); post uses it to pin labels and lift the plan's ink onto the
+slab.
 
 ## Voiceover
 
@@ -98,6 +114,23 @@ film now shows a forklift, not a reach truck. `timeline.VO` lists every line's c
 If the ElevenLabs account is on the free tier, the audio is not licensed for commercial use:
 regenerate the takes on a paid plan before publishing and re-check the cuts in `timeline.VO`.
 
+## Sound
+
+The effects are recordings from Mixkit (mixkit.co/free-sound-effects), under the Mixkit Sound Effects
+Free License: free for commercial use, no attribution, not to be redistributed as sound files on their
+own (so they are not in the repo; `fetch_sfx.sh` lists every one by its Mixkit id). No library had
+a usable forklift, so the night truck is a small tractor and a truck idle, low-passed, with a real
+reversing beeper. The mix: voice at -15 LUFS, effects about 10 dB under it and ducked a further
+4 dB under each line, master at -14 LUFS, -1 dBTP.
+
+## Product screens
+
+The laptop's dashboard on audit day is a screenshot of the product's test environment
+(`assets/textures/twin/desk/rams_twin_dashboard.png`: the dashboard with the product's own 3D twin
+viewer, light theme; the dark theme and the other viewer modes would not switch in a headless
+browser). The panels in the film copy its card style and colours. Use a
+fresh capture from production, with a real site's data and permission, for the final.
+
 ## Launch plan (ideas)
 
 1. **Teasers, the week before:** three 8 s close-ups of the twin (a plan line drawing itself; a rack
@@ -119,8 +152,10 @@ regenerate the takes on a paid plan before publishing and re-check the cuts in `
 
 ## To confirm with RAMS before publishing
 
-1. **Screenshots of the real twin.** The film shows a stylised twin, not the product UI. Its
-   panels should match the product's colours and layout where possible.
+1. **Product screens.** The audit-day laptop shows the test environment's dashboard and the
+   panels copy its style; the 3D twin the film flies through is still ours, not the product's viewer. The
+   capture is from a test account and shows a sample layout; re-capture from a demo account for the
+   final if that's preferred.
 2. **All numbers are illustrative:** BoQ prices, fleet km and kWh, the −32%, the 61% of trips,
    bay counts, the audit pack. Replace them with real figures from a client (with written permission),
    or keep the "Illustrative data" line.
