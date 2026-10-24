@@ -209,7 +209,7 @@ def mat_screen(name, first):
     iu.use_auto_refresh = True
     iu.use_cyclic = False
     p = g.principled(Base_Color=lin("#050506"), Roughness=0.04, Coat_Weight=1.0, Coat_Roughness=0.02,
-                     Emission_Color=tex.outputs["Color"], Emission_Strength=2.2)
+                     Emission_Color=tex.outputs["Color"], Emission_Strength=1.5)
     g.output(p)
     return m
 
@@ -409,17 +409,18 @@ def steam(c, mug_xy=(0.42, 0.24), top=0.095):
     for fc in m.node_tree.animation_data.action.fcurves:
         for kp in fc.keyframe_points:
             kp.interpolation = "LINEAR"
-    wav = g.n("ShaderNodeTexWave", mp.outputs[0], props={"wave_type": "BANDS", "bands_direction": "Y"})
-    wav.inputs["Scale"].default_value = 3.0
-    wav.inputs["Distortion"].default_value = 9.0
-    wav.inputs["Detail"].default_value = 3.0
+    wav = g.n("ShaderNodeTexNoise", mp.outputs[0])
+    wav.inputs["Scale"].default_value = 3.2
+    wav.inputs["Detail"].default_value = 2.0
+    wav.inputs["Roughness"].default_value = 0.45
+    wav.inputs["Distortion"].default_value = 0.8
     u, v, _ = g.sep(tc)
     across = g.mr(g.math("ABSOLUTE", g.sub(u, 0.5)), 0.5, 0.05, 0.0, 1.0)      # fade to the sides
     up = g.mul(g.mr(v, 0.0, 0.18), g.mr(v, 1.0, 0.45))                         # fade in and out
-    dens = g.mul(g.mul(g.mr(wav.outputs["Fac"], 0.55, 0.95), across), up)
-    em = g.n("ShaderNodeEmission", (1.0, 0.97, 0.92, 1.0), g.mul(dens, 0.35))
+    dens = g.mul(g.mul(g.mr(wav.outputs["Fac"], 0.5, 0.8), across), up)
+    em = g.n("ShaderNodeEmission", (1.0, 0.97, 0.92, 1.0), g.mul(dens, 0.18))
     tr = g.n("ShaderNodeBsdfTransparent")
-    g.output(g.mixs(g.math("MINIMUM", g.mul(dens, 0.5), 1.0), tr.outputs[0], em.outputs[0]))
+    g.output(g.mixs(g.math("MINIMUM", g.mul(dens, 0.3), 1.0), tr.outputs[0], em.outputs[0]))
     try:
         m.surface_render_method = "BLENDED"
     except AttributeError:
@@ -443,9 +444,9 @@ def hivis_vest(c):
     for v in me.vertices:                                  # a little drape: it hangs from the shoulders
         u = v.co.x / 0.42
         v.co.z = 0.012 * math.cos(u * math.pi * 1.5) + 0.01 * max(0.0, -v.co.y / 0.28)
-    ob = obj("vest", me, c, (0.98, 0.548, 0.70), (math.radians(90), math.radians(-3), 0))
+    ob = obj("vest", me, c, (0.50, 0.548, 0.52), (math.radians(90), math.radians(-3), 0))
     hook = obj("vest_hook", box_mesh("m_hook", (0.02, 0.03, 0.02), [mat_plain("hook", "#9a9ca0", 0.3, 1.0)]), c,
-               (0.98, 0.56, 0.99))
+               (0.50, 0.56, 0.775))
     return ob
 
 
