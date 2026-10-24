@@ -794,13 +794,13 @@ def el_outro(c, lay, f):
     la = ease_out(ramp(f, t0, 14))
     ta = ease_out(ramp(f, t0 + 6, 14))
     sa = ease_out(ramp(f, t0 + 12, 14))
-    ax = lay.m + 330 if not v else lay.W / 2          # the column's axis: the centre of DIGITAL
+    ax = lay.m + 296 if not v else lay.W / 2          # the column's axis: the centre of DIGITAL
     if not v:
         blit(c, title_wash(), 0, 0, la)
         lg = logo(330)
         blit_logo(c, lg, ax, 112 - 16 * (1 - la), la)
-        text(c, (ax, 380 - 16 * (1 - ta)), "Digital Twin", font("title", 108), WHITE, ta, "ms", shadow=True)
-        text(c, (ax, 440 - 12 * (1 - sa)), "Your entire warehouse, from 2D to 8D.", font("ui", 36), (214, 222, 232),
+        text(c, (ax, 376 - 16 * (1 - ta)), "Digital Twin", font("title", 100), WHITE, ta, "ms", shadow=True)
+        text(c, (ax, 432 - 12 * (1 - sa)), "Your entire warehouse, from 2D to 8D.", font("ui", 32), (214, 222, 232),
              sa, "ms", shadow=True)
     else:
         lg = logo(420)
