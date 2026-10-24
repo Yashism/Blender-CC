@@ -79,6 +79,8 @@ blender -b --factory-startup -P scripts/twin/desk.py -- --vertical --samples 16 
 blender -b --factory-startup -P scripts/twin/build.py -- --vertical --res 270x480 --samples 8 --out renders/twin/story_v2_v --frames 1-2342 --step 2 --track
 python3 scripts/twin/post.py --clip c01_night,c02_morning      # review clips -> renders/twin/story_clips
 python3 scripts/twin/post.py                                   # the full film, 16:9 + 9:16
+# quick look: 320x180 / 180x320 at 4 samples (about 2 h for the twin on 4 CPU cores), then
+python3 scripts/twin/post.py --preview --modes h               # 960x540 *_preview_16x9.mp4 (--clip works too)
 
 # final 1080p on a GPU: the same commands with --res 1920x1080 (1080x1920 vertical) --samples 64
 # (twin) / 128 (desk), no --step, into fresh folders, then post.py --twin/--desk/--twin-v/--desk-v
